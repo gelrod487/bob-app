@@ -1,0 +1,142 @@
+// BOB — Book of Business
+// Prisma schema generated directly from bob-schema.md (v6 — final).
+// Run `npx prisma migrate dev --name init` after setting DATABASE_URL in .env.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Agency {
+  id            String     @id @default(uuid())
+  name          String
+  createdAt     DateTime   @default(now()) @map("created_at")
+
+  producers     Producer[]
+  expenses      Expense[]  @relation("AgencyExpenses")
+  ownerDraws    OwnerDraw[]
+  // Overrides logged against this agency (commission_entry.owner_type = 'agency')
+  commissionEntries CommissionEntry[] @relation("AgencyCommissionEntries")
+
+  @@map("agency")
+}
+
+model Producer {
+  id                String   @id @default(uuid())
+  agencyId          String?  @map("agency_id") // null = Individual tier, self-contained
+  name              String
+  subscriptionTier  String   @map("subscription_tier") // 'individual' | 'agency_owner'
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  agency            Agency?   @relation(fields: [agencyId], references: [id])
+  clients           Client[]
+  expenses          Expense[] @relation("ProducerExpenses")
+  commissionEntries CommissionEntry[] @relation("ProducerCommissionEntries")
+
+  @@map("producer")
+}
+
+model Client {
+  id          String   @id @default(uuid())
+  producerId  String   @map("producer_id")
+  name        String
+  contactInfo Json?    @map("contact_info") // { phone, email }
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  producer Producer @relation(fields: [producerId], references: [id])
+  policies Policy[]
+
+  @@map("client")
+}
+
+model Policy {
+  id             String   @id @default(uuid())
+  clientId       String   @map("client_id")
+  policyNumber   String?  @map("policy_number")
+  carrier        String
+  productType    String   @map("product_type")
+  faceAmount     Decimal? @map("face_amount") @db.Decimal(12, 2)
+  monthlyPremium Decimal  @map("monthly_premium") @db.Decimal(10, 2)
+  // annualPremium is intentionally NOT stored — compute as monthlyPremium * 12 wherever needed,
+  // matching the generated column in the SQL spec. Keeping it derived avoids drift.
+  issueDate      DateTime @map("issue_date") @db.Date
+  status         String   // 'active' | 'pending' | 'lapsed' | 'declined' | 'withdrawn'
+  leadType       String?  @map("lead_type")   // descriptive only, not a real relationship
+  leadVendor     String?  @map("lead_vendor") // descriptive only, not a real relationship
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  client            Client            @relation(fields: [clientId], references: [id])
+  commissionEntries CommissionEntry[]
+  paymentReminders  PaymentReminder[]
+
+  @@map("policy")
+}
+
+model CommissionEntry {
+  id         String   @id @default(uuid())
+  policyId   String   @map("policy_id")
+  ownerType  String   @map("owner_type") // 'producer' | 'agency'
+  producerId String?  @map("producer_id") // set when ownerType = 'producer'
+  agencyId   String?  @map("agency_id")   // set when ownerType = 'agency'
+  entryType  String   @map("entry_type")  // 'advance' | 'additional' | 'chargeback' | 'override' | 'other'
+  amount     Decimal  @db.Decimal(10, 2)  // chargebacks stored negative
+  entryDate  DateTime @map("entry_date") @db.Date
+  notes      String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  policy   Policy    @relation(fields: [policyId], references: [id])
+  producer Producer? @relation("ProducerCommissionEntries", fields: [producerId], references: [id])
+  agency   Agency?   @relation("AgencyCommissionEntries", fields: [agencyId], references: [id])
+
+  @@map("commission_entry")
+}
+
+model PaymentReminder {
+  id               String   @id @default(uuid())
+  policyId         String   @map("policy_id")
+  monthsAfterIssue Int      @map("months_after_issue") // 10 | 11 | 12 | 13
+  reminderDate     DateTime @map("reminder_date") @db.Date
+  status           String   @default("pending") // 'pending' | 'completed' | 'dismissed'
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  policy Policy @relation(fields: [policyId], references: [id])
+
+  @@map("payment_reminder")
+}
+
+model Expense {
+  id           String   @id @default(uuid())
+  ownerType    String   @map("owner_type") // 'producer' | 'agency'
+  producerId   String?  @map("producer_id")
+  agencyId     String?  @map("agency_id")
+  category     String   // 'lead_cost' | 'operations' | 'staff' | 'recruiting' | 'travel'
+  description  String?
+  vendor       String?  // lead_cost only
+  quantity     Int?     // lead_cost only, e.g. # of leads
+  unitCost     Decimal? @map("unit_cost") @db.Decimal(10, 2) // lead_cost only, e.g. cost/lead
+  amount       Decimal  @db.Decimal(10, 2)
+  expenseDate  DateTime @map("expense_date") @db.Date
+
+  producer Producer? @relation("ProducerExpenses", fields: [producerId], references: [id])
+  agency   Agency?   @relation("AgencyExpenses", fields: [agencyId], references: [id])
+
+  @@map("expense")
+}
+
+// Owner draws are NOT expenses — see bob-schema.md. Tracked separately, never netted
+// against Net Profit; surfaced on the dashboard as a distinct "cash out" line if desired.
+model OwnerDraw {
+  id        String   @id @default(uuid())
+  agencyId  String   @map("agency_id")
+  amount    Decimal  @db.Decimal(10, 2)
+  drawDate  DateTime @map("draw_date") @db.Date
+  notes     String?
+
+  agency Agency @relation(fields: [agencyId], references: [id])
+
+  @@map("owner_draw")
+}

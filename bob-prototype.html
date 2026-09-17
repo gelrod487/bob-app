@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>BOB — Book of Business</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+:root{
+  --cream:#FFF6EA;
+  --panel:#FFFFFF;
+  --ink:#2B2320;
+  --ink-soft:#6B5F58;
+  --orange:#FF6B35;
+  --orange-deep:#E4531F;
+  --gold:#F7A934;
+  --coral:#E63946;
+  --teal:#1B998B;
+  --line:#F0DFC9;
+  --shadow: 0 10px 30px rgba(120,70,20,.08);
+  --radius: 18px;
+}
+:root:not([data-theme="light"]){
+  --cream:#FFF6EA; --panel:#FFFFFF; --ink:#2B2320; --ink-soft:#6B5F58; --line:#F0DFC9;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --cream:#20140D; --panel:#2C1D14; --ink:#FBEDE0; --ink-soft:#CBB6A8; --line:#4A362A;
+    --shadow: 0 10px 30px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"]{
+  --cream:#20140D; --panel:#2C1D14; --ink:#FBEDE0; --ink-soft:#CBB6A8; --line:#4A362A;
+  --shadow: 0 10px 30px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box;}
+body{
+  margin:0; background:var(--cream); color:var(--ink);
+  font-family:'Inter',sans-serif; -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,.display{font-family:'Baloo 2',sans-serif;}
+.wrap{max-width:1180px; margin:0 auto; padding:20px 20px 80px;}
+
+/* ---- Top bar ---- */
+.topbar{display:flex; align-items:center; justify-content:space-between; padding:14px 0 22px; gap:16px; flex-wrap:wrap;}
+.brand{display:flex; align-items:center; gap:12px;}
+.brand h1{font-size:1.7rem; margin:0; color:var(--orange-deep); letter-spacing:.5px;}
+.brand span.sub{display:block; font-size:.72rem; color:var(--ink-soft); font-weight:600; margin-top:-2px;}
+.plan-toggle{display:flex; background:var(--panel); border:1.5px solid var(--line); border-radius:999px; padding:4px; box-shadow:var(--shadow);}
+.plan-toggle button{
+  border:none; background:transparent; padding:8px 18px; border-radius:999px; font-weight:700; font-size:.85rem;
+  color:var(--ink-soft); cursor:pointer; font-family:'Inter',sans-serif;
+}
+.plan-toggle button.active{background:linear-gradient(135deg,var(--orange),var(--gold)); color:#fff;}
+
+/* ---- Tabs ---- */
+.tabs{display:flex; gap:6px; margin:22px 0 20px; flex-wrap:wrap; border-bottom:2px solid var(--line); padding-bottom:0;}
+.tab{
+  padding:10px 16px; border:none; background:transparent; font-family:'Baloo 2',sans-serif; font-weight:600;
+  font-size:.95rem; color:var(--ink-soft); cursor:pointer; border-bottom:3px solid transparent; margin-bottom:-2px;
+}
+.tab.active{color:var(--orange-deep); border-bottom-color:var(--orange);}
+.agency-only{display:none;}
+body.agency .agency-only{display:inline-flex;}
+body.agency .agency-only.block{display:block;}
+body.agency .agency-only.grid-item{display:block;}
+
+/* ---- Cards / grid ---- */
+.grid{display:grid; grid-template-columns:repeat(4,1fr); gap:14px;}
+@media(max-width:900px){.grid{grid-template-columns:repeat(2,1fr);}}
+@media(max-width:560px){.grid{grid-template-columns:1fr;}}
+.card{background:var(--panel); border-radius:var(--radius); padding:18px 20px; box-shadow:var(--shadow); border:1px solid var(--line);}
+.stat-label{font-size:.78rem; color:var(--ink-soft); font-weight:600; margin-bottom:6px;}
+.stat-value{font-size:1.6rem; font-weight:800; font-family:'Baloo 2',sans-serif;}
+.stat-value.pos{color:var(--teal);}
+.stat-value.neg{color:var(--coral);}
+.panel{background:var(--panel); border-radius:var(--radius); padding:22px; box-shadow:var(--shadow); border:1px solid var(--line); margin-bottom:18px;}
+.panel h2{margin:0 0 14px; font-size:1.15rem; color:var(--orange-deep);}
+.two-col{display:grid; grid-template-columns:1.3fr 1fr; gap:18px;}
+@media(max-width:860px){.two-col{grid-template-columns:1fr;}}
+
+/* ---- Table ---- */
+table{width:100%; border-collapse:collapse; font-size:.88rem;}
+th{text-align:left; color:var(--ink-soft); font-weight:700; padding:8px 10px; border-bottom:2px solid var(--line); font-size:.75rem; text-transform:uppercase; letter-spacing:.03em;}
+td{padding:9px 10px; border-bottom:1px solid var(--line);}
+tr:last-child td{border-bottom:none;}
+.tag{display:inline-block; padding:3px 10px; border-radius:999px; font-size:.72rem; font-weight:700;}
+.tag.active-pol{background:#E4F6E9; color:#1E7A3E;}
+.tag.lapsed{background:#FBE4E4; color:#B23A3A;}
+.tag.pending{background:#FFF3D6; color:#9A6B00;}
+
+/* ---- Forms ---- */
+form.entry{display:grid; grid-template-columns:repeat(2,1fr); gap:12px;}
+@media(max-width:600px){form.entry{grid-template-columns:1fr;}}
+label{font-size:.78rem; font-weight:700; color:var(--ink-soft); display:block; margin-bottom:4px;}
+input,select{
+  width:100%; padding:9px 11px; border-radius:10px; border:1.5px solid var(--line); background:var(--cream);
+  color:var(--ink); font-family:'Inter'; font-size:.9rem;
+}
+.full{grid-column:1 / -1;}
+button.primary{
+  background:linear-gradient(135deg,var(--orange),var(--orange-deep)); color:#fff; border:none; padding:11px 22px;
+  border-radius:12px; font-weight:700; cursor:pointer; font-size:.9rem; font-family:'Inter';
+}
+button.ghost{background:transparent; border:1.5px solid var(--line); color:var(--ink); padding:10px 18px; border-radius:12px; font-weight:700; cursor:pointer;}
+.dropzone{
+  border:2px dashed var(--line); border-radius:14px; padding:26px; text-align:center; color:var(--ink-soft);
+  font-size:.88rem; cursor:pointer; background:var(--cream);
+}
+.dropzone.drag{border-color:var(--orange); background:#FFF0E2;}
+
+/* ---- BOB mascot ---- */
+.bob-wrap{position:fixed; right:22px; bottom:22px; width:92px; z-index:40; cursor:pointer;}
+.bob-bubble{
+  position:absolute; bottom:100%; right:0; margin-bottom:8px; background:var(--panel); border:1.5px solid var(--line);
+  padding:7px 12px; border-radius:12px; font-size:.78rem; font-weight:600; white-space:nowrap; box-shadow:var(--shadow);
+  opacity:0; transform:translateY(6px); transition:.25s;
+}
+.bob-wrap.talk .bob-bubble{opacity:1; transform:translateY(0);}
+#bobSvg{animation:bob-bounce 2.6s ease-in-out infinite;}
+@keyframes bob-bounce{0%,100%{transform:translateY(0) rotate(0deg);}50%{transform:translateY(-8px) rotate(-2deg);}}
+.blink{animation:bob-blink 4.5s infinite;}
+@keyframes bob-blink{0%,92%,100%{transform:scaleY(1);}94%{transform:scaleY(.1);}96%{transform:scaleY(1);}}
+@media (prefers-reduced-motion: reduce){#bobSvg,.blink{animation:none;}}
+
+.section-hidden{display:none;}
+.helptext{font-size:.8rem; color:var(--ink-soft); margin-top:2px;}
+.chart-box{position:relative; height:230px;}
+footer.hint{text-align:center; color:var(--ink-soft); font-size:.78rem; margin-top:30px;}
+</style>
+</head>
+<body class="individual">
+<div class="wrap">
+
+  <div class="topbar">
+    <div class="brand">
+      <svg width="40" height="40" viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="#FF6B35"/><circle cx="50" cy="50" r="46" fill="none" stroke="#E4531F" stroke-width="4"/><text x="50" y="63" font-family="Baloo 2, sans-serif" font-size="38" font-weight="800" fill="#fff" text-anchor="middle">B</text></svg>
+      <div><h1>BOB</h1><span class="sub">Book of Business</span></div>
+    </div>
+    <div class="plan-toggle">
+      <button id="btnIndividual" class="active">Producer</button>
+      <button id="btnAgency">Agency Owner</button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="dashboard">Dashboard</button>
+    <button class="tab" data-tab="clients">Clients &amp; Policies</button>
+    <button class="tab" data-tab="commissions">Commissions</button>
+    <button class="tab" data-tab="expenses">Expenses</button>
+    <button class="tab" data-tab="import">Import Data</button>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div class="tab-panel" id="tab-dashboard">
+    <div class="grid" style="margin-bottom:18px;">
+      <div class="card"><div class="stat-label">Commission Revenue (MTD)</div><div class="stat-value pos" id="statRevenue">$0</div></div>
+      <div class="card"><div class="stat-label">Total Expenses (MTD)</div><div class="stat-value neg" id="statExpenses">$0</div></div>
+      <div class="card"><div class="stat-label">Net Profit (MTD)</div><div class="stat-value" id="statProfit">$0</div></div>
+      <div class="card"><div class="stat-label">Active Policies</div><div class="stat-value" id="statPolicies">0</div></div>
+    </div>
+    <div class="two-col">
+      <div class="panel">
+        <h2>Profitability Trend</h2>
+        <div class="chart-box"><canvas id="trendChart"></canvas></div>
+      </div>
+      <div class="panel">
+        <h2>Expense Breakdown</h2>
+        <div class="chart-box"><canvas id="expenseChart"></canvas></div>
+      </div>
+    </div>
+    <div class="panel agency-only block">
+      <h2>Agency Roll-up</h2>
+      <div class="grid">
+        <div class="card"><div class="stat-label">Override Commission</div><div class="stat-value pos" id="statOverride">$0</div></div>
+        <div class="card"><div class="stat-label">Staff Costs</div><div class="stat-value neg" id="statStaff">$0</div></div>
+        <div class="card"><div class="stat-label">Recruiting Costs</div><div class="stat-value neg" id="statRecruit">$0</div></div>
+        <div class="card"><div class="stat-label">Producers Tracked</div><div class="stat-value" id="statProducers">0</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CLIENTS & POLICIES -->
+  <div class="tab-panel section-hidden" id="tab-clients">
+    <div class="panel">
+      <h2>Add Client / Policy</h2>
+      <form class="entry" id="policyForm">
+        <div><label>Client Name</label><input required name="client" placeholder="Jordan Alvarez"></div>
+        <div><label>Carrier</label><input required name="carrier" placeholder="e.g. North Star Life"></div>
+        <div><label>Product Type</label>
+          <select name="product"><option>Term Life</option><option>Whole Life</option><option>IUL</option><option>Final Expense</option><option>Annuity</option></select>
+        </div>
+        <div><label>Annual Premium ($)</label><input required type="number" step="0.01" name="premium" placeholder="1200"></div>
+        <div><label>Issue Date</label><input required type="date" name="issued"></div>
+        <div><label>Status</label><select name="status"><option>Active</option><option>Pending</option><option>Lapsed</option></select></div>
+        <div class="full"><button class="primary" type="submit">Add Policy</button></div>
+      </form>
+    </div>
+    <div class="panel">
+      <h2>Policy Book</h2>
+      <table>
+        <thead><tr><th>Client</th><th>Carrier</th><th>Product</th><th>Premium</th><th>Issued</th><th>Status</th></tr></thead>
+        <tbody id="policyTable"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- COMMISSIONS -->
+  <div class="tab-panel section-hidden" id="tab-commissions">
+    <div class="panel">
+      <h2>Log Commission</h2>
+      <form class="entry" id="commForm">
+        <div><label>Client</label><input required name="client" placeholder="Jordan Alvarez"></div>
+        <div><label>Type</label><select name="type"><option>Initial</option><option>Renewal</option><option class="agency-only-opt">Override</option><option>Chargeback</option></select></div>
+        <div><label>Amount ($)</label><input required type="number" step="0.01" name="amount" placeholder="850"></div>
+        <div><label>Date</label><input required type="date" name="date"></div>
+        <div class="full"><button class="primary" type="submit">Log Commission</button></div>
+      </form>
+    </div>
+    <div class="panel">
+      <h2>Commission History</h2>
+      <table><thead><tr><th>Client</th><th>Type</th><th>Amount</th><th>Date</th></tr></thead><tbody id="commTable"></tbody></table>
+    </div>
+  </div>
+
+  <!-- EXPENSES -->
+  <div class="tab-panel section-hidden" id="tab-expenses">
+    <div class="panel">
+      <h2>Log Expense</h2>
+      <form class="entry" id="expForm">
+        <div><label>Category</label>
+          <select name="category">
+            <option>Lead Costs</option><option>Operations</option>
+            <option class="agency-only-opt">Staff</option><option class="agency-only-opt">Recruiting</option>
+          </select>
+        </div>
+        <div><label>Description</label><input name="desc" placeholder="e.g. Facebook lead gen"></div>
+        <div><label>Amount ($)</label><input required type="number" step="0.01" name="amount" placeholder="300"></div>
+        <div><label>Date</label><input required type="date" name="date"></div>
+        <div class="full"><button class="primary" type="submit">Log Expense</button></div>
+      </form>
+    </div>
+    <div class="panel">
+      <h2>Expense Log</h2>
+      <table><thead><tr><th>Category</th><th>Description</th><th>Amount</th><th>Date</th></tr></thead><tbody id="expTable"></tbody></table>
+    </div>
+  </div>
+
+  <!-- IMPORT -->
+  <div class="tab-panel section-hidden" id="tab-import">
+    <div class="panel">
+      <h2>Import Your Existing Tracker</h2>
+      <p class="helptext">Upload a CSV export of your current spreadsheet. BOB will read the columns so you can map them to the right fields — nothing gets added until you confirm.</p>
+      <div class="dropzone" id="dropzone">Drop a CSV file here, or click to choose one</div>
+      <input type="file" id="fileInput" accept=".csv" style="display:none;">
+      <div id="mapArea" style="margin-top:16px;"></div>
+    </div>
+  </div>
+
+  <footer class="hint">Prototype preview of BOB — data here is stored only in your browser for this demo, not on a server.</footer>
+</div>
+
+<!-- BOB mascot -->
+<div class="bob-wrap" id="bobWrap">
+  <div class="bob-bubble" id="bobBubble">Hi, I'm BOB!</div>
+  <svg id="bobSvg" viewBox="0 0 120 120" width="92" height="92">
+    <ellipse cx="60" cy="108" rx="26" ry="6" fill="rgba(0,0,0,.12)"/>
+    <rect x="30" y="52" width="60" height="42" rx="10" fill="#E4531F"/>
+    <rect x="52" y="40" width="16" height="14" fill="#E4531F"/>
+    <rect x="30" y="66" width="60" height="6" fill="#FFC46B"/>
+    <circle cx="60" cy="34" r="26" fill="#FFB25E"/>
+    <g class="blink">
+      <circle cx="50" cy="32" r="4" fill="#2B2320"/>
+      <circle cx="70" cy="32" r="4" fill="#2B2320"/>
+    </g>
+    <path d="M48 44 Q60 54 72 44" stroke="#2B2320" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <circle cx="38" cy="38" r="5" fill="#FF9E7A" opacity=".6"/>
+    <circle cx="82" cy="38" r="5" fill="#FF9E7A" opacity=".6"/>
+  </svg>
+</div>
+
+<script>
+const state = { policies: [], comms: [], expenses: [] };
+const LS_KEY = 'bob_demo_state_v1';
+try{
+  const saved = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
+  if(saved){ Object.assign(state, saved); }
+}catch(e){ console.warn('storage read failed', e); }
+
+function save(){
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }catch(e){ console.warn('storage save failed', e); }
+}
+
+function seed(){
+  if(state.policies.length) return;
+  state.policies = [
+    {client:'Marisol Reyes', carrier:'North Star Life', product:'Term Life', premium:1180, issued:'2026-02-14', status:'Active'},
+    {client:'Devon Park', carrier:'Everwell Mutual', product:'IUL', premium:3400, issued:'2026-04-02', status:'Active'},
+    {client:'Priya Nair', carrier:'North Star Life', product:'Final Expense', premium:640, issued:'2026-01-20', status:'Pending'},
+    {client:'Carlos Vega', carrier:'Beacon Assurance', product:'Whole Life', premium:2100, issued:'2025-11-11', status:'Lapsed'},
+  ];
+  state.comms = [
+    {client:'Marisol Reyes', type:'Initial', amount:850, date:'2026-02-15'},
+    {client:'Devon Park', type:'Initial', amount:1900, date:'2026-04-03'},
+    {client:'Marisol Reyes', type:'Renewal', amount:120, date:'2026-08-14'},
+  ];
+  state.expenses = [
+    {category:'Lead Costs', desc:'Facebook lead gen', amount:420, date:'2026-08-01'},
+    {category:'Operations', desc:'CRM subscription', amount:79, date:'2026-08-01'},
+    {category:'Staff', desc:'Part-time assistant', amount:1500, date:'2026-08-01'},
+    {category:'Recruiting', desc:'Job board posting', amount:150, date:'2026-08-05'},
+  ];
+  save();
+}
+seed();
+
+/* ---- plan toggle ---- */
+const btnInd = document.getElementById('btnIndividual');
+const btnAg = document.getElementById('btnAgency');
+function setPlan(agency){
+  document.body.classList.toggle('agency', agency);
+  document.body.classList.toggle('individual', !agency);
+  btnInd.classList.toggle('active', !agency);
+  btnAg.classList.toggle('active', agency);
+  document.querySelectorAll('.agency-only-opt').forEach(o=>o.style.display = agency ? 'block':'none');
+  renderCharts();
+  say(agency ? "Agency view — I'm tracking staff & overrides too." : "Producer view — just your own book.");
+}
+btnInd.onclick = ()=>setPlan(false);
+btnAg.onclick = ()=>setPlan(true);
+
+/* ---- tabs ---- */
+document.querySelectorAll('.tab').forEach(t=>{
+  t.onclick = ()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(x=>x.classList.add('section-hidden'));
+    t.classList.add('active');
+    document.getElementById('tab-'+t.dataset.tab).classList.remove('section-hidden');
+    if(t.dataset.tab==='dashboard') renderCharts();
+  };
+});
+
+/* ---- BOB mascot ---- */
+const bobWrap = document.getElementById('bobWrap');
+const bobBubble = document.getElementById('bobBubble');
+const lines = ["Hi, I'm BOB!","Add a policy — I'll do the math.","Looking sharp today!","Don't forget to log your lead costs."];
+function say(text){
+  bobBubble.textContent = text;
+  bobWrap.classList.add('talk');
+  clearTimeout(bobWrap._t);
+  bobWrap._t = setTimeout(()=>bobWrap.classList.remove('talk'), 3200);
+}
+bobWrap.onclick = ()=> say(lines[Math.floor(Math.random()*lines.length)]);
+setTimeout(()=>say(lines[0]), 900);
+
+/* ---- rendering ---- */
+function fmt(n){ return '$'+Number(n||0).toLocaleString(undefined,{maximumFractionDigits:0}); }
+
+function renderTables(){
+  document.getElementById('policyTable').innerHTML = state.policies.map(p=>{
+    const cls = p.status==='Active'?'active-pol':(p.status==='Lapsed'?'lapsed':'pending');
+    return `<tr><td>${p.client}</td><td>${p.carrier}</td><td>${p.product}</td><td>${fmt(p.premium)}</td><td>${p.issued}</td><td><span class="tag ${cls}">${p.status}</span></td></tr>`;
+  }).join('') || '<tr><td colspan="6" class="helptext">No policies yet.</td></tr>';
+
+  document.getElementById('commTable').innerHTML = state.comms.map(c=>
+    `<tr><td>${c.client}</td><td>${c.type}</td><td>${fmt(c.amount)}</td><td>${c.date}</td></tr>`
+  ).join('') || '<tr><td colspan="4" class="helptext">No commissions logged yet.</td></tr>';
+
+  document.getElementById('expTable').innerHTML = state.expenses.map(e=>
+    `<tr><td>${e.category}</td><td>${e.desc||''}</td><td>${fmt(e.amount)}</td><td>${e.date}</td></tr>`
+  ).join('') || '<tr><td colspan="4" class="helptext">No expenses logged yet.</td></tr>';
+}
+
+let trendChart, expenseChart;
+function renderCharts(){
+  const agency = document.body.classList.contains('agency');
+  const revenue = state.comms.filter(c=>c.type!=='Override').reduce((s,c)=>s+Number(c.amount),0);
+  const override = state.comms.filter(c=>c.type==='Override').reduce((s,c)=>s+Number(c.amount),0);
+  const staff = state.expenses.filter(e=>e.category==='Staff').reduce((s,e)=>s+Number(e.amount),0);
+  const recruit = state.expenses.filter(e=>e.category==='Recruiting').reduce((s,e)=>s+Number(e.amount),0);
+  const otherExp = state.expenses.filter(e=>!['Staff','Recruiting'].includes(e.category)).reduce((s,e)=>s+Number(e.amount),0);
+  const totalExp = otherExp + (agency ? staff+recruit : 0);
+  const totalRev = revenue + (agency ? override : 0);
+  const profit = totalRev - totalExp;
+
+  document.getElementById('statRevenue').textContent = fmt(totalRev);
+  document.getElementById('statExpenses').textContent = fmt(totalExp);
+  const profitEl = document.getElementById('statProfit');
+  profitEl.textContent = fmt(profit);
+  profitEl.className = 'stat-value ' + (profit>=0?'pos':'neg');
+  document.getElementById('statPolicies').textContent = state.policies.filter(p=>p.status==='Active').length;
+  document.getElementById('statOverride').textContent = fmt(override);
+  document.getElementById('statStaff').textContent = fmt(staff);
+  document.getElementById('statRecruit').textContent = fmt(recruit);
+  document.getElementById('statProducers').textContent = agency ? 4 : 0;
+
+  const ctx1 = document.getElementById('trendChart');
+  const months = ['Mar','Apr','May','Jun','Jul','Aug'];
+  const revSeries = [1800,2450,2100,3200,2900,totalRev||3400];
+  const expSeries = [900,1100,950,1600,1400,totalExp||1200];
+  if(trendChart) trendChart.destroy();
+  trendChart = new Chart(ctx1,{type:'line',data:{labels:months,datasets:[
+    {label:'Revenue',data:revSeries,borderColor:'#1B998B',backgroundColor:'rgba(27,153,139,.15)',tension:.35,fill:true},
+    {label:'Expenses',data:expSeries,borderColor:'#E63946',backgroundColor:'rgba(230,57,70,.12)',tension:.35,fill:true}
+  ]},options:{plugins:{legend:{labels:{color:getComputedStyle(document.body).color}}},scales:{x:{ticks:{color:getComputedStyle(document.body).color}},y:{ticks:{color:getComputedStyle(document.body).color}}}}});
+
+  const ctx2 = document.getElementById('expenseChart');
+  const labels = agency ? ['Lead Costs','Operations','Staff','Recruiting'] : ['Lead Costs','Operations'];
+  const leadC = state.expenses.filter(e=>e.category==='Lead Costs').reduce((s,e)=>s+Number(e.amount),0);
+  const opsC = state.expenses.filter(e=>e.category==='Operations').reduce((s,e)=>s+Number(e.amount),0);
+  const data = agency ? [leadC,opsC,staff,recruit] : [leadC,opsC];
+  if(expenseChart) expenseChart.destroy();
+  expenseChart = new Chart(ctx2,{type:'doughnut',data:{labels,datasets:[{data,backgroundColor:['#FF6B35','#F7A934','#E63946','#8E5B3F']}]},options:{plugins:{legend:{position:'bottom',labels:{color:getComputedStyle(document.body).color}}}}});
+}
+
+/* ---- forms ---- */
+document.getElementById('policyForm').addEventListener('submit', e=>{
+  e.preventDefault();
+  const f = new FormData(e.target);
+  state.policies.unshift({client:f.get('client'),carrier:f.get('carrier'),product:f.get('product'),premium:f.get('premium'),issued:f.get('issued'),status:f.get('status')});
+  save(); renderTables(); e.target.reset(); say('Policy added — nice work!');
+});
+document.getElementById('commForm').addEventListener('submit', e=>{
+  e.preventDefault();
+  const f = new FormData(e.target);
+  state.comms.unshift({client:f.get('client'),type:f.get('type'),amount:f.get('amount'),date:f.get('date')});
+  save(); renderTables(); renderCharts(); e.target.reset(); say('Commission logged!');
+});
+document.getElementById('expForm').addEventListener('submit', e=>{
+  e.preventDefault();
+  const f = new FormData(e.target);
+  state.expenses.unshift({category:f.get('category'),desc:f.get('desc'),amount:f.get('amount'),date:f.get('date')});
+  save(); renderTables(); renderCharts(); e.target.reset(); say('Expense logged.');
+});
+
+/* ---- CSV import with column mapping ---- */
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+dropzone.onclick = ()=>fileInput.click();
+['dragover','dragenter'].forEach(ev=>dropzone.addEventListener(ev,e=>{e.preventDefault();dropzone.classList.add('drag');}));
+['dragleave','drop'].forEach(ev=>dropzone.addEventListener(ev,e=>{e.preventDefault();dropzone.classList.remove('drag');}));
+dropzone.addEventListener('drop', e=>{ if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
+fileInput.addEventListener('change', e=>{ if(e.target.files[0]) handleFile(e.target.files[0]); });
+
+function handleFile(file){
+  Papa.parse(file, { header:true, skipEmptyLines:true, complete: res=>{
+    renderMapper(res.meta.fields || [], res.data);
+  }});
+}
+function renderMapper(fields, rows){
+  const targets = ['Client Name','Carrier','Product Type','Premium','Issue Date','Status'];
+  const area = document.getElementById('mapArea');
+  area.innerHTML = `<h3 style="margin-top:0;">Map your columns</h3>
+    <p class="helptext">${rows.length} rows found. Match each field below to a column from your file.</p>
+    <div class="grid" style="grid-template-columns:repeat(2,1fr);">
+    ${targets.map((t,i)=>`
+      <div><label>${t}</label><select data-target="${t}">
+        <option value="">— skip —</option>
+        ${fields.map(f=>`<option value="${f}" ${f.toLowerCase().includes(t.split(' ')[0].toLowerCase())?'selected':''}>${f}</option>`).join('')}
+      </select></div>`).join('')}
+    </div>
+    <div style="margin-top:16px;"><button class="primary" id="confirmImport">Import ${rows.length} Rows</button>
+    <button class="ghost" id="cancelImport" style="margin-left:8px;">Cancel</button></div>`;
+  document.getElementById('confirmImport').onclick = ()=>{
+    const map = {};
+    area.querySelectorAll('select').forEach(s=>{ if(s.value) map[s.dataset.target]=s.value; });
+    rows.forEach(r=>{
+      state.policies.unshift({
+        client:r[map['Client Name']]||'—', carrier:r[map['Carrier']]||'—', product:r[map['Product Type']]||'—',
+        premium:r[map['Premium']]||0, issued:r[map['Issue Date']]||'', status:r[map['Status']]||'Active'
+      });
+    });
+    save(); renderTables(); area.innerHTML=''; say(`Imported ${rows.length} rows — check the Clients tab!`);
+    document.querySelector('[data-tab="clients"]').click();
+  };
+  document.getElementById('cancelImport').onclick = ()=> area.innerHTML='';
+}
+
+renderTables();
+renderCharts();
+</script>
+</body>
+</html>
