@@ -23,6 +23,8 @@ async function producerProfitability(producerId, { from, to } = {}) {
     entryType: { in: ['advance', 'additional', 'chargeback', 'other'] },
     ...(from || to ? { entryDate: dateFilter } : {}),
   };
+  const grossCommissionWhere = { ...commissionWhere, entryType: { in: ['advance', 'additional', 'other'] } };
+  const chargebackWhere = { ...commissionWhere, entryType: 'chargeback' };
   const expenseWhere = {
     ownerType: 'producer',
     producerId,
@@ -30,22 +32,36 @@ async function producerProfitability(producerId, { from, to } = {}) {
     ...(from || to ? { expenseDate: dateFilter } : {}),
   };
 
-  const [commissionAgg, expenseAgg, activePolicyCount] = await Promise.all([
+  const [commissionAgg, grossAgg, chargebackAgg, expenseAgg, activePolicyCount, pendingPolicies] = await Promise.all([
     prisma.commissionEntry.aggregate({ where: commissionWhere, _sum: { amount: true } }),
+    prisma.commissionEntry.aggregate({ where: grossCommissionWhere, _sum: { amount: true } }),
+    prisma.commissionEntry.aggregate({ where: chargebackWhere, _sum: { amount: true } }),
     prisma.expense.aggregate({ where: expenseWhere, _sum: { amount: true } }),
     prisma.policy.count({
       where: { status: 'active', client: { producerId } },
     }),
+    prisma.policy.findMany({
+      where: { status: 'pending', client: { producerId } },
+      select: { monthlyPremium: true },
+    }),
   ]);
 
   const totalCommission = Number(commissionAgg._sum.amount || 0);
+  const grossCommission = Number(grossAgg._sum.amount || 0);
+  const chargebacks = Math.abs(Number(chargebackAgg._sum.amount || 0));
   const totalExpenses = Number(expenseAgg._sum.amount || 0);
+  const pendingPremium = pendingPolicies.reduce((s, p) => s + Number(p.monthlyPremium) * 12, 0);
 
   return {
     totalCommission,
+    grossCommission,
+    chargebacks,
     totalExpenses,
-    netProfit: totalCommission - totalExpenses,
+    netProfit: grossCommission - chargebacks - totalExpenses,
     activePolicyCount,
+    placedCount: activePolicyCount,
+    pendingCount: pendingPolicies.length,
+    pendingPremium,
   };
 }
 
@@ -67,6 +83,8 @@ async function agencyProfitability(agencyId, { from, to } = {}) {
     entryType: { in: ['advance', 'additional', 'chargeback', 'other'] },
     ...(from || to ? { entryDate: dateFilter } : {}),
   };
+  const grossCommissionWhere = { ...producerCommissionWhere, entryType: { in: ['advance', 'additional', 'other'] } };
+  const chargebackWhere = { ...producerCommissionWhere, entryType: 'chargeback' };
   const overrideWhere = {
     ownerType: 'agency',
     agencyId,
@@ -82,25 +100,39 @@ async function agencyProfitability(agencyId, { from, to } = {}) {
     ...(from || to ? { expenseDate: dateFilter } : {}),
   };
 
-  const [producerCommissionAgg, overrideAgg, expenseAgg, activePolicyCount] = await Promise.all([
+  const [producerCommissionAgg, grossAgg, chargebackAgg, overrideAgg, expenseAgg, activePolicyCount, pendingPolicies] = await Promise.all([
     prisma.commissionEntry.aggregate({ where: producerCommissionWhere, _sum: { amount: true } }),
+    prisma.commissionEntry.aggregate({ where: grossCommissionWhere, _sum: { amount: true } }),
+    prisma.commissionEntry.aggregate({ where: chargebackWhere, _sum: { amount: true } }),
     prisma.commissionEntry.aggregate({ where: overrideWhere, _sum: { amount: true } }),
     prisma.expense.aggregate({ where: expenseWhere, _sum: { amount: true } }),
     prisma.policy.count({
       where: { status: 'active', client: { producer: { agencyId } } },
     }),
+    prisma.policy.findMany({
+      where: { status: 'pending', client: { producer: { agencyId } } },
+      select: { monthlyPremium: true },
+    }),
   ]);
 
   const totalProducerCommission = Number(producerCommissionAgg._sum.amount || 0);
+  const grossCommission = Number(grossAgg._sum.amount || 0);
+  const chargebacks = Math.abs(Number(chargebackAgg._sum.amount || 0));
   const totalOverrides = Number(overrideAgg._sum.amount || 0);
   const totalExpenses = Number(expenseAgg._sum.amount || 0);
+  const pendingPremium = pendingPolicies.reduce((s, p) => s + Number(p.monthlyPremium) * 12, 0);
 
   return {
     totalProducerCommission,
+    grossCommission: grossCommission + totalOverrides,
+    chargebacks,
     totalOverrides,
     totalExpenses,
-    netProfit: totalProducerCommission + totalOverrides - totalExpenses,
+    netProfit: grossCommission + totalOverrides - chargebacks - totalExpenses,
     activePolicyCount,
+    placedCount: activePolicyCount,
+    pendingCount: pendingPolicies.length,
+    pendingPremium,
     producerCount: producerIds.length,
   };
 }

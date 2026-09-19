@@ -1,0 +1,40 @@
+<svg viewBox="0 0 160 200" xmlns="http://www.w3.org/2000/svg">
+  <ellipse cx="80" cy="190" rx="42" ry="8" fill="rgba(60,30,20,.15)"/>
+
+  <!-- back arm (waving) -->
+  <path d="M113 92 Q142 78 138 52" stroke="#7A2A1C" stroke-width="11" fill="none" stroke-linecap="round"/>
+  <circle cx="138" cy="50" r="9" fill="#F3B98C"/>
+
+  <!-- legs -->
+  <rect x="55" y="168" width="16" height="26" rx="7" fill="#6E2416"/>
+  <rect x="89" y="168" width="16" height="26" rx="7" fill="#6E2416"/>
+  <ellipse cx="63" cy="196" rx="12" ry="5" fill="#3A140C"/>
+  <ellipse cx="97" cy="196" rx="12" ry="5" fill="#3A140C"/>
+
+  <!-- book body (cover) -->
+  <rect x="32" y="46" width="96" height="128" rx="10" fill="#8C2F1E"/>
+  <rect x="32" y="46" width="14" height="128" rx="7" fill="#6E2416"/>
+  <!-- page edges -->
+  <rect x="122" y="54" width="5" height="112" fill="#F6E9DA"/>
+  <rect x="116" y="58" width="4" height="104" fill="#EAD9C4"/>
+
+  <!-- gold trim -->
+  <rect x="46" y="46" width="82" height="128" rx="6" fill="none" stroke="#C89B3C" stroke-width="2.5"/>
+
+  <!-- wax seal -->
+  <circle cx="102" cy="140" r="16" fill="#C89B3C"/>
+  <text x="102" y="146" font-family="Georgia, serif" font-size="17" font-weight="700" fill="#6E2416" text-anchor="middle">B</text>
+
+  <!-- face -->
+  <g>
+    <circle cx="66" cy="88" r="5" fill="#2A211A"/>
+    <circle cx="94" cy="88" r="5" fill="#2A211A"/>
+    <circle cx="60" cy="100" r="6" fill="#E85A45" opacity=".35"/>
+    <circle cx="100" cy="100" r="6" fill="#E85A45" opacity=".35"/>
+    <path d="M64 106 Q80 118 96 106" stroke="#2A211A" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+  </g>
+
+  <!-- front arm (down, at side) -->
+  <path d="M46 100 Q28 116 34 138" stroke="#8C2F1E" stroke-width="11" fill="none" stroke-linecap="round"/>
+  <circle cx="35" cy="140" r="9" fill="#F3B98C"/>
+</svg>

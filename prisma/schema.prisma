@@ -42,8 +42,48 @@ model Producer {
   clients           Client[]
   expenses          Expense[] @relation("ProducerExpenses")
   commissionEntries CommissionEntry[] @relation("ProducerCommissionEntries")
+  dailyActivities   DailyActivity[]
+  goals             Goal[]
 
   @@map("producer")
+}
+
+// One row per producer per calendar day — the "Today" tally on the Desk (dashboard) and
+// the production funnel (dials -> appointments -> presentations/sits -> sales) are both
+// built from these. Activity is always logged against the producer doing the dialing, even
+// for an Agency Owner rolling up a team, since there's no separate login per sub-producer.
+model DailyActivity {
+  id            String   @id @default(uuid())
+  producerId    String   @map("producer_id")
+  date          DateTime @db.Date
+  dials         Int      @default(0)
+  appointments  Int      @default(0)
+  presentations Int      @default(0)
+  sales         Int      @default(0)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  producer Producer @relation(fields: [producerId], references: [id])
+
+  @@unique([producerId, date])
+  @@map("daily_activity")
+}
+
+// One row per producer per month — powers the "This month vs. goals" progress bars.
+// fycTarget is First-Year Commission, i.e. the dollar goal for the month.
+model Goal {
+  id                 String   @id @default(uuid())
+  producerId         String   @map("producer_id")
+  month              DateTime @db.Date // always the 1st of the month
+  dialsTarget        Int      @default(0) @map("dials_target")
+  appointmentsTarget Int      @default(0) @map("appointments_target")
+  sitsTarget         Int      @default(0) @map("sits_target")
+  salesTarget        Int      @default(0) @map("sales_target")
+  fycTarget          Decimal  @default(0) @db.Decimal(10, 2) @map("fyc_target")
+
+  producer Producer @relation(fields: [producerId], references: [id])
+
+  @@unique([producerId, month])
+  @@map("goal")
 }
 
 model Client {

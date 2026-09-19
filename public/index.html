@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <title>BOB — Book of Business</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="Track your book of business — clients, policies, commissions, and expenses — with real-time profitability, built for independent producers and agency owners.">
+<meta name="description" content="Bob's got you covered — track clients, commissions, chargebacks, expenses, and daily production in one book of business, with a real P&L every week.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <link rel="stylesheet" href="/css/bob.css">
 </head>
@@ -15,111 +15,163 @@
 
   <div class="home-nav">
     <div class="brand">
-      <svg width="36" height="36" viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="#FF6B35"/><circle cx="50" cy="50" r="46" fill="none" stroke="#E4531F" stroke-width="4"/><text x="50" y="63" font-family="Baloo 2, sans-serif" font-size="38" font-weight="800" fill="#fff" text-anchor="middle">B</text></svg>
-      <div><h1 style="font-size:1.3rem;">BOB</h1></div>
+      <img src="/img/bob-mascot.svg" width="34" height="42" alt="">
+      <span class="brand-name">Bob's got you covered</span>
+    </div>
+    <div class="home-nav-links">
+      <a href="#desk">Product</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#faq">FAQ</a>
+      <a href="/demo.html">Tour</a>
     </div>
     <div class="home-nav-actions" id="navActions">
-      <a href="/login.html">Sign In</a>
-      <a class="primary" href="/login.html" style="padding:9px 18px; border-radius:12px;">Get Started</a>
+      <a class="plain" href="/login.html">Sign in</a>
+      <a class="primary" href="/login.html">Start free trial</a>
     </div>
   </div>
 
   <!-- HERO -->
   <div class="hero">
-    <h1>Know your numbers.<br><span>Every policy. Every dollar.</span></h1>
-    <p class="lede">BOB tracks your clients, policies, commissions, and expenses in one place — so you always know your real net profit, not just what came in.</p>
-    <div class="hero-ctas">
-      <a class="primary big" href="/login.html">Get Started Free</a>
-      <a class="ghost big" href="#pricing">See Pricing</a>
+    <div>
+      <h1>Meet Bob, your book of business partner!</h1>
+      <p class="lede">He's here for the messy stuff — tracking your client data, commissions, chargebacks, expenses, lead costs, and production metrics like dials, appointments, and sales. All to give you a simple view of the health and success of your business.</p>
+      <div class="hero-ctas">
+        <a class="primary big" href="/login.html">Start 14-day trial</a>
+        <a class="ghost big" href="/demo.html">Tour the sample book</a>
+      </div>
+      <p class="hero-fine">No card to start. One producer book per account. <a href="#pricing">See plans.</a></p>
+    </div>
+    <div>
+      <div style="display:flex; gap:24px; align-items:center;">
+        <div class="hero-mascot"><img src="/img/bob-mascot.svg" alt="Bob, the book of business mascot, waving"></div>
+        <div class="sample-card" style="flex:1;">
+          <span class="kicker">Example Producer · YTD</span>
+          <div class="headline-num">$43,412 net</div>
+          <div class="sample-grid">
+            <div><div class="sample-label">Paid FYC</div><div class="sample-num">$147,312</div></div>
+            <div><div class="sample-label">Overhead</div><div class="sample-num neg">$90,777</div></div>
+            <div><div class="sample-label">Chargebacks</div><div class="sample-num neg">−$13,129</div></div>
+            <div><div class="sample-label">Persistency</div><div class="sample-num pos">97%</div></div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
-  <!-- FEATURES -->
+  <div class="stats-strip">
+    <div><div class="num">$147k</div><div class="cap">Paid first-year commission, tracked to the case</div></div>
+    <div><div class="num">2.7%</div><div class="cap">Dial-to-sale conversion, not a guess from memory</div></div>
+    <div><div class="num">62%</div><div class="cap">Lead + overhead share of gross — visible every week</div></div>
+  </div>
+
+  <!-- HOW IT WORKS -->
   <div class="home-section">
-    <h2>Everything your book of business needs</h2>
-    <p class="section-sub">Built around how independent producers and agency owners actually track their work.</p>
+    <div class="kicker">How it works</div>
+    <h2>Subscribe. Log the week. Read net.</h2>
+    <div class="steps-grid">
+      <div class="step">
+        <div class="step-num">01</div>
+        <h3>Open a trial</h3>
+        <p>Google, X, or email. Your book is created on the account — not a shared spreadsheet.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">02</div>
+        <h3>Track the two ledgers</h3>
+        <p>Cases (client, carrier, premium, status, FYC, chargebacks) and the work (dials, appointments, sits, sales).</p>
+      </div>
+      <div class="step">
+        <div class="step-num">03</div>
+        <h3>Keep the subscription</h3>
+        <p>After 14 days, Producer is $49/mo. Agency is $129/mo. Cancel anytime; export your book first.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- THE DESK -->
+  <div class="home-section" id="desk">
+    <div class="kicker">The Desk</div>
+    <h2>Everything the weekly spreadsheet tried to be.</h2>
     <div class="feature-grid">
       <div class="feature-card">
-        <span class="icon">📊</span>
-        <h3>Profitability Dashboard</h3>
-        <p>See commission revenue, expenses, and net profit at a glance, with trend charts built straight from your ledger — not a rough estimate.</p>
+        <span class="icon">⚖️</span>
+        <h3>P&amp;L that includes chargebacks</h3>
+        <p>Issue-paid FYC, lapses, and remaining balance on every case. Net is commissions minus chargebacks minus the real cost of the week.</p>
       </div>
       <div class="feature-card">
-        <span class="icon">📇</span>
-        <h3>Clients &amp; Policies</h3>
-        <p>Every client and policy in one searchable book — carrier, product, premium, issue date, and status, always up to date.</p>
+        <span class="icon">📞</span>
+        <h3>Dials through sales</h3>
+        <p>Bump today's dials, appointments, presentations, and sales from the desk. The funnel is the work, not a slide.</p>
       </div>
       <div class="feature-card">
-        <span class="icon">💰</span>
-        <h3>Commission Tracking</h3>
-        <p>Log advances, renewals, chargebacks, and overrides. BOB keeps the math straight so you know what you actually earned.</p>
+        <span class="icon">💵</span>
+        <h3>Lead cost next to cases</h3>
+        <p>Lead vendors, setters, E&amp;O, CRM — categorized so you can see cost per issued case, not a pile of receipts.</p>
       </div>
       <div class="feature-card">
-        <span class="icon">🧾</span>
-        <h3>Expense Tracking</h3>
-        <p>Lead costs, operations, travel — broken out clearly so you see true net profit, not just top-line revenue.</p>
-      </div>
-      <div class="feature-card">
-        <span class="icon">📥</span>
-        <h3>Spreadsheet Import</h3>
-        <p>Already tracking things in a spreadsheet? Upload your CSV and BOB maps the columns for you — nothing gets added until you confirm.</p>
-      </div>
-      <div class="feature-card">
-        <span class="icon">🏢</span>
-        <h3>Built for Agencies</h3>
-        <p>Agency Owners get a roll-up view across every producer, override commission tracking, and owner draw logging.</p>
+        <span class="icon">📈</span>
+        <h3>Unit economics</h3>
+        <p>FYC per sale, cost per dial, persistency. Built for producers who buy leads and want to know if the source is still worth it.</p>
       </div>
     </div>
-  </div>
-
-  <!-- PREVIEW -->
-  <div class="home-section">
-    <h2>See it in action</h2>
-    <p class="section-sub">A look at the dashboard you'll get — shown here with sample numbers.</p>
-    <div class="preview-panel">
-      <span class="preview-tag">Sample data</span>
-      <div class="grid">
-        <div class="card"><div class="stat-label">Commission Revenue</div><div class="stat-value pos">$12,400</div></div>
-        <div class="card"><div class="stat-label">Total Expenses</div><div class="stat-value neg">$3,200</div></div>
-        <div class="card"><div class="stat-label">Net Profit</div><div class="stat-value pos">$9,200</div></div>
-        <div class="card"><div class="stat-label">Active Policies</div><div class="stat-value">18</div></div>
-      </div>
-    </div>
+    <div style="text-align:center; margin-top:24px;"><a class="ghost" href="/demo.html">See every page</a></div>
   </div>
 
   <!-- PRICING -->
   <div class="home-section" id="pricing">
-    <h2>Simple, honest pricing</h2>
-    <p class="section-sub">One plan for individual producers, one for agency owners. Cancel anytime.</p>
+    <div class="kicker">Plans</div>
+    <h2>Two plans. No agency software bloat.</h2>
+    <p class="section-sub">One agent. One honest book.</p>
     <div class="pricing-grid">
       <div class="price-card">
+        <div class="price-eyebrow">One agent. One honest book.</div>
         <h3>Producer</h3>
-        <div class="amount">$29<span>/mo</span></div>
+        <div class="amount">$49<span>/mo</span></div>
         <ul>
-          <li>Unlimited clients &amp; policies</li>
-          <li>Commission &amp; expense tracking</li>
-          <li>Profitability dashboard</li>
-          <li>CSV import</li>
+          <li>Commissions, chargebacks, and net P&amp;L</li>
+          <li>Daily dials, appointments, presentations, sales</li>
+          <li>Client file: contact, carrier, premium, status</li>
+          <li>Lead spend vs. first-year commission</li>
         </ul>
-        <a class="primary" href="/login.html?tier=individual" style="display:block; text-align:center; text-decoration:none; padding:12px;">Start as Producer</a>
+        <a class="primary" href="/login.html?tier=individual">Start trial</a>
       </div>
       <div class="price-card featured">
-        <h3>Agency Owner</h3>
-        <div class="amount">$79<span>/mo</span></div>
+        <div class="price-eyebrow">For shops running setters and overrides.</div>
+        <h3>Agency</h3>
+        <div class="amount">$129<span>/mo</span></div>
         <ul>
           <li>Everything in Producer</li>
-          <li>Agency-wide roll-up dashboard</li>
-          <li>Override commission tracking</li>
-          <li>Staff, recruiting &amp; owner draws</li>
+          <li>Staff, setter, and E&amp;O cost tracking</li>
+          <li>Override and bonus lines on the P&amp;L</li>
+          <li>Higher volume without per-case fees</li>
         </ul>
-        <a class="primary" href="/login.html?tier=agency_owner" style="display:block; text-align:center; text-decoration:none; padding:12px;">Start as Agency Owner</a>
+        <a class="primary" href="/login.html?tier=agency_owner">Choose Agency</a>
       </div>
     </div>
   </div>
 
   <footer class="home-footer">
-    BOB — Book of Business. <a href="/login.html">Sign In</a>
+    <div>
+      <div class="brand" style="margin-bottom:10px;">
+        <img src="/img/bob-mascot.svg" width="26" height="32" alt="">
+        <span class="brand-name" style="font-size:1rem;">Bob's got you covered</span>
+      </div>
+      <p style="color:var(--ink-soft); font-size:.86rem; max-width:320px;">Your book of business — commissions, chargebacks, lead cost, and the work that made the number. One book per account.</p>
+    </div>
+    <div>
+      <h4>Product</h4>
+      <a href="#desk">The desk</a>
+      <a href="#pricing">Pricing</a>
+      <a href="/demo.html">Sample book</a>
+      <a href="#faq">FAQ</a>
+    </div>
+    <div>
+      <h4>Account</h4>
+      <a href="/login.html">Sign in</a>
+      <a href="#">Terms</a>
+      <a href="#">Privacy</a>
+    </div>
   </footer>
+  <p class="footer-disclaimer">BOB is independent software for licensed producers. Not affiliated with any carrier.</p>
 </div>
 
 <script src="/js/supabaseClient.js"></script>
@@ -127,7 +179,7 @@
 (async () => {
   const { data: { session } } = await supabaseClient.auth.getSession();
   if (session) {
-    document.getElementById('navActions').innerHTML = '<a class="primary" href="/app.html" style="padding:9px 18px; border-radius:12px;">Go to Dashboard</a>';
+    document.getElementById('navActions').innerHTML = '<a class="primary" href="/app.html">Go to Desk</a>';
   }
 })();
 </script>

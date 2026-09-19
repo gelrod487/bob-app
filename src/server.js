@@ -31,6 +31,8 @@ app.use('/api/payment-reminders', requireProducer, require('./routes/paymentRemi
 app.use('/api/owner-draws', requireProducer, require('./routes/ownerDraws'));
 app.use('/api/import', requireProducer, require('./routes/import'));
 app.use('/api/billing', requireProducer, require('./routes/billing'));
+app.use('/api/activity', requireProducer, require('./routes/activity'));
+app.use('/api/goals', requireProducer, require('./routes/goals'));
 
 // GET /api/dashboard — the numbers the mockup's dashboard tab needs, in one call.
 app.get('/api/dashboard', requireProducer, asyncHandler(async (req, res) => {
