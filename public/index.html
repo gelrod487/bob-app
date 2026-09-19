@@ -1,13 +1,134 @@
 <!DOCTYPE html>
 <html lang="en">
-<head><meta charset="UTF-8"><title>BOB — Book of Business</title></head>
-<body>
+<head>
+<meta charset="UTF-8">
+<title>BOB — Book of Business</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Track your book of business — clients, policies, commissions, and expenses — with real-time profitability, built for independent producers and agency owners.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<link rel="stylesheet" href="/css/bob.css">
+</head>
+<body>
+<div class="wrap">
+
+  <div class="home-nav">
+    <div class="brand">
+      <svg width="36" height="36" viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="#FF6B35"/><circle cx="50" cy="50" r="46" fill="none" stroke="#E4531F" stroke-width="4"/><text x="50" y="63" font-family="Baloo 2, sans-serif" font-size="38" font-weight="800" fill="#fff" text-anchor="middle">B</text></svg>
+      <div><h1 style="font-size:1.3rem;">BOB</h1></div>
+    </div>
+    <div class="home-nav-actions" id="navActions">
+      <a href="/login.html">Sign In</a>
+      <a class="primary" href="/login.html" style="padding:9px 18px; border-radius:12px;">Get Started</a>
+    </div>
+  </div>
+
+  <!-- HERO -->
+  <div class="hero">
+    <h1>Know your numbers.<br><span>Every policy. Every dollar.</span></h1>
+    <p class="lede">BOB tracks your clients, policies, commissions, and expenses in one place — so you always know your real net profit, not just what came in.</p>
+    <div class="hero-ctas">
+      <a class="primary big" href="/login.html">Get Started Free</a>
+      <a class="ghost big" href="#pricing">See Pricing</a>
+    </div>
+  </div>
+
+  <!-- FEATURES -->
+  <div class="home-section">
+    <h2>Everything your book of business needs</h2>
+    <p class="section-sub">Built around how independent producers and agency owners actually track their work.</p>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <span class="icon">📊</span>
+        <h3>Profitability Dashboard</h3>
+        <p>See commission revenue, expenses, and net profit at a glance, with trend charts built straight from your ledger — not a rough estimate.</p>
+      </div>
+      <div class="feature-card">
+        <span class="icon">📇</span>
+        <h3>Clients &amp; Policies</h3>
+        <p>Every client and policy in one searchable book — carrier, product, premium, issue date, and status, always up to date.</p>
+      </div>
+      <div class="feature-card">
+        <span class="icon">💰</span>
+        <h3>Commission Tracking</h3>
+        <p>Log advances, renewals, chargebacks, and overrides. BOB keeps the math straight so you know what you actually earned.</p>
+      </div>
+      <div class="feature-card">
+        <span class="icon">🧾</span>
+        <h3>Expense Tracking</h3>
+        <p>Lead costs, operations, travel — broken out clearly so you see true net profit, not just top-line revenue.</p>
+      </div>
+      <div class="feature-card">
+        <span class="icon">📥</span>
+        <h3>Spreadsheet Import</h3>
+        <p>Already tracking things in a spreadsheet? Upload your CSV and BOB maps the columns for you — nothing gets added until you confirm.</p>
+      </div>
+      <div class="feature-card">
+        <span class="icon">🏢</span>
+        <h3>Built for Agencies</h3>
+        <p>Agency Owners get a roll-up view across every producer, override commission tracking, and owner draw logging.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- PREVIEW -->
+  <div class="home-section">
+    <h2>See it in action</h2>
+    <p class="section-sub">A look at the dashboard you'll get — shown here with sample numbers.</p>
+    <div class="preview-panel">
+      <span class="preview-tag">Sample data</span>
+      <div class="grid">
+        <div class="card"><div class="stat-label">Commission Revenue</div><div class="stat-value pos">$12,400</div></div>
+        <div class="card"><div class="stat-label">Total Expenses</div><div class="stat-value neg">$3,200</div></div>
+        <div class="card"><div class="stat-label">Net Profit</div><div class="stat-value pos">$9,200</div></div>
+        <div class="card"><div class="stat-label">Active Policies</div><div class="stat-value">18</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PRICING -->
+  <div class="home-section" id="pricing">
+    <h2>Simple, honest pricing</h2>
+    <p class="section-sub">One plan for individual producers, one for agency owners. Cancel anytime.</p>
+    <div class="pricing-grid">
+      <div class="price-card">
+        <h3>Producer</h3>
+        <div class="amount">$29<span>/mo</span></div>
+        <ul>
+          <li>Unlimited clients &amp; policies</li>
+          <li>Commission &amp; expense tracking</li>
+          <li>Profitability dashboard</li>
+          <li>CSV import</li>
+        </ul>
+        <a class="primary" href="/login.html?tier=individual" style="display:block; text-align:center; text-decoration:none; padding:12px;">Start as Producer</a>
+      </div>
+      <div class="price-card featured">
+        <h3>Agency Owner</h3>
+        <div class="amount">$79<span>/mo</span></div>
+        <ul>
+          <li>Everything in Producer</li>
+          <li>Agency-wide roll-up dashboard</li>
+          <li>Override commission tracking</li>
+          <li>Staff, recruiting &amp; owner draws</li>
+        </ul>
+        <a class="primary" href="/login.html?tier=agency_owner" style="display:block; text-align:center; text-decoration:none; padding:12px;">Start as Agency Owner</a>
+      </div>
+    </div>
+  </div>
+
+  <footer class="home-footer">
+    BOB — Book of Business. <a href="/login.html">Sign In</a>
+  </footer>
+</div>
+
 <script src="/js/supabaseClient.js"></script>
 <script>
 (async () => {
   const { data: { session } } = await supabaseClient.auth.getSession();
-  window.location.href = session ? '/app.html' : '/login.html';
+  if (session) {
+    document.getElementById('navActions').innerHTML = '<a class="primary" href="/app.html" style="padding:9px 18px; border-radius:12px;">Go to Dashboard</a>';
+  }
 })();
 </script>
 </body>

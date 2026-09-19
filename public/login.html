@@ -99,6 +99,14 @@ function wireTierPicker(formEl, agencyFieldEl) {
 }
 wireTierPicker(signupForm, document.getElementById('agencyNameField'));
 wireTierPicker(completeForm, document.getElementById('completeAgencyNameField'));
+
+/* ---- arriving from a pricing link (e.g. /login.html?tier=agency_owner) ---- */
+const requestedTier = new URLSearchParams(window.location.search).get('tier');
+if (requestedTier === 'individual' || requestedTier === 'agency_owner') {
+  document.querySelector('.auth-tab[data-mode="signup"]').click();
+  const option = signupForm.querySelector(`.tier-option[data-tier="${requestedTier}"]`);
+  if (option) option.click();
+}
 function selectedTier(formEl) {
   return formEl.querySelector('.tier-option.selected').dataset.tier;
 }
