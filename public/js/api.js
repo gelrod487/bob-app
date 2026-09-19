@@ -3,7 +3,7 @@
 async function apiFetch(path, { method = 'GET', body } = {}) {
   const { data: { session } } = await supabaseClient.auth.getSession();
   if (!session) {
-    window.location.href = '/login.html';
+    if (!location.pathname.endsWith('/login.html')) window.location.href = '/login.html';
     throw new Error('No active session.');
   }
 
@@ -17,7 +17,11 @@ async function apiFetch(path, { method = 'GET', body } = {}) {
   });
 
   if (res.status === 401) {
-    window.location.href = '/login.html';
+    // The Supabase session in localStorage is stale (e.g. the user was deleted, or the
+    // token can't be verified server-side) — clear it so we don't loop redirecting back
+    // to a page that still finds a "valid" local session.
+    await supabaseClient.auth.signOut();
+    if (!location.pathname.endsWith('/login.html')) window.location.href = '/login.html';
     throw new Error('Session expired.');
   }
 
