@@ -14,7 +14,7 @@
 <body>
 <div class="app-shell">
   <div class="sidebar">
-    <div class="brand"><img src="/img/bob-mascot.svg" width="26" height="32" alt=""><span class="brand-name" style="font-size:1rem;">Bob's got you covered</span></div>
+    <div class="brand"><div class="mascot-wrap" id="navMascot"><img class="mascot-sway" src="/img/bob-mascot.svg" width="26" height="32" alt="Bob"></div><span class="brand-name" style="font-size:1rem;">Bob's got you covered</span></div>
     <div class="sidebar-nav" id="sidebarNav">
       <button data-page="desk" class="active"><span class="ic">🗂️</span>Desk</button>
       <button data-page="activity"><span class="ic">📞</span>Activity</button>
@@ -34,23 +34,19 @@
   </div>
 </div>
 
-<div class="bob-wrap" id="bobWrap">
-  <div class="bob-bubble" id="bobBubble">Hi, I'm Bob!</div>
-  <img src="/img/bob-mascot.svg" alt="Bob">
-</div>
-
 <script src="/js/supabaseClient.js"></script>
 <script src="/js/api.js"></script>
+<script src="/js/mascot.js"></script>
 <script>
 let me = null;
 let policiesCache = [];
 let clientsCache = [];
 const CATEGORY_META = {
-  lead_cost: { label: 'Lead cost', color: '#8C2F1E' },
-  operations: { label: 'Operations', color: '#2A211A' },
-  travel: { label: 'Travel', color: '#B23A2A' },
-  staff: { label: 'Staff', color: '#2F6B4F' },
-  recruiting: { label: 'Recruiting', color: '#C89B3C' },
+  lead_cost: { label: 'Lead cost', color: '#FF6B35' },
+  operations: { label: 'Operations', color: '#5A3825' },
+  travel: { label: 'Travel', color: '#FF8C69' },
+  staff: { label: 'Staff', color: '#1B998B' },
+  recruiting: { label: 'Recruiting', color: '#F7A934' },
 };
 const STATUS_TAG = {
   active: { cls: 'active-pol', label: 'Issued — paid' },
@@ -67,17 +63,8 @@ function todayISO(){ const d = new Date(); return `${d.getFullYear()}-${String(d
 function monthFirstISO(){ const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`; }
 function policyChargeback(p){ return (p.commissionEntries||[]).filter(e=>e.entryType==='chargeback').reduce((s,e)=>s+Math.abs(Number(e.amount)),0); }
 
-/* ---- BOB mascot ---- */
-const bobWrap = document.getElementById('bobWrap');
-const bobBubble = document.getElementById('bobBubble');
-const lines = ["Hi, I'm Bob!","Bump your dials — I'll do the math.","Looking sharp today!","Don't forget to log your lead costs."];
-function say(text){
-  bobBubble.textContent = text;
-  bobWrap.classList.add('talk');
-  clearTimeout(bobWrap._t);
-  bobWrap._t = setTimeout(()=>bobWrap.classList.remove('talk'), 3200);
-}
-bobWrap.onclick = ()=> say(lines[Math.floor(Math.random()*lines.length)]);
+/* ---- BOB mascot (lives top-left in the sidebar) ---- */
+const say = wireMascot('navMascot', ["Hi, I'm Bob!","Bump your dials — I'll do the math.","Looking sharp today!","Don't forget to log your lead costs."]);
 
 /* ---- sidebar nav ---- */
 const mainInner = document.getElementById('mainInner');
@@ -101,7 +88,7 @@ document.getElementById('logoutBtn').onclick = async () => { await supabaseClien
   statusPill.textContent = me.subscriptionStatus;
   statusPill.className = 'pill ' + me.subscriptionStatus;
 
-  setTimeout(()=>say(lines[0]), 900);
+  setTimeout(()=>say("Hi, I'm Bob!"), 900);
   go('desk');
 })();
 
@@ -265,7 +252,7 @@ function renderNetChart(series){
   if (!ctx) return;
   if (netChart) netChart.destroy();
   netChart = new Chart(ctx, { type:'line', data:{ labels: series.labels, datasets:[{
-    data: series.data, borderColor:'#C89B3C', backgroundColor:'rgba(200,155,60,.18)',
+    data: series.data, borderColor:'#FF6B35', backgroundColor:'rgba(255,107,53,.15)',
     fill:true, tension:.45, cubicInterpolationMode:'monotone', pointRadius:0,
   }]}, options:{ responsive:true, maintainAspectRatio:false,
     plugins:{ legend:{ display:false } },

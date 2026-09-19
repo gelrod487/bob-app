@@ -15,7 +15,7 @@
 
   <div class="home-nav">
     <div class="brand">
-      <img src="/img/bob-mascot.svg" width="34" height="42" alt="">
+      <div class="mascot-wrap" id="navMascot"><img class="mascot-sway" src="/img/bob-mascot.svg" width="34" height="42" alt="Bob"></div>
       <span class="brand-name">Bob's got you covered</span>
     </div>
     <div class="home-nav-links">
@@ -43,7 +43,7 @@
     </div>
     <div>
       <div style="display:flex; gap:24px; align-items:center;">
-        <div class="hero-mascot"><img src="/img/bob-mascot.svg" alt="Bob, the book of business mascot, waving"></div>
+        <div class="hero-mascot"><img class="mascot-sway" src="/img/bob-mascot.svg" alt="Bob, the book of business mascot, waving"></div>
         <div class="sample-card" style="flex:1;">
           <span class="kicker">Example Producer · YTD</span>
           <div class="headline-num">$43,412 net</div>
@@ -152,7 +152,7 @@
   <footer class="home-footer">
     <div>
       <div class="brand" style="margin-bottom:10px;">
-        <img src="/img/bob-mascot.svg" width="26" height="32" alt="">
+        <img class="mascot-sway" src="/img/bob-mascot.svg" width="26" height="32" alt="Bob">
         <span class="brand-name" style="font-size:1rem;">Bob's got you covered</span>
       </div>
       <p style="color:var(--ink-soft); font-size:.86rem; max-width:320px;">Your book of business — commissions, chargebacks, lead cost, and the work that made the number. One book per account.</p>
@@ -175,7 +175,11 @@
 </div>
 
 <script src="/js/supabaseClient.js"></script>
+<script src="/js/mascot.js"></script>
 <script>
+wireMascot('navMascot', [
+  "Hi, I'm Bob!", "Chargebacks included — no surprises.", "One book per account.", "Tour the sample book!",
+]);
 (async () => {
   const { data: { session } } = await supabaseClient.auth.getSession();
   if (session) {

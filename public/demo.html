@@ -16,7 +16,7 @@
 </div>
 <div class="app-shell">
   <div class="sidebar">
-    <div class="brand"><img src="/img/bob-mascot.svg" width="26" height="32" alt=""><span class="brand-name" style="font-size:1rem;">Bob's got you covered</span></div>
+    <div class="brand"><div class="mascot-wrap" id="navMascot"><img class="mascot-sway" src="/img/bob-mascot.svg" width="26" height="32" alt="Bob"></div><span class="brand-name" style="font-size:1rem;">Bob's got you covered</span></div>
     <div class="sidebar-nav" id="sidebarNav">
       <button data-page="desk" class="active"><span class="ic">🗂️</span>Desk</button>
       <button data-page="activity"><span class="ic">📞</span>Activity</button>
@@ -34,7 +34,9 @@
   </div>
 </div>
 
+<script src="/js/mascot.js"></script>
 <script>
+wireMascot('navMascot', ["Hi, I'm Bob!", "This is a sample book — try the real thing!", "Edits here stay in your browser."]);
 /* ---- sample dataset (static — matches the numbers shown on the marketing site) ---- */
 const BASE = {
   netProfit: 76, grossCommission: 5681, placedCount: 4, pendingPremium: 1764,
@@ -50,11 +52,11 @@ const BASE = {
     { name:'Danielle Brooks', email:'dbrooks@example.com', phone:'(469) 555-0177', carrier:'F&G', product:'Pathsetter IUL', policyNumber:'FG-44012', issued:'May 22', monthly:312.00, ap:3744.00, status:'issued' },
   ],
   costs: [
-    { label:'Lead flow', amount:2480, color:'#8C2F1E' },
-    { label:'Staff', amount:1280, color:'#2A211A' },
-    { label:'Travel', amount:640, color:'#2F6B4F' },
-    { label:'CRM / tools', amount:189, color:'#C89B3C' },
-    { label:'E&O insurance', amount:52, color:'#B23A2A' },
+    { label:'Lead flow', amount:2480, color:'#FF6B35' },
+    { label:'Staff', amount:1280, color:'#1B998B' },
+    { label:'Travel', amount:640, color:'#FF8C69' },
+    { label:'CRM / tools', amount:189, color:'#F7A934' },
+    { label:'E&O insurance', amount:52, color:'#5A3825' },
   ],
 };
 
@@ -180,7 +182,7 @@ function renderNetChart(){
   if (!ctx) return;
   if (netChart) netChart.destroy();
   netChart = new Chart(ctx, { type:'line', data:{ labels: BASE.netByMonth.labels, datasets:[{
-    data: BASE.netByMonth.data, borderColor:'#C89B3C', backgroundColor:'rgba(200,155,60,.18)',
+    data: BASE.netByMonth.data, borderColor:'#FF6B35', backgroundColor:'rgba(255,107,53,.15)',
     fill:true, tension:.45, cubicInterpolationMode:'monotone', pointRadius:0,
   }]}, options:{ responsive:true, maintainAspectRatio:false,
     plugins:{ legend:{ display:false } },

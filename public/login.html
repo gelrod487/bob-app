@@ -13,7 +13,7 @@
 <div class="auth-wrap">
   <div class="auth-card">
     <div class="brand" style="margin-bottom:20px;">
-      <img src="/img/bob-mascot.svg" width="34" height="42" alt="">
+      <div class="mascot-wrap" id="navMascot"><img class="mascot-sway" src="/img/bob-mascot.svg" width="34" height="42" alt="Bob"></div>
       <div><h1 style="font-size:1.3rem; margin:0;">Bob's got you covered</h1></div>
     </div>
 
@@ -73,7 +73,9 @@
 
 <script src="/js/supabaseClient.js"></script>
 <script src="/js/api.js"></script>
+<script src="/js/mascot.js"></script>
 <script>
+wireMascot('navMascot', ["Hi, I'm Bob!", "Let's get your book set up.", "One book per account."]);
 /* ---- tab switching ---- */
 const signinForm = document.getElementById('signinForm');
 const signupForm = document.getElementById('signupForm');
