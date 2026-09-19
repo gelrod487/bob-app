@@ -104,11 +104,6 @@
       <circle cx="113" cy="161" r="3.2" fill="url(#brass)"/>
     </g>
 
-    <!-- wax seal -->
-    <circle cx="101" cy="140" r="15" fill="url(#brass)"/>
-    <circle cx="101" cy="140" r="15" fill="none" stroke="#7A4E10" stroke-width="1.2" opacity=".6"/>
-    <circle cx="96" cy="135" r="2.4" fill="#FFF3D6" opacity=".55"/>
-
     <!-- face — tooled into the leather, not drawn on top of it -->
     <g>
       <path d="M58 79 Q65 74 72 78" stroke="#2A1409" stroke-width="2.3" fill="none" stroke-linecap="round" opacity=".75"/>
