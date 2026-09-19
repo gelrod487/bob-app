@@ -18,13 +18,9 @@
   --shadow: 0 10px 30px rgba(90,45,20,.10);
   --radius: 18px;
 }
-@media (prefers-color-scheme: dark){
-  :root:not([data-theme="light"]){
-    --cream:#20140D; --panel:#2C1D14; --panel-alt:#3A2A1E; --ink:#FBEDE0; --ink-soft:#CBB6A8; --line:#4A362A;
-    --green-bg:#173330; --amber-bg:#3A2E10; --red-bg:#3A211C;
-    --shadow: 0 10px 30px rgba(0,0,0,.4);
-  }
-}
+/* Bob's palette is intentionally always this light warm cream — it doesn't follow the
+   visitor's OS/browser dark-mode preference. A manual toggle could still opt in by setting
+   data-theme="dark" on <html>, which the block below supports, but nothing does that today. */
 :root[data-theme="dark"]{
   --cream:#20140D; --panel:#2C1D14; --panel-alt:#3A2A1E; --ink:#FBEDE0; --ink-soft:#CBB6A8; --line:#4A362A;
   --green-bg:#173330; --amber-bg:#3A2E10; --red-bg:#3A211C;
