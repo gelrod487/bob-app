@@ -247,14 +247,17 @@ footer.home-footer a{display:block; color:var(--ink-soft); text-decoration:none;
 .case-card .case-right{text-align:right;}
 .case-card .case-amount{font-weight:800; font-family:'Playfair Display',serif; font-size:1.05rem;}
 
-/* ---- BOB mascot: lives top-left on every page, always gently swaying ---- */
+/* ---- BOB mascot: lives top-left on every page. The wave itself is animated inside the
+   SVG (just the arm, via SMIL) — this is only a slow, subtle breathing bob for the rest
+   of the body, so the two motions read as one natural, organic gesture rather than the
+   whole figure rocking back and forth. ---- */
 @keyframes mascot-idle{
-  0%,100%{ transform:translateY(0) rotate(0deg); }
-  50%{ transform:translateY(-3px) rotate(-2deg); }
+  0%,100%{ transform:translateY(0); }
+  50%{ transform:translateY(-2px); }
 }
-.mascot-sway{ animation:mascot-idle 3.4s ease-in-out infinite; transform-origin:bottom center; display:block; }
+.mascot-sway{ animation:mascot-idle 2.8s ease-in-out infinite; display:block; }
 .mascot-wrap{ position:relative; display:inline-flex; align-items:center; cursor:pointer; }
-.mascot-wrap:active .mascot-sway{ animation-duration:.6s; }
+.mascot-wrap:active .mascot-sway{ animation-duration:.5s; }
 .mascot-bubble{
   position:absolute; top:100%; left:0; margin-top:8px;
   background:var(--panel); border:1.5px solid var(--line); padding:7px 12px; border-radius:12px;
