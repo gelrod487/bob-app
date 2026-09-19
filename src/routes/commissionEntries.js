@@ -14,6 +14,7 @@ router.get('/', async (req, res) => {
       ...(policyId ? { policyId } : {}),
       OR: [{ producerId: req.producerId }, { agency: { producers: { some: { id: req.producerId } } } }],
     },
+    include: { policy: { include: { client: true } } },
     orderBy: { entryDate: 'desc' },
   });
   res.json(entries);

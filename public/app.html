@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>BOB — Book of Business</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<link rel="stylesheet" href="/css/bob.css">
+</head>
+<body class="individual">
+<div class="wrap">
+
+  <div class="topbar">
+    <div class="brand">
+      <svg width="40" height="40" viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="#FF6B35"/><circle cx="50" cy="50" r="46" fill="none" stroke="#E4531F" stroke-width="4"/><text x="50" y="63" font-family="Baloo 2, sans-serif" font-size="38" font-weight="800" fill="#fff" text-anchor="middle">B</text></svg>
+      <div><h1>BOB</h1><span class="sub">Book of Business</span></div>
+    </div>
+    <div class="topbar-actions">
+      <span class="pill" id="planPill">—</span>
+      <span class="pill" id="statusPill">—</span>
+      <button class="ghost" id="logoutBtn">Log Out</button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="dashboard">Dashboard</button>
+    <button class="tab" data-tab="clients">Clients &amp; Policies</button>
+    <button class="tab" data-tab="commissions">Commissions</button>
+    <button class="tab" data-tab="expenses">Expenses</button>
+    <button class="tab" data-tab="import">Import Data</button>
+    <button class="tab" data-tab="billing">Billing</button>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div class="tab-panel" id="tab-dashboard">
+    <div class="grid" style="margin-bottom:18px;">
+      <div class="card"><div class="stat-label">Commission Revenue</div><div class="stat-value pos" id="statRevenue">$0</div></div>
+      <div class="card"><div class="stat-label">Total Expenses</div><div class="stat-value neg" id="statExpenses">$0</div></div>
+      <div class="card"><div class="stat-label">Net Profit</div><div class="stat-value" id="statProfit">$0</div></div>
+      <div class="card"><div class="stat-label">Active Policies</div><div class="stat-value" id="statPolicies">0</div></div>
+    </div>
+    <div class="two-col">
+      <div class="panel">
+        <h2>Profitability Trend (last 6 months)</h2>
+        <div class="chart-box"><canvas id="trendChart"></canvas></div>
+      </div>
+      <div class="panel">
+        <h2>Expense Breakdown</h2>
+        <div class="chart-box"><canvas id="expenseChart"></canvas></div>
+      </div>
+    </div>
+    <div class="panel agency-only block">
+      <h2>Agency Roll-up</h2>
+      <div class="grid">
+        <div class="card"><div class="stat-label">Override Commission</div><div class="stat-value pos" id="statOverride">$0</div></div>
+        <div class="card"><div class="stat-label">Staff Costs</div><div class="stat-value neg" id="statStaff">$0</div></div>
+        <div class="card"><div class="stat-label">Recruiting Costs</div><div class="stat-value neg" id="statRecruit">$0</div></div>
+        <div class="card"><div class="stat-label">Producers Tracked</div><div class="stat-value" id="statProducers">0</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CLIENTS & POLICIES -->
+  <div class="tab-panel section-hidden" id="tab-clients">
+    <div class="panel">
+      <h2>Add Client / Policy</h2>
+      <form class="entry" id="policyForm">
+        <div><label>Client Name</label><input required name="client" placeholder="Jordan Alvarez"></div>
+        <div><label>Carrier</label><input required name="carrier" placeholder="e.g. North Star Life"></div>
+        <div><label>Product Type</label>
+          <select name="product"><option>Term Life</option><option>Whole Life</option><option>IUL</option><option>Final Expense</option><option>Annuity</option></select>
+        </div>
+        <div><label>Monthly Premium ($)</label><input required type="number" step="0.01" name="premium" placeholder="100"></div>
+        <div><label>Issue Date</label><input required type="date" name="issued"></div>
+        <div><label>Status</label>
+          <select name="status"><option value="active">Active</option><option value="pending">Pending</option><option value="lapsed">Lapsed</option><option value="declined">Declined</option><option value="withdrawn">Withdrawn</option></select>
+        </div>
+        <div class="full"><button class="primary" type="submit">Add Policy</button></div>
+        <div class="full errortext" id="policyError"></div>
+      </form>
+    </div>
+    <div class="panel">
+      <h2>Policy Book</h2>
+      <table>
+        <thead><tr><th>Client</th><th>Carrier</th><th>Product</th><th>Monthly Premium</th><th>Issued</th><th>Status</th></tr></thead>
+        <tbody id="policyTable"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- COMMISSIONS -->
+  <div class="tab-panel section-hidden" id="tab-commissions">
+    <div class="panel">
+      <h2>Log Commission</h2>
+      <form class="entry" id="commForm">
+        <div class="full"><label>Policy</label><select required name="policyId" id="commPolicySelect"></select></div>
+        <div><label>Type</label><select name="type"><option value="Initial">Initial</option><option value="Renewal">Renewal</option><option value="Override" class="agency-only-opt">Override</option><option value="Chargeback">Chargeback</option></select></div>
+        <div><label>Amount ($)</label><input required type="number" step="0.01" name="amount" placeholder="850"></div>
+        <div><label>Date</label><input required type="date" name="date"></div>
+        <div class="full"><button class="primary" type="submit">Log Commission</button></div>
+        <div class="full errortext" id="commError"></div>
+      </form>
+    </div>
+    <div class="panel">
+      <h2>Commission History</h2>
+      <table><thead><tr><th>Client</th><th>Type</th><th>Amount</th><th>Date</th></tr></thead><tbody id="commTable"></tbody></table>
+    </div>
+  </div>
+
+  <!-- EXPENSES -->
+  <div class="tab-panel section-hidden" id="tab-expenses">
+    <div class="panel">
+      <h2>Log Expense</h2>
+      <form class="entry" id="expForm">
+        <div><label>Category</label>
+          <select name="category">
+            <option value="lead_cost">Lead Costs</option><option value="operations">Operations</option><option value="travel">Travel</option>
+            <option value="staff" class="agency-only-opt">Staff</option><option value="recruiting" class="agency-only-opt">Recruiting</option>
+          </select>
+        </div>
+        <div><label>Description</label><input name="desc" placeholder="e.g. Facebook lead gen"></div>
+        <div><label>Amount ($)</label><input required type="number" step="0.01" name="amount" placeholder="300"></div>
+        <div><label>Date</label><input required type="date" name="date"></div>
+        <div class="full"><button class="primary" type="submit">Log Expense</button></div>
+        <div class="full errortext" id="expError"></div>
+      </form>
+    </div>
+    <div class="panel">
+      <h2>Expense Log</h2>
+      <table><thead><tr><th>Category</th><th>Description</th><th>Amount</th><th>Date</th></tr></thead><tbody id="expTable"></tbody></table>
+    </div>
+  </div>
+
+  <!-- IMPORT -->
+  <div class="tab-panel section-hidden" id="tab-import">
+    <div class="panel">
+      <h2>Import Your Existing Tracker</h2>
+      <p class="helptext">Upload a CSV export of your current spreadsheet. BOB will read the columns so you can map them to the right fields — nothing gets added until you confirm.</p>
+      <div class="dropzone" id="dropzone">Drop a CSV file here, or click to choose one</div>
+      <input type="file" id="fileInput" accept=".csv" style="display:none;">
+      <div id="mapArea" style="margin-top:16px;"></div>
+    </div>
+  </div>
+
+  <!-- BILLING -->
+  <div class="tab-panel section-hidden" id="tab-billing">
+    <div class="panel">
+      <h2>Your Plan</h2>
+      <p class="helptext">Current plan: <strong id="billingTierText">—</strong> · Status: <span class="pill" id="billingStatusPill">—</span></p>
+      <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:16px;">
+        <button class="primary" id="subscribeIndividualBtn">Subscribe — Producer</button>
+        <button class="primary" id="subscribeAgencyBtn">Subscribe — Agency Owner</button>
+        <button class="ghost" id="manageBillingBtn">Manage Billing</button>
+      </div>
+      <div class="errortext" id="billingError"></div>
+      <p class="helptext" id="billingNotice" style="margin-top:14px;"></p>
+    </div>
+  </div>
+
+  <footer class="hint">BOB — Book of Business.</footer>
+</div>
+
+<!-- BOB mascot -->
+<div class="bob-wrap" id="bobWrap">
+  <div class="bob-bubble" id="bobBubble">Hi, I'm BOB!</div>
+  <svg id="bobSvg" viewBox="0 0 120 120" width="92" height="92">
+    <ellipse cx="60" cy="108" rx="26" ry="6" fill="rgba(0,0,0,.12)"/>
+    <rect x="30" y="52" width="60" height="42" rx="10" fill="#E4531F"/>
+    <rect x="52" y="40" width="16" height="14" fill="#E4531F"/>
+    <rect x="30" y="66" width="60" height="6" fill="#FFC46B"/>
+    <circle cx="60" cy="34" r="26" fill="#FFB25E"/>
+    <g class="blink">
+      <circle cx="50" cy="32" r="4" fill="#2B2320"/>
+      <circle cx="70" cy="32" r="4" fill="#2B2320"/>
+    </g>
+    <path d="M48 44 Q60 54 72 44" stroke="#2B2320" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <circle cx="38" cy="38" r="5" fill="#FF9E7A" opacity=".6"/>
+    <circle cx="82" cy="38" r="5" fill="#FF9E7A" opacity=".6"/>
+  </svg>
+</div>
+
+<script src="/js/supabaseClient.js"></script>
+<script src="/js/api.js"></script>
+<script>
+let me = null; // { id, name, email, agencyId, subscriptionTier, subscriptionStatus }
+let policiesCache = [];
+let clientsCache = [];
+
+function fmt(n){ return '$'+Number(n||0).toLocaleString(undefined,{maximumFractionDigits:0}); }
+// Date-only strings (e.g. "2026-06-01") parse as UTC midnight — format in UTC too, or
+// timezones behind UTC display the wrong (previous) day.
+function fmtDate(dateStr){ return new Date(dateStr).toLocaleDateString(undefined,{timeZone:'UTC'}); }
+
+/* ---- BOB mascot ---- */
+const bobWrap = document.getElementById('bobWrap');
+const bobBubble = document.getElementById('bobBubble');
+const lines = ["Hi, I'm BOB!","Add a policy — I'll do the math.","Looking sharp today!","Don't forget to log your lead costs."];
+function say(text){
+  bobBubble.textContent = text;
+  bobWrap.classList.add('talk');
+  clearTimeout(bobWrap._t);
+  bobWrap._t = setTimeout(()=>bobWrap.classList.remove('talk'), 3200);
+}
+bobWrap.onclick = ()=> say(lines[Math.floor(Math.random()*lines.length)]);
+
+/* ---- tabs ---- */
+document.querySelectorAll('.tab').forEach(t=>{
+  t.onclick = ()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(x=>x.classList.add('section-hidden'));
+    t.classList.add('active');
+    document.getElementById('tab-'+t.dataset.tab).classList.remove('section-hidden');
+    if(t.dataset.tab==='dashboard') renderDashboard();
+    if(t.dataset.tab==='clients') renderPolicies();
+    if(t.dataset.tab==='commissions') renderCommissions();
+    if(t.dataset.tab==='expenses') renderExpenses();
+    if(t.dataset.tab==='billing') renderBilling();
+  };
+});
+
+/* ---- logout ---- */
+document.getElementById('logoutBtn').onclick = async () => {
+  await supabaseClient.auth.signOut();
+  window.location.href = '/login.html';
+};
+
+/* ---- boot ---- */
+(async function init(){
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (!session) { window.location.href = '/login.html'; return; }
+
+  const meRes = await apiFetch('/api/me');
+  if (!meRes.producer) { window.location.href = '/login.html'; return; }
+  me = meRes.producer;
+
+  const isAgency = me.subscriptionTier === 'agency_owner';
+  document.body.classList.toggle('agency', isAgency);
+  document.body.classList.toggle('individual', !isAgency);
+  document.querySelectorAll('.agency-only-opt').forEach(o => o.style.display = isAgency ? 'block' : 'none');
+
+  document.getElementById('planPill').textContent = isAgency ? 'Agency Owner' : 'Producer';
+  const statusPill = document.getElementById('statusPill');
+  statusPill.textContent = me.subscriptionStatus;
+  statusPill.className = 'pill ' + me.subscriptionStatus;
+
+  const checkoutResult = new URLSearchParams(window.location.search).get('checkout');
+  if (checkoutResult === 'success') {
+    setTimeout(() => say("Subscription active — thanks!"), 900);
+    window.history.replaceState({}, '', '/app.html');
+  } else if (checkoutResult === 'cancelled') {
+    setTimeout(() => say("Checkout cancelled — no charge made."), 900);
+    window.history.replaceState({}, '', '/app.html');
+  } else {
+    setTimeout(()=>say(lines[0]), 900);
+  }
+  renderDashboard();
+})();
+
+/* ================= DASHBOARD ================= */
+let trendChart, expenseChart;
+async function renderDashboard(){
+  const [dash, expenses, commissions] = await Promise.all([
+    apiFetch('/api/dashboard'),
+    apiFetch('/api/expenses'),
+    apiFetch('/api/commission-entries'),
+  ]);
+
+  const isAgency = dash.tier === 'agency_owner';
+  const revenue = isAgency ? (dash.totalProducerCommission + dash.totalOverrides) : dash.totalCommission;
+  document.getElementById('statRevenue').textContent = fmt(revenue);
+  document.getElementById('statExpenses').textContent = fmt(dash.totalExpenses);
+  const profitEl = document.getElementById('statProfit');
+  profitEl.textContent = fmt(dash.netProfit);
+  profitEl.className = 'stat-value ' + (dash.netProfit >= 0 ? 'pos' : 'neg');
+  document.getElementById('statPolicies').textContent = dash.activePolicyCount;
+
+  if (isAgency) {
+    const staff = expenses.filter(e=>e.category==='staff').reduce((s,e)=>s+Number(e.amount),0);
+    const recruit = expenses.filter(e=>e.category==='recruiting').reduce((s,e)=>s+Number(e.amount),0);
+    document.getElementById('statOverride').textContent = fmt(dash.totalOverrides);
+    document.getElementById('statStaff').textContent = fmt(staff);
+    document.getElementById('statRecruit').textContent = fmt(recruit);
+    document.getElementById('statProducers').textContent = dash.producerCount;
+  }
+
+  // Expense breakdown donut — real category sums.
+  const categories = isAgency
+    ? [['lead_cost','Lead Costs'],['operations','Operations'],['staff','Staff'],['recruiting','Recruiting'],['travel','Travel']]
+    : [['lead_cost','Lead Costs'],['operations','Operations'],['travel','Travel']];
+  const expData = categories.map(([key]) => expenses.filter(e=>e.category===key).reduce((s,e)=>s+Number(e.amount),0));
+  const ctx2 = document.getElementById('expenseChart');
+  if (expenseChart) expenseChart.destroy();
+  expenseChart = new Chart(ctx2, { type:'doughnut', data:{
+    labels: categories.map(c=>c[1]),
+    datasets:[{ data: expData, backgroundColor:['#FF6B35','#F7A934','#E63946','#8E5B3F','#1B998B'] }]
+  }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom', labels:{ color:getComputedStyle(document.body).color } } } } });
+
+  // Trend chart — real last-6-months revenue vs. expenses, grouped from raw records.
+  const months = [];
+  const now = new Date();
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+    months.push({ key: `${d.getFullYear()}-${d.getMonth()}`, label: d.toLocaleString(undefined,{month:'short'}) });
+  }
+  const monthKey = (dateStr) => { const d = new Date(dateStr); return `${d.getFullYear()}-${d.getMonth()}`; };
+  const revenueEntryTypes = ['advance','additional','chargeback','other','override'];
+  const revSeries = months.map(m => commissions
+    .filter(c => revenueEntryTypes.includes(c.entryType) && monthKey(c.entryDate) === m.key)
+    .reduce((s,c)=>s+Number(c.amount),0));
+  const expSeries = months.map(m => expenses
+    .filter(e => monthKey(e.expenseDate) === m.key)
+    .reduce((s,e)=>s+Number(e.amount),0));
+  const ctx1 = document.getElementById('trendChart');
+  if (trendChart) trendChart.destroy();
+  trendChart = new Chart(ctx1, { type:'line', data:{ labels: months.map(m=>m.label), datasets:[
+    { label:'Revenue', data:revSeries, borderColor:'#1B998B', backgroundColor:'rgba(27,153,139,.15)', tension:.35, fill:true },
+    { label:'Expenses', data:expSeries, borderColor:'#E63946', backgroundColor:'rgba(230,57,70,.12)', tension:.35, fill:true },
+  ]}, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ labels:{ color:getComputedStyle(document.body).color } } },
+    scales:{ x:{ ticks:{ color:getComputedStyle(document.body).color } }, y:{ ticks:{ color:getComputedStyle(document.body).color } } } } });
+}
+
+/* ================= CLIENTS & POLICIES ================= */
+async function findOrCreateClientByName(name){
+  const match = clientsCache.find(c => c.name.trim().toLowerCase() === name.trim().toLowerCase());
+  if (match) return match.id;
+  const created = await apiFetch('/api/clients', { method:'POST', body:{ name } });
+  clientsCache.push(created);
+  return created.id;
+}
+
+async function renderPolicies(){
+  const [clients, policies] = await Promise.all([apiFetch('/api/clients'), apiFetch('/api/policies')]);
+  clientsCache = clients;
+  policiesCache = policies;
+
+  document.getElementById('policyTable').innerHTML = policies.map(p=>{
+    const cls = p.status==='active' ? 'active-pol' : (p.status==='lapsed' ? 'lapsed' : 'pending');
+    return `<tr><td>${p.client?.name || '—'}</td><td>${p.carrier}</td><td>${p.productType}</td><td>${fmt(p.monthlyPremium)}</td><td>${fmtDate(p.issueDate)}</td><td><span class="tag ${cls}">${p.status}</span></td></tr>`;
+  }).join('') || '<tr><td colspan="6" class="helptext">No policies yet.</td></tr>';
+}
+
+document.getElementById('policyForm').addEventListener('submit', async e=>{
+  e.preventDefault();
+  const errEl = document.getElementById('policyError');
+  errEl.textContent = '';
+  const f = new FormData(e.target);
+  try {
+    const clientId = await findOrCreateClientByName(f.get('client'));
+    await apiFetch('/api/policies', { method:'POST', body:{
+      clientId, carrier:f.get('carrier'), productType:f.get('product'),
+      monthlyPremium: Number(f.get('premium')), issueDate: f.get('issued'), status: f.get('status'),
+    }});
+    e.target.reset();
+    say('Policy added — nice work!');
+    renderPolicies();
+  } catch (err) { errEl.textContent = err.message; }
+});
+
+/* ================= COMMISSIONS ================= */
+const COMM_TYPE_MAP = { Initial:'advance', Renewal:'additional', Override:'override', Chargeback:'chargeback' };
+
+async function renderCommissions(){
+  if (!policiesCache.length) policiesCache = await apiFetch('/api/policies');
+  const select = document.getElementById('commPolicySelect');
+  select.innerHTML = policiesCache.map(p => `<option value="${p.id}">${(p.client?.name||'—')} — ${p.carrier} — ${p.productType}</option>`).join('')
+    || '<option value="">No policies yet — add one first</option>';
+
+  const entries = await apiFetch('/api/commission-entries');
+  document.getElementById('commTable').innerHTML = entries.map(c=>
+    `<tr><td>${c.policy?.client?.name || (c.ownerType==='agency' ? 'Agency override' : '—')}</td><td>${c.entryType}</td><td>${fmt(c.amount)}</td><td>${fmtDate(c.entryDate)}</td></tr>`
+  ).join('') || '<tr><td colspan="4" class="helptext">No commissions logged yet.</td></tr>';
+}
+
+document.getElementById('commForm').addEventListener('submit', async e=>{
+  e.preventDefault();
+  const errEl = document.getElementById('commError');
+  errEl.textContent = '';
+  const f = new FormData(e.target);
+  const entryType = COMM_TYPE_MAP[f.get('type')];
+  const ownerType = entryType === 'override' ? 'agency' : 'producer';
+  try {
+    await apiFetch('/api/commission-entries', { method:'POST', body:{
+      policyId: f.get('policyId'), ownerType, entryType,
+      amount: Number(f.get('amount')), entryDate: f.get('date'),
+      agencyId: ownerType === 'agency' ? me.agencyId : undefined,
+    }});
+    e.target.reset();
+    say('Commission logged!');
+    renderCommissions();
+  } catch (err) { errEl.textContent = err.message; }
+});
+
+/* ================= EXPENSES ================= */
+async function renderExpenses(){
+  const expenses = await apiFetch('/api/expenses');
+  document.getElementById('expTable').innerHTML = expenses.map(e=>
+    `<tr><td>${e.category}</td><td>${e.description||''}</td><td>${fmt(e.amount)}</td><td>${fmtDate(e.expenseDate)}</td></tr>`
+  ).join('') || '<tr><td colspan="4" class="helptext">No expenses logged yet.</td></tr>';
+}
+
+document.getElementById('expForm').addEventListener('submit', async e=>{
+  e.preventDefault();
+  const errEl = document.getElementById('expError');
+  errEl.textContent = '';
+  const f = new FormData(e.target);
+  const category = f.get('category');
+  const ownerType = ['staff','recruiting'].includes(category) ? 'agency' : 'producer';
+  try {
+    await apiFetch('/api/expenses', { method:'POST', body:{
+      ownerType, category, description: f.get('desc') || null,
+      amount: Number(f.get('amount')), expenseDate: f.get('date'),
+      agencyId: ownerType === 'agency' ? me.agencyId : undefined,
+    }});
+    e.target.reset();
+    say('Expense logged.');
+    renderExpenses();
+  } catch (err) { errEl.textContent = err.message; }
+});
+
+/* ================= IMPORT ================= */
+const IMPORT_FIELDS = [
+  ['clientName','Client Name'], ['phone','Phone'], ['email','Email'], ['carrier','Carrier'],
+  ['policyNumber','Policy Number'], ['productType','Product Type'], ['faceAmount','Face Amount'],
+  ['monthlyPremium','Monthly Premium'], ['issueDate','Issue Date'], ['status','Status'],
+  ['leadType','Lead Type'], ['leadVendor','Lead Vendor'],
+  ['advanceCommission','Initial Commission'], ['additionalCommission','Additional Commission'], ['chargeback','Chargeback'],
+];
+
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+dropzone.onclick = ()=>fileInput.click();
+['dragover','dragenter'].forEach(ev=>dropzone.addEventListener(ev,e=>{e.preventDefault();dropzone.classList.add('drag');}));
+['dragleave','drop'].forEach(ev=>dropzone.addEventListener(ev,e=>{e.preventDefault();dropzone.classList.remove('drag');}));
+dropzone.addEventListener('drop', e=>{ if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
+fileInput.addEventListener('change', e=>{ if(e.target.files[0]) handleFile(e.target.files[0]); });
+
+let importRows = [];
+function handleFile(file){
+  Papa.parse(file, { header:true, skipEmptyLines:true, complete: async (res) => {
+    importRows = res.data;
+    const suggestion = await apiFetch('/api/import/suggest-mapping', { method:'POST', body:{ rows: importRows } });
+    renderMapper(suggestion);
+  }});
+}
+
+function renderMapper(suggestion){
+  const { headers, suggestedMapping, totalRows } = suggestion;
+  const area = document.getElementById('mapArea');
+  area.innerHTML = `<h3 style="margin-top:0;">Map your columns</h3>
+    <p class="helptext">${totalRows} rows found. Match each field below to a column from your file, or leave it skipped.</p>
+    <div class="grid" style="grid-template-columns:repeat(2,1fr);">
+    ${IMPORT_FIELDS.map(([key,label])=>`
+      <div><label>${label}</label><select data-key="${key}">
+        <option value="">— skip —</option>
+        ${headers.map(h=>`<option value="${h}" ${suggestedMapping[key]===h?'selected':''}>${h}</option>`).join('')}
+      </select></div>`).join('')}
+    </div>
+    <div style="margin-top:16px;"><button class="primary" id="confirmImport">Import ${totalRows} Rows</button>
+    <button class="ghost" id="cancelImport" style="margin-left:8px;">Cancel</button></div>
+    <div id="importResult" style="margin-top:14px;"></div>`;
+
+  document.getElementById('confirmImport').onclick = async () => {
+    const mapping = {};
+    area.querySelectorAll('select').forEach(s => { if (s.value) mapping[s.dataset.key] = s.value; });
+    const summary = await apiFetch('/api/import/commit', { method:'POST', body:{ rows: importRows, mapping } });
+    document.getElementById('importResult').innerHTML = `<p class="helptext">
+      Imported ${summary.policiesCreated} polic${summary.policiesCreated===1?'y':'ies'}
+      (${summary.clientsCreated} new client${summary.clientsCreated===1?'':'s'}, ${summary.clientsMatched} matched),
+      ${summary.commissionEntries} commission entries, ${summary.remindersScheduled} payment reminders scheduled.
+      ${summary.skipped.length ? `${summary.skipped.length} row(s) skipped.` : ''}</p>`;
+    say(`Imported ${summary.policiesCreated} policies — check the Clients tab!`);
+  };
+  document.getElementById('cancelImport').onclick = () => { area.innerHTML = ''; };
+}
+
+/* ================= BILLING ================= */
+async function renderBilling(){
+  document.getElementById('billingTierText').textContent = me.subscriptionTier === 'agency_owner' ? 'Agency Owner' : 'Producer';
+  const pill = document.getElementById('billingStatusPill');
+  pill.textContent = me.subscriptionStatus;
+  pill.className = 'pill ' + me.subscriptionStatus;
+  document.getElementById('manageBillingBtn').style.display = me.subscriptionStatus === 'active' ? 'inline-block' : 'none';
+}
+
+async function startCheckout(tier){
+  const errEl = document.getElementById('billingError');
+  errEl.textContent = '';
+  try {
+    const { url } = await apiFetch('/api/billing/checkout-session', { method:'POST', body:{ tier } });
+    window.location.href = url;
+  } catch (err) { errEl.textContent = err.message; }
+}
+document.getElementById('subscribeIndividualBtn').onclick = () => startCheckout('individual');
+document.getElementById('subscribeAgencyBtn').onclick = () => startCheckout('agency_owner');
+document.getElementById('manageBillingBtn').onclick = async () => {
+  const errEl = document.getElementById('billingError');
+  errEl.textContent = '';
+  try {
+    const { url } = await apiFetch('/api/billing/portal-session', { method:'POST' });
+    window.location.href = url;
+  } catch (err) { errEl.textContent = err.message; }
+};
+</script>
+</body>
+</html>

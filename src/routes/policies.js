@@ -24,7 +24,7 @@ router.get('/', async (req, res) => {
       client: { producerId: req.producerId },
       ...(clientId ? { clientId } : {}),
     },
-    include: { commissionEntries: true, paymentReminders: true },
+    include: { client: true, commissionEntries: true, paymentReminders: true },
     orderBy: { issueDate: 'desc' },
   });
   res.json(policies);

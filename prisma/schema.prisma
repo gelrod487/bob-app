@@ -7,8 +7,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model Agency {
@@ -29,7 +30,12 @@ model Producer {
   id                String   @id @default(uuid())
   agencyId          String?  @map("agency_id") // null = Individual tier, self-contained
   name              String
-  subscriptionTier  String   @map("subscription_tier") // 'individual' | 'agency_owner'
+  email             String   @unique
+  supabaseUserId    String   @unique @map("supabase_user_id") // links to Supabase Auth's auth.users.id
+  subscriptionTier  String   @default("individual") @map("subscription_tier") // 'individual' | 'agency_owner'
+  subscriptionStatus String  @default("inactive") @map("subscription_status") // 'inactive' | 'active' | 'past_due' | 'canceled'
+  stripeCustomerId     String? @unique @map("stripe_customer_id")
+  stripeSubscriptionId String? @unique @map("stripe_subscription_id")
   createdAt         DateTime @default(now()) @map("created_at")
 
   agency            Agency?   @relation(fields: [agencyId], references: [id])

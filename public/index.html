@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>BOB — Book of Business</title></head>
+<body>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="/js/supabaseClient.js"></script>
+<script>
+(async () => {
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  window.location.href = session ? '/app.html' : '/login.html';
+})();
+</script>
+</body>
+</html>
