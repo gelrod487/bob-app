@@ -1,74 +1,115 @@
 <svg viewBox="0 0 160 200" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="coverSheen" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#FFFFFF" stop-opacity=".22"/>
-      <stop offset="35%" stop-color="#FFFFFF" stop-opacity="0"/>
-      <stop offset="100%" stop-color="#5A3825" stop-opacity=".14"/>
+    <linearGradient id="leatherCover" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FF8955"/>
+      <stop offset="45%" stop-color="#FF6B35"/>
+      <stop offset="100%" stop-color="#C7431B"/>
     </linearGradient>
-    <radialGradient id="shine" cx="30%" cy="20%" r="45%">
-      <stop offset="0%" stop-color="#FFFFFF" stop-opacity=".45"/>
+    <linearGradient id="spineGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#D65A2A"/>
+      <stop offset="100%" stop-color="#9E3417"/>
+    </linearGradient>
+    <linearGradient id="brass" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FFE29A"/>
+      <stop offset="55%" stop-color="#F7A934"/>
+      <stop offset="100%" stop-color="#B9781A"/>
+    </linearGradient>
+    <linearGradient id="coverSheen" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity=".25"/>
+      <stop offset="35%" stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#3A1F12" stop-opacity=".2"/>
+    </linearGradient>
+    <radialGradient id="shine" cx="30%" cy="18%" r="45%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity=".5"/>
       <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
     </radialGradient>
     <linearGradient id="limbShade" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#FFFFFF" stop-opacity=".18"/>
       <stop offset="100%" stop-color="#5A3825" stop-opacity=".15"/>
     </linearGradient>
+    <filter id="dropShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#3A1F12" flood-opacity="0.3"/>
+    </filter>
   </defs>
 
-  <ellipse cx="80" cy="190" rx="42" ry="8" fill="rgba(90,56,37,.15)"/>
+  <ellipse cx="80" cy="190" rx="42" ry="7" fill="rgba(90,56,37,.16)"/>
 
-  <!-- back arm (waving) — animated as its own piece so only the arm swings -->
-  <g>
-    <path d="M113 92 Q142 78 138 52" stroke="#E4531F" stroke-width="11" fill="none" stroke-linecap="round"/>
-    <path d="M113 92 Q142 78 138 52" stroke="url(#limbShade)" stroke-width="11" fill="none" stroke-linecap="round"/>
-    <circle cx="138" cy="50" r="9" fill="#FFC9A3"/>
-    <animateTransform attributeName="transform" type="rotate" additive="sum"
-      values="0 113 92; -14 113 92; 10 113 92; -11 113 92; 0 113 92"
-      keyTimes="0; 0.25; 0.55; 0.8; 1" dur="1.9s" repeatCount="indefinite"
-      calcMode="spline" keySplines="0.45 0 0.55 1; 0.45 0 0.55 1; 0.45 0 0.55 1; 0.45 0 0.55 1"/>
+  <g filter="url(#dropShadow)">
+    <!-- back arm (waving) — animated as its own piece so only the arm swings -->
+    <g>
+      <path d="M113 92 Q142 78 138 52" stroke="#E4531F" stroke-width="11" fill="none" stroke-linecap="round"/>
+      <path d="M113 92 Q142 78 138 52" stroke="url(#limbShade)" stroke-width="11" fill="none" stroke-linecap="round"/>
+      <circle cx="138" cy="50" r="9" fill="#FFC9A3"/>
+      <animateTransform attributeName="transform" type="rotate" additive="sum"
+        values="0 113 92; -14 113 92; 10 113 92; -11 113 92; 0 113 92"
+        keyTimes="0; 0.25; 0.55; 0.8; 1" dur="1.9s" repeatCount="indefinite"
+        calcMode="spline" keySplines="0.45 0 0.55 1; 0.45 0 0.55 1; 0.45 0 0.55 1; 0.45 0 0.55 1"/>
+    </g>
+
+    <!-- legs -->
+    <rect x="55" y="168" width="16" height="26" rx="7" fill="#E4531F"/>
+    <rect x="89" y="168" width="16" height="26" rx="7" fill="#E4531F"/>
+    <rect x="55" y="168" width="16" height="26" rx="7" fill="url(#limbShade)"/>
+    <rect x="89" y="168" width="16" height="26" rx="7" fill="url(#limbShade)"/>
+    <ellipse cx="63" cy="196" rx="12" ry="5" fill="#5A3825"/>
+    <ellipse cx="97" cy="196" rx="12" ry="5" fill="#5A3825"/>
+
+    <!-- page block (the "paper" the cover wraps around — thicker, layered) -->
+    <rect x="124" y="52" width="10" height="116" rx="1.5" fill="#F5E4CE"/>
+    <rect x="126" y="55" width="1" height="110" fill="#E4CBA8"/>
+    <rect x="128.5" y="55" width="1" height="110" fill="#E4CBA8"/>
+    <rect x="131" y="55" width="1" height="110" fill="#E4CBA8"/>
+    <rect x="124" y="56" width="4" height="108" fill="#FFF6EA"/>
+
+    <!-- book cover -->
+    <rect x="32" y="46" width="94" height="128" rx="9" fill="url(#leatherCover)"/>
+    <rect x="32" y="46" width="15" height="128" rx="7" fill="url(#spineGrad)"/>
+
+    <!-- embossed spine ribs -->
+    <g stroke-linecap="round">
+      <path d="M33 84 H46" stroke="#FFB27E" stroke-width="1.6" opacity=".55"/>
+      <path d="M33 87 H46" stroke="#7A250F" stroke-width="1.6" opacity=".55"/>
+      <path d="M33 114 H46" stroke="#FFB27E" stroke-width="1.6" opacity=".55"/>
+      <path d="M33 117 H46" stroke="#7A250F" stroke-width="1.6" opacity=".55"/>
+      <path d="M33 144 H46" stroke="#FFB27E" stroke-width="1.6" opacity=".55"/>
+      <path d="M33 147 H46" stroke="#7A250F" stroke-width="1.6" opacity=".55"/>
+    </g>
+
+    <!-- gold cover trim -->
+    <rect x="46" y="46" width="80" height="128" rx="6" fill="none" stroke="#F7A934" stroke-width="2.5"/>
+    <!-- sheen + glossy highlight for a rounder, leather-like surface -->
+    <rect x="32" y="46" width="94" height="128" rx="9" fill="url(#coverSheen)"/>
+    <ellipse cx="56" cy="68" rx="20" ry="28" fill="url(#shine)"/>
+
+    <!-- brass corner rivets, ledger-style -->
+    <g>
+      <circle cx="55" cy="59" r="3.4" fill="url(#brass)"/>
+      <circle cx="113" cy="59" r="3.4" fill="url(#brass)"/>
+      <circle cx="55" cy="161" r="3.4" fill="url(#brass)"/>
+      <circle cx="113" cy="161" r="3.4" fill="url(#brass)"/>
+    </g>
+
+    <!-- wax seal (plain — no letter) -->
+    <circle cx="101" cy="140" r="15" fill="url(#brass)"/>
+    <circle cx="101" cy="140" r="15" fill="none" stroke="#8A5A12" stroke-width="1.2" opacity=".5"/>
+
+    <!-- face -->
+    <g>
+      <path d="M58 79 Q65 74 72 78" stroke="#5A3825" stroke-width="2.5" fill="none" stroke-linecap="round" opacity=".7"/>
+      <path d="M86 78 Q93 74 100 79" stroke="#5A3825" stroke-width="2.5" fill="none" stroke-linecap="round" opacity=".7"/>
+      <circle cx="59" cy="100" r="6.5" fill="#FF8C69" opacity=".5"/>
+      <circle cx="99" cy="100" r="6.5" fill="#FF8C69" opacity=".5"/>
+      <circle cx="65" cy="89" r="5.5" fill="#5A3825"/>
+      <circle cx="93" cy="89" r="5.5" fill="#5A3825"/>
+      <circle cx="66.8" cy="87" r="1.4" fill="#FFF6EA"/>
+      <circle cx="94.8" cy="87" r="1.4" fill="#FFF6EA"/>
+      <path d="M62 105 Q79 121 96 105" stroke="#5A3825" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+      <path d="M66 109 Q79 116 92 109" stroke="#7A250F" stroke-width="2" fill="none" stroke-linecap="round" opacity=".35"/>
+    </g>
+
+    <!-- front arm (down, at side) -->
+    <path d="M45 100 Q27 116 33 138" stroke="#FF6B35" stroke-width="11" fill="none" stroke-linecap="round"/>
+    <path d="M45 100 Q27 116 33 138" stroke="url(#limbShade)" stroke-width="11" fill="none" stroke-linecap="round"/>
+    <circle cx="34" cy="140" r="9" fill="#FFC9A3"/>
   </g>
-
-  <!-- legs -->
-  <rect x="55" y="168" width="16" height="26" rx="7" fill="#E4531F"/>
-  <rect x="89" y="168" width="16" height="26" rx="7" fill="#E4531F"/>
-  <rect x="55" y="168" width="16" height="26" rx="7" fill="url(#limbShade)"/>
-  <rect x="89" y="168" width="16" height="26" rx="7" fill="url(#limbShade)"/>
-  <ellipse cx="63" cy="196" rx="12" ry="5" fill="#5A3825"/>
-  <ellipse cx="97" cy="196" rx="12" ry="5" fill="#5A3825"/>
-
-  <!-- book body (cover) -->
-  <rect x="32" y="46" width="96" height="128" rx="10" fill="#FF6B35"/>
-  <rect x="32" y="46" width="14" height="128" rx="7" fill="#E4531F"/>
-  <!-- page edges -->
-  <rect x="122" y="54" width="5" height="112" fill="#FFF6EA"/>
-  <rect x="116" y="58" width="4" height="104" fill="#F5E4CE"/>
-
-  <!-- gold trim -->
-  <rect x="46" y="46" width="82" height="128" rx="6" fill="none" stroke="#F7A934" stroke-width="2.5"/>
-  <!-- soft sheen + glossy highlight for a rounder, less-flat cover -->
-  <rect x="32" y="46" width="96" height="128" rx="10" fill="url(#coverSheen)"/>
-  <ellipse cx="58" cy="70" rx="22" ry="30" fill="url(#shine)"/>
-
-  <!-- wax seal (plain — no letter) -->
-  <circle cx="102" cy="140" r="16" fill="#F7A934"/>
-  <circle cx="102" cy="140" r="16" fill="none" stroke="#E4531F" stroke-width="1.5" opacity=".5"/>
-
-  <!-- face -->
-  <g>
-    <path d="M59 79 Q66 74 73 78" stroke="#5A3825" stroke-width="2.5" fill="none" stroke-linecap="round" opacity=".7"/>
-    <path d="M87 78 Q94 74 101 79" stroke="#5A3825" stroke-width="2.5" fill="none" stroke-linecap="round" opacity=".7"/>
-    <circle cx="60" cy="100" r="6.5" fill="#FF8C69" opacity=".5"/>
-    <circle cx="100" cy="100" r="6.5" fill="#FF8C69" opacity=".5"/>
-    <circle cx="66" cy="89" r="5.5" fill="#5A3825"/>
-    <circle cx="94" cy="89" r="5.5" fill="#5A3825"/>
-    <circle cx="67.8" cy="87" r="1.4" fill="#FFF6EA"/>
-    <circle cx="95.8" cy="87" r="1.4" fill="#FFF6EA"/>
-    <path d="M63 105 Q80 121 97 105" stroke="#5A3825" stroke-width="3.5" fill="none" stroke-linecap="round"/>
-    <path d="M67 109 Q80 116 93 109" stroke="#E4531F" stroke-width="2" fill="none" stroke-linecap="round" opacity=".35"/>
-  </g>
-
-  <!-- front arm (down, at side) -->
-  <path d="M46 100 Q28 116 34 138" stroke="#FF6B35" stroke-width="11" fill="none" stroke-linecap="round"/>
-  <path d="M46 100 Q28 116 34 138" stroke="url(#limbShade)" stroke-width="11" fill="none" stroke-linecap="round"/>
-  <circle cx="35" cy="140" r="9" fill="#FFC9A3"/>
 </svg>
