@@ -1,5 +1,6 @@
 const supabaseAdmin = require('../lib/supabase');
 const prisma = require('../lib/db');
+const asyncHandler = require('./asyncHandler');
 
 // Verifies the Supabase access token on every /api request and, if a Producer row already
 // exists for that Supabase user, attaches it. Routes that need an existing Producer (i.e.
@@ -29,4 +30,4 @@ function requireProducer(req, res, next) {
   next();
 }
 
-module.exports = { requireAuth, requireProducer };
+module.exports = { requireAuth: asyncHandler(requireAuth), requireProducer };

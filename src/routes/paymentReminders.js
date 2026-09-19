@@ -1,11 +1,12 @@
 const express = require('express');
 const prisma = require('../lib/db');
+const asyncHandler = require('../middleware/asyncHandler');
 
 const router = express.Router();
 
 // GET /api/payment-reminders?status=pending — used by the dashboard's
 // "N policies have expected payments due this month" widget.
-router.get('/', async (req, res) => {
+router.get('/', asyncHandler(async (req, res) => {
   const { status } = req.query;
   const reminders = await prisma.paymentReminder.findMany({
     where: {
@@ -16,11 +17,11 @@ router.get('/', async (req, res) => {
     orderBy: { reminderDate: 'asc' },
   });
   res.json(reminders);
-});
+}));
 
 // PATCH /api/payment-reminders/:id — manual dismiss (e.g. the policy lapsed
 // before reaching that month, so no payment is actually expected).
-router.patch('/:id', async (req, res) => {
+router.patch('/:id', asyncHandler(async (req, res) => {
   const { status } = req.body;
   if (!['pending', 'completed', 'dismissed'].includes(status)) {
     return res.status(400).json({ error: 'status must be pending, completed, or dismissed.' });
@@ -30,6 +31,6 @@ router.patch('/:id', async (req, res) => {
     data: { status },
   });
   res.json(reminder);
-});
+}));
 
 module.exports = router;

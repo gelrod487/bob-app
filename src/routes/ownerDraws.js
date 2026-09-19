@@ -1,6 +1,7 @@
 const express = require('express');
 const prisma = require('../lib/db');
 const { requireAgencyOwner } = require('../middleware/tier');
+const asyncHandler = require('../middleware/asyncHandler');
 
 const router = express.Router();
 
@@ -8,16 +9,16 @@ const router = express.Router();
 router.use(requireAgencyOwner);
 
 // GET /api/owner-draws
-router.get('/', async (req, res) => {
+router.get('/', asyncHandler(async (req, res) => {
   const draws = await prisma.ownerDraw.findMany({
     where: { agencyId: req.agencyId },
     orderBy: { drawDate: 'desc' },
   });
   res.json(draws);
-});
+}));
 
 // POST /api/owner-draws
-router.post('/', async (req, res) => {
+router.post('/', asyncHandler(async (req, res) => {
   const { amount, drawDate, notes } = req.body;
   if (amount === undefined || !drawDate) {
     return res.status(400).json({ error: 'amount and drawDate are required.' });
@@ -26,6 +27,6 @@ router.post('/', async (req, res) => {
     data: { agencyId: req.agencyId, amount, drawDate: new Date(drawDate), notes: notes || null },
   });
   res.status(201).json(draw);
-});
+}));
 
 module.exports = router;

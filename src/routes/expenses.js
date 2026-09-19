@@ -1,22 +1,23 @@
 const express = require('express');
 const prisma = require('../lib/db');
 const { assertExpenseCategoryAllowed } = require('../middleware/tier');
+const asyncHandler = require('../middleware/asyncHandler');
 
 const router = express.Router();
 
 const VALID_CATEGORIES = ['lead_cost', 'operations', 'staff', 'recruiting', 'travel'];
 
 // GET /api/expenses
-router.get('/', async (req, res) => {
+router.get('/', asyncHandler(async (req, res) => {
   const expenses = await prisma.expense.findMany({
     where: { OR: [{ producerId: req.producerId }, { agency: { producers: { some: { id: req.producerId } } } }] },
     orderBy: { expenseDate: 'desc' },
   });
   res.json(expenses);
-});
+}));
 
 // POST /api/expenses
-router.post('/', async (req, res) => {
+router.post('/', asyncHandler(async (req, res) => {
   const { ownerType, category, description, vendor, quantity, unitCost, amount, expenseDate, agencyId } = req.body;
 
   if (!ownerType || !category || amount === undefined || !expenseDate) {
@@ -48,6 +49,6 @@ router.post('/', async (req, res) => {
   });
 
   res.status(201).json(expense);
-});
+}));
 
 module.exports = router;

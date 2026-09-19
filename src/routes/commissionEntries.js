@@ -1,13 +1,14 @@
 const express = require('express');
 const prisma = require('../lib/db');
 const { assertCommissionEntryAllowed } = require('../middleware/tier');
+const asyncHandler = require('../middleware/asyncHandler');
 
 const router = express.Router();
 
 const VALID_ENTRY_TYPES = ['advance', 'additional', 'chargeback', 'override', 'other'];
 
 // GET /api/commission-entries?policyId=...
-router.get('/', async (req, res) => {
+router.get('/', asyncHandler(async (req, res) => {
   const { policyId } = req.query;
   const entries = await prisma.commissionEntry.findMany({
     where: {
@@ -18,10 +19,10 @@ router.get('/', async (req, res) => {
     orderBy: { entryDate: 'desc' },
   });
   res.json(entries);
-});
+}));
 
 // POST /api/commission-entries
-router.post('/', async (req, res) => {
+router.post('/', asyncHandler(async (req, res) => {
   const { policyId, ownerType, entryType, amount, entryDate, notes, agencyId } = req.body;
 
   if (!policyId || !ownerType || !entryType || amount === undefined || !entryDate) {
@@ -72,6 +73,6 @@ router.post('/', async (req, res) => {
   }
 
   res.status(201).json(entry);
-});
+}));
 
 module.exports = router;

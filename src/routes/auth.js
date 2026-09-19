@@ -1,12 +1,13 @@
 const express = require('express');
 const prisma = require('../lib/db');
+const asyncHandler = require('../middleware/asyncHandler');
 
 const router = express.Router();
 
 // POST /api/auth/bootstrap — called once, right after Supabase sign-up (or first sign-in),
 // to create the app-level Producer row for a Supabase Auth user. Safe to call again for an
 // already-bootstrapped user: it just returns the existing Producer.
-router.post('/bootstrap', async (req, res) => {
+router.post('/bootstrap', asyncHandler(async (req, res) => {
   const existing = await prisma.producer.findUnique({ where: { supabaseUserId: req.supabaseUser.id } });
   if (existing) return res.json(existing);
 
@@ -34,6 +35,6 @@ router.post('/bootstrap', async (req, res) => {
   });
 
   res.status(201).json(producer);
-});
+}));
 
 module.exports = router;

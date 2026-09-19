@@ -6,6 +6,7 @@ const { producerProfitability, agencyProfitability } = require('./lib/profitabil
 const prisma = require('./lib/db');
 const { requireAuth, requireProducer } = require('./middleware/auth');
 const handleStripeWebhook = require('./routes/billingWebhook');
+const asyncHandler = require('./middleware/asyncHandler');
 
 const app = express();
 
@@ -32,7 +33,7 @@ app.use('/api/import', requireProducer, require('./routes/import'));
 app.use('/api/billing', requireProducer, require('./routes/billing'));
 
 // GET /api/dashboard — the numbers the mockup's dashboard tab needs, in one call.
-app.get('/api/dashboard', requireProducer, async (req, res) => {
+app.get('/api/dashboard', requireProducer, asyncHandler(async (req, res) => {
   const producer = await prisma.producer.findUnique({ where: { id: req.producerId } });
   if (!producer) return res.status(404).json({ error: 'Producer not found.' });
 
@@ -42,7 +43,20 @@ app.get('/api/dashboard', requireProducer, async (req, res) => {
   }
   const stats = await producerProfitability(producer.id, req.query);
   res.json({ tier: 'individual', ...stats });
+}));
+
+// Final safety net: anything asyncHandler passes to next(err) lands here instead of
+// crashing the process (this is what a bad Stripe/Prisma call used to do — see
+// src/middleware/asyncHandler.js).
+app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
+  console.error(err);
+  res.status(500).json({ error: 'Something went wrong on our end.' });
 });
+
+// Extra defense-in-depth: if anything still slips through as an unhandled rejection
+// (e.g. a background timer callback outside any request, like a retry inside a
+// third-party SDK), log it instead of letting Node's default behavior kill the process.
+process.on('unhandledRejection', (err) => console.error('Unhandled rejection:', err));
 
 const port = process.env.PORT || 4000;
 app.listen(port, () => console.log(`BOB backend listening on :${port}`));

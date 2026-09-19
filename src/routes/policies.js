@@ -1,5 +1,6 @@
 const express = require('express');
 const prisma = require('../lib/db');
+const asyncHandler = require('../middleware/asyncHandler');
 
 const router = express.Router();
 
@@ -17,7 +18,7 @@ function buildReminderDates(issueDate) {
 }
 
 // GET /api/policies?clientId=...
-router.get('/', async (req, res) => {
+router.get('/', asyncHandler(async (req, res) => {
   const { clientId } = req.query;
   const policies = await prisma.policy.findMany({
     where: {
@@ -28,10 +29,10 @@ router.get('/', async (req, res) => {
     orderBy: { issueDate: 'desc' },
   });
   res.json(policies);
-});
+}));
 
 // POST /api/policies
-router.post('/', async (req, res) => {
+router.post('/', asyncHandler(async (req, res) => {
   const {
     clientId, policyNumber, carrier, productType, faceAmount,
     monthlyPremium, issueDate, status, leadType, leadVendor,
@@ -69,7 +70,7 @@ router.post('/', async (req, res) => {
   }
 
   res.status(201).json(policy);
-});
+}));
 
 module.exports = router;
 module.exports.buildReminderDates = buildReminderDates;

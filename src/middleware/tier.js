@@ -1,4 +1,5 @@
 const prisma = require('../lib/db');
+const asyncHandler = require('./asyncHandler');
 
 // bob-schema.md calls out two rules that need enforcing in code, not SQL:
 //   1. expense.category IN ('staff','recruiting') must only ever have owner_type='agency'
@@ -33,4 +34,8 @@ function assertCommissionEntryAllowed({ entryType, ownerType }) {
   }
 }
 
-module.exports = { requireAgencyOwner, assertExpenseCategoryAllowed, assertCommissionEntryAllowed };
+module.exports = {
+  requireAgencyOwner: asyncHandler(requireAgencyOwner),
+  assertExpenseCategoryAllowed,
+  assertCommissionEntryAllowed,
+};

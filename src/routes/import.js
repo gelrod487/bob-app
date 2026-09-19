@@ -2,6 +2,7 @@ const express = require('express');
 const XLSX = require('xlsx');
 const prisma = require('../lib/db');
 const { buildReminderDates } = require('./policies');
+const asyncHandler = require('../middleware/asyncHandler');
 
 const router = express.Router();
 
@@ -90,7 +91,7 @@ function parseNumericOrRecoverStatus(rawValue) {
 
 // Step 3 of bob-schema.md's import flow: row-by-row commit, given a confirmed mapping.
 // POST body: { rows: [...], mapping: { clientName: 'FULL NAME', carrier: 'CARRIER', ... } }
-router.post('/commit', async (req, res) => {
+router.post('/commit', asyncHandler(async (req, res) => {
   const { rows, mapping } = req.body;
   if (!rows || !mapping) return res.status(400).json({ error: 'rows and mapping are required.' });
 
@@ -206,7 +207,7 @@ router.post('/commit', async (req, res) => {
   }
 
   res.json(summary);
-});
+}));
 
 // Convenience endpoint: accepts an uploaded XLSX/CSV (as base64 in the body for
 // this scaffold — swap for multipart/form-data + multer in the real build) and

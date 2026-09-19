@@ -1,6 +1,7 @@
 const express = require('express');
 const stripe = require('../lib/stripe');
 const prisma = require('../lib/db');
+const asyncHandler = require('../middleware/asyncHandler');
 
 const router = express.Router();
 
@@ -12,7 +13,7 @@ const PRICE_BY_TIER = {
 // POST /api/billing/checkout-session — body: { tier: 'individual' | 'agency_owner' }
 // Creates (or reuses) a Stripe customer for this producer, then a Checkout Session for
 // the requested plan. Returns { url } for the frontend to redirect the browser to.
-router.post('/checkout-session', async (req, res) => {
+router.post('/checkout-session', asyncHandler(async (req, res) => {
   const { tier } = req.body;
   const priceId = PRICE_BY_TIER[tier];
   if (!priceId) return res.status(400).json({ error: 'tier must be "individual" or "agency_owner".' });
@@ -42,11 +43,11 @@ router.post('/checkout-session', async (req, res) => {
   });
 
   res.json({ url: session.url });
-});
+}));
 
 // POST /api/billing/portal-session — lets an already-subscribed producer manage or cancel
 // their subscription via Stripe's hosted Customer Portal.
-router.post('/portal-session', async (req, res) => {
+router.post('/portal-session', asyncHandler(async (req, res) => {
   const producer = await prisma.producer.findUnique({ where: { id: req.producerId } });
   if (!producer.stripeCustomerId) {
     return res.status(400).json({ error: 'No billing account yet — subscribe first.' });
@@ -59,6 +60,6 @@ router.post('/portal-session', async (req, res) => {
   });
 
   res.json({ url: session.url });
-});
+}));
 
 module.exports = router;
