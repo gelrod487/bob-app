@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: bob-app
+    runtime: node
+    plan: free
+    buildCommand: npm install && npx prisma generate
+    startCommand: npx prisma migrate deploy && npm start
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_PRICE_ID_INDIVIDUAL
+        sync: false
+      - key: STRIPE_PRICE_ID_AGENCY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false

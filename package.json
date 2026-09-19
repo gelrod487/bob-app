@@ -4,8 +4,12 @@
   "description": "BOB — Book of Business. Backend API scaffold generated from bob-schema.md (v6).",
   "main": "src/server.js",
   "type": "commonjs",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "node src/server.js",
+    "start": "node src/server.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev --name init",
     "prisma:studio": "prisma studio"
