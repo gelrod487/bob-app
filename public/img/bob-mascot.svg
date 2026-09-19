@@ -1,13 +1,17 @@
 <svg viewBox="0 0 160 200" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="leatherCover" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#FF8955"/>
-      <stop offset="45%" stop-color="#FF6B35"/>
-      <stop offset="100%" stop-color="#C7431B"/>
+      <stop offset="0%" stop-color="#C17A4A"/>
+      <stop offset="42%" stop-color="#8B4A28"/>
+      <stop offset="100%" stop-color="#5C2C15"/>
     </linearGradient>
     <linearGradient id="spineGrad" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#D65A2A"/>
-      <stop offset="100%" stop-color="#9E3417"/>
+      <stop offset="0%" stop-color="#6E3418"/>
+      <stop offset="100%" stop-color="#3E1D0F"/>
+    </linearGradient>
+    <linearGradient id="strapLeather" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#8A4526"/>
+      <stop offset="100%" stop-color="#4A2410"/>
     </linearGradient>
     <linearGradient id="brass" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#FFE29A"/>
@@ -15,31 +19,36 @@
       <stop offset="100%" stop-color="#B9781A"/>
     </linearGradient>
     <linearGradient id="coverSheen" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#FFFFFF" stop-opacity=".25"/>
-      <stop offset="35%" stop-color="#FFFFFF" stop-opacity="0"/>
-      <stop offset="100%" stop-color="#3A1F12" stop-opacity=".2"/>
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity=".2"/>
+      <stop offset="30%" stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#1F0F07" stop-opacity=".3"/>
     </linearGradient>
-    <radialGradient id="shine" cx="30%" cy="18%" r="45%">
-      <stop offset="0%" stop-color="#FFFFFF" stop-opacity=".5"/>
-      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    <radialGradient id="shine" cx="28%" cy="16%" r="42%">
+      <stop offset="0%" stop-color="#FFDCB0" stop-opacity=".4"/>
+      <stop offset="100%" stop-color="#FFDCB0" stop-opacity="0"/>
     </radialGradient>
-    <linearGradient id="limbShade" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#FFFFFF" stop-opacity=".18"/>
-      <stop offset="100%" stop-color="#5A3825" stop-opacity=".15"/>
-    </linearGradient>
+    <radialGradient id="wornCorner" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#D9A06A" stop-opacity=".5"/>
+      <stop offset="100%" stop-color="#D9A06A" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="grain" x="-15%" y="-15%" width="130%" height="130%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="11" result="n"/>
+      <feColorMatrix in="n" type="matrix" values="0 0 0 0 0.14  0 0 0 0 0.07  0 0 0 0 0.03  0 0 0 0.5 0" result="tn"/>
+      <feComposite in="tn" in2="SourceAlpha" operator="in" result="cn"/>
+      <feBlend in="SourceGraphic" in2="cn" mode="multiply"/>
+    </filter>
     <filter id="dropShadow" x="-30%" y="-30%" width="160%" height="160%">
-      <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#3A1F12" flood-opacity="0.3"/>
+      <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#241207" flood-opacity="0.35"/>
     </filter>
   </defs>
 
-  <ellipse cx="80" cy="190" rx="42" ry="7" fill="rgba(90,56,37,.16)"/>
+  <ellipse cx="80" cy="190" rx="42" ry="7" fill="rgba(60,30,15,.18)"/>
 
   <g filter="url(#dropShadow)">
     <!-- back arm (waving) — animated as its own piece so only the arm swings -->
     <g>
-      <path d="M113 92 Q142 78 138 52" stroke="#E4531F" stroke-width="11" fill="none" stroke-linecap="round"/>
-      <path d="M113 92 Q142 78 138 52" stroke="url(#limbShade)" stroke-width="11" fill="none" stroke-linecap="round"/>
-      <circle cx="138" cy="50" r="9" fill="#FFC9A3"/>
+      <path d="M113 92 Q142 78 138 52" stroke="url(#strapLeather)" stroke-width="11" fill="none" stroke-linecap="round"/>
+      <circle cx="138" cy="52" r="5.5" fill="url(#brass)"/>
       <animateTransform attributeName="transform" type="rotate" additive="sum"
         values="0 113 92; -14 113 92; 10 113 92; -11 113 92; 0 113 92"
         keyTimes="0; 0.25; 0.55; 0.8; 1" dur="1.9s" repeatCount="indefinite"
@@ -47,69 +56,80 @@
     </g>
 
     <!-- legs -->
-    <rect x="55" y="168" width="16" height="26" rx="7" fill="#E4531F"/>
-    <rect x="89" y="168" width="16" height="26" rx="7" fill="#E4531F"/>
-    <rect x="55" y="168" width="16" height="26" rx="7" fill="url(#limbShade)"/>
-    <rect x="89" y="168" width="16" height="26" rx="7" fill="url(#limbShade)"/>
-    <ellipse cx="63" cy="196" rx="12" ry="5" fill="#5A3825"/>
-    <ellipse cx="97" cy="196" rx="12" ry="5" fill="#5A3825"/>
+    <rect x="55" y="168" width="16" height="26" rx="6" fill="url(#strapLeather)"/>
+    <rect x="89" y="168" width="16" height="26" rx="6" fill="url(#strapLeather)"/>
+    <ellipse cx="63" cy="196" rx="12" ry="5" fill="#2E1710"/>
+    <ellipse cx="97" cy="196" rx="12" ry="5" fill="#2E1710"/>
 
-    <!-- page block (the "paper" the cover wraps around — thicker, layered) -->
-    <rect x="124" y="52" width="10" height="116" rx="1.5" fill="#F5E4CE"/>
-    <rect x="126" y="55" width="1" height="110" fill="#E4CBA8"/>
-    <rect x="128.5" y="55" width="1" height="110" fill="#E4CBA8"/>
-    <rect x="131" y="55" width="1" height="110" fill="#E4CBA8"/>
-    <rect x="124" y="56" width="4" height="108" fill="#FFF6EA"/>
+    <!-- page block (the "paper" the cover wraps around) -->
+    <rect x="124" y="52" width="10" height="116" rx="1.5" fill="#F0DFC2"/>
+    <rect x="126" y="55" width="1" height="110" fill="#D9C29C"/>
+    <rect x="128.5" y="55" width="1" height="110" fill="#D9C29C"/>
+    <rect x="131" y="55" width="1" height="110" fill="#D9C29C"/>
+    <rect x="124" y="56" width="4" height="108" fill="#F8ECD8"/>
 
-    <!-- book cover -->
-    <rect x="32" y="46" width="94" height="128" rx="9" fill="url(#leatherCover)"/>
-    <rect x="32" y="46" width="15" height="128" rx="7" fill="url(#spineGrad)"/>
+    <!-- book cover, with leather grain -->
+    <rect x="32" y="46" width="94" height="128" rx="9" fill="url(#leatherCover)" filter="url(#grain)"/>
+    <rect x="32" y="46" width="15" height="128" rx="7" fill="url(#spineGrad)" filter="url(#grain)"/>
+
+    <!-- worn/handled leather patches (corners lighten with use) -->
+    <circle cx="40" cy="54" r="16" fill="url(#wornCorner)"/>
+    <circle cx="118" cy="166" r="18" fill="url(#wornCorner)"/>
 
     <!-- embossed spine ribs -->
     <g stroke-linecap="round">
-      <path d="M33 84 H46" stroke="#FFB27E" stroke-width="1.6" opacity=".55"/>
-      <path d="M33 87 H46" stroke="#7A250F" stroke-width="1.6" opacity=".55"/>
-      <path d="M33 114 H46" stroke="#FFB27E" stroke-width="1.6" opacity=".55"/>
-      <path d="M33 117 H46" stroke="#7A250F" stroke-width="1.6" opacity=".55"/>
-      <path d="M33 144 H46" stroke="#FFB27E" stroke-width="1.6" opacity=".55"/>
-      <path d="M33 147 H46" stroke="#7A250F" stroke-width="1.6" opacity=".55"/>
+      <path d="M33 84 H46" stroke="#A8663A" stroke-width="1.4" opacity=".5"/>
+      <path d="M33 87 H46" stroke="#2A1409" stroke-width="1.4" opacity=".6"/>
+      <path d="M33 114 H46" stroke="#A8663A" stroke-width="1.4" opacity=".5"/>
+      <path d="M33 117 H46" stroke="#2A1409" stroke-width="1.4" opacity=".6"/>
+      <path d="M33 144 H46" stroke="#A8663A" stroke-width="1.4" opacity=".5"/>
+      <path d="M33 147 H46" stroke="#2A1409" stroke-width="1.4" opacity=".6"/>
     </g>
 
-    <!-- gold cover trim -->
-    <rect x="46" y="46" width="80" height="128" rx="6" fill="none" stroke="#F7A934" stroke-width="2.5"/>
+    <!-- hand-stitched edge, just inside the gold tooling line -->
+    <rect x="50" y="50" width="72" height="120" rx="5" fill="none" stroke="#2A1409" stroke-width="1"
+      stroke-dasharray="2.2 2.6" opacity=".55"/>
+    <!-- gilt tooling trim -->
+    <rect x="46" y="46" width="80" height="128" rx="6" fill="none" stroke="#F7A934" stroke-width="2" opacity=".85"/>
+
     <!-- sheen + glossy highlight for a rounder, leather-like surface -->
     <rect x="32" y="46" width="94" height="128" rx="9" fill="url(#coverSheen)"/>
     <ellipse cx="56" cy="68" rx="20" ry="28" fill="url(#shine)"/>
 
     <!-- brass corner rivets, ledger-style -->
     <g>
-      <circle cx="55" cy="59" r="3.4" fill="url(#brass)"/>
-      <circle cx="113" cy="59" r="3.4" fill="url(#brass)"/>
-      <circle cx="55" cy="161" r="3.4" fill="url(#brass)"/>
-      <circle cx="113" cy="161" r="3.4" fill="url(#brass)"/>
+      <circle cx="55" cy="59" r="3.2" fill="url(#brass)"/>
+      <circle cx="113" cy="59" r="3.2" fill="url(#brass)"/>
+      <circle cx="55" cy="161" r="3.2" fill="url(#brass)"/>
+      <circle cx="113" cy="161" r="3.2" fill="url(#brass)"/>
     </g>
 
-    <!-- wax seal (plain — no letter) -->
+    <!-- wax seal -->
     <circle cx="101" cy="140" r="15" fill="url(#brass)"/>
-    <circle cx="101" cy="140" r="15" fill="none" stroke="#8A5A12" stroke-width="1.2" opacity=".5"/>
+    <circle cx="101" cy="140" r="15" fill="none" stroke="#7A4E10" stroke-width="1.2" opacity=".6"/>
+    <circle cx="96" cy="135" r="2.4" fill="#FFF3D6" opacity=".55"/>
 
-    <!-- face -->
+    <!-- face — tooled into the leather, not drawn on top of it -->
     <g>
-      <path d="M58 79 Q65 74 72 78" stroke="#5A3825" stroke-width="2.5" fill="none" stroke-linecap="round" opacity=".7"/>
-      <path d="M86 78 Q93 74 100 79" stroke="#5A3825" stroke-width="2.5" fill="none" stroke-linecap="round" opacity=".7"/>
-      <circle cx="59" cy="100" r="6.5" fill="#FF8C69" opacity=".5"/>
-      <circle cx="99" cy="100" r="6.5" fill="#FF8C69" opacity=".5"/>
-      <circle cx="65" cy="89" r="5.5" fill="#5A3825"/>
-      <circle cx="93" cy="89" r="5.5" fill="#5A3825"/>
-      <circle cx="66.8" cy="87" r="1.4" fill="#FFF6EA"/>
-      <circle cx="94.8" cy="87" r="1.4" fill="#FFF6EA"/>
-      <path d="M62 105 Q79 121 96 105" stroke="#5A3825" stroke-width="3.5" fill="none" stroke-linecap="round"/>
-      <path d="M66 109 Q79 116 92 109" stroke="#7A250F" stroke-width="2" fill="none" stroke-linecap="round" opacity=".35"/>
+      <path d="M58 79 Q65 74 72 78" stroke="#2A1409" stroke-width="2.3" fill="none" stroke-linecap="round" opacity=".75"/>
+      <path d="M86 78 Q93 74 100 79" stroke="#2A1409" stroke-width="2.3" fill="none" stroke-linecap="round" opacity=".75"/>
+
+      <!-- left eye: debossed circle (shadow + base + rim highlight) -->
+      <circle cx="66" cy="90" r="6" fill="#2A1409" opacity=".4"/>
+      <circle cx="65" cy="89" r="5.6" fill="#3D2013"/>
+      <path d="M60.8 87 A5.6 5.6 0 0 1 68 84.5" stroke="#C99A6B" stroke-width="1" fill="none" opacity=".6"/>
+      <!-- right eye -->
+      <circle cx="94" cy="90" r="6" fill="#2A1409" opacity=".4"/>
+      <circle cx="93" cy="89" r="5.6" fill="#3D2013"/>
+      <path d="M88.8 87 A5.6 5.6 0 0 1 96 84.5" stroke="#C99A6B" stroke-width="1" fill="none" opacity=".6"/>
+
+      <!-- smile: debossed groove -->
+      <path d="M62 105 Q79 121 96 105" stroke="#2A1409" stroke-width="3" fill="none" stroke-linecap="round" opacity=".8"/>
+      <path d="M63 107.5 Q79 122.5 95 107.5" stroke="#C99A6B" stroke-width="1.3" fill="none" stroke-linecap="round" opacity=".5"/>
     </g>
 
     <!-- front arm (down, at side) -->
-    <path d="M45 100 Q27 116 33 138" stroke="#FF6B35" stroke-width="11" fill="none" stroke-linecap="round"/>
-    <path d="M45 100 Q27 116 33 138" stroke="url(#limbShade)" stroke-width="11" fill="none" stroke-linecap="round"/>
-    <circle cx="34" cy="140" r="9" fill="#FFC9A3"/>
+    <path d="M45 100 Q27 116 33 138" stroke="url(#strapLeather)" stroke-width="11" fill="none" stroke-linecap="round"/>
+    <circle cx="33" cy="138" r="5.5" fill="url(#brass)"/>
   </g>
 </svg>
