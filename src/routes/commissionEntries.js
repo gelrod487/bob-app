@@ -7,12 +7,17 @@ const router = express.Router();
 
 const VALID_ENTRY_TYPES = ['advance', 'additional', 'chargeback', 'override', 'other'];
 
-// GET /api/commission-entries?policyId=...
+// GET /api/commission-entries?policyId=...&from=YYYY-MM-DD&to=YYYY-MM-DD
 router.get('/', asyncHandler(async (req, res) => {
-  const { policyId } = req.query;
+  const { policyId, from, to } = req.query;
+  const dateFilter = {};
+  if (from) dateFilter.gte = new Date(from);
+  if (to) dateFilter.lte = new Date(to);
+
   const entries = await prisma.commissionEntry.findMany({
     where: {
       ...(policyId ? { policyId } : {}),
+      ...(from || to ? { entryDate: dateFilter } : {}),
       OR: [{ producerId: req.producerId }, { agency: { producers: { some: { id: req.producerId } } } }],
     },
     include: { policy: { include: { client: true } } },

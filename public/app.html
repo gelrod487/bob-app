@@ -42,11 +42,11 @@ let me = null;
 let policiesCache = [];
 let clientsCache = [];
 const CATEGORY_META = {
-  lead_cost: { label: 'Lead cost', color: '#FF6B35' },
-  operations: { label: 'Operations', color: '#5A3825' },
-  travel: { label: 'Travel', color: '#FF8C69' },
-  staff: { label: 'Staff', color: '#1B998B' },
-  recruiting: { label: 'Recruiting', color: '#F7A934' },
+  lead_cost: { label: 'Lead cost', color: '#7A3B4A' },
+  operations: { label: 'Operations', color: '#7C9473' },
+  travel: { label: 'Travel', color: '#D4A373' },
+  staff: { label: 'Staff', color: '#A63D40' },
+  recruiting: { label: 'Recruiting', color: '#D8CBB8' },
 };
 const STATUS_TAG = {
   active: { cls: 'active-pol', label: 'Issued — paid' },
@@ -59,9 +59,70 @@ const STATUS_TAG = {
 function fmt(n){ return '$'+Number(n||0).toLocaleString(undefined,{maximumFractionDigits:0}); }
 function fmtDate(dateStr){ return new Date(dateStr).toLocaleDateString(undefined,{timeZone:'UTC', month:'short', day:'numeric'}); }
 function pct(a,b){ return b ? ((a/b)*100).toFixed(1)+'%' : '0%'; }
-function todayISO(){ const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function toISO(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function todayISO(){ return toISO(new Date()); }
 function monthFirstISO(){ const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`; }
 function policyChargeback(p){ return (p.commissionEntries||[]).filter(e=>e.entryType==='chargeback').reduce((s,e)=>s+Math.abs(Number(e.amount)),0); }
+
+/* ---- shared date-range report filter (Desk, Activity, Costs, Profit) ---- */
+const DATE_RANGE_PRESETS = [
+  ['today','Today'], ['yesterday','Yesterday'], ['this_week','This week'], ['this_month','This month'],
+  ['last_month','Last month'], ['this_quarter','This quarter'], ['ytd','Year to date'], ['custom','Custom'],
+];
+const dateFilterState = {
+  desk: { key: 'this_month', from: '', to: '' },
+  activity: { key: 'this_month', from: '', to: '' },
+  costs: { key: 'this_month', from: '', to: '' },
+  profit: { key: 'this_month', from: '', to: '' },
+};
+function computeDateRange(key, customFrom, customTo){
+  const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth(), d = now.getDate();
+  switch (key) {
+    case 'today': { const t = toISO(now); return { from: t, to: t }; }
+    case 'yesterday': { const t = toISO(new Date(y,m,d-1)); return { from: t, to: t }; }
+    case 'this_week': { const start = new Date(y,m,d - now.getDay()); return { from: toISO(start), to: toISO(now) }; }
+    case 'last_month': return { from: toISO(new Date(y,m-1,1)), to: toISO(new Date(y,m,0)) };
+    case 'this_quarter': { const q = Math.floor(m/3); return { from: toISO(new Date(y,q*3,1)), to: toISO(now) }; }
+    case 'ytd': return { from: toISO(new Date(y,0,1)), to: toISO(now) };
+    case 'custom': return { from: customFrom || toISO(new Date(y,m,1)), to: customTo || toISO(now) };
+    case 'this_month': default: return { from: toISO(new Date(y,m,1)), to: toISO(now) };
+  }
+}
+function dateFilterHTML(pageKey){
+  const state = dateFilterState[pageKey];
+  const range = computeDateRange(state.key, state.from, state.to);
+  return `
+  <div class="date-filter" data-page="${pageKey}">
+    <select class="date-filter-select">
+      ${DATE_RANGE_PRESETS.map(([k,label]) => `<option value="${k}" ${state.key===k?'selected':''}>${label}</option>`).join('')}
+    </select>
+    <span class="date-filter-custom${state.key==='custom' ? '' : ' section-hidden'}">
+      <input type="date" class="date-filter-from" value="${range.from}">
+      <span>to</span>
+      <input type="date" class="date-filter-to" value="${range.to}">
+      <button type="button" class="ghost date-filter-apply">Apply</button>
+    </span>
+    <span class="date-filter-range helptext">${fmtDate(range.from)} – ${fmtDate(range.to)}</span>
+  </div>`;
+}
+function wireDateFilter(pageKey, onChange){
+  const wrap = mainInner.querySelector(`.date-filter[data-page="${pageKey}"]`);
+  if (!wrap) return;
+  const state = dateFilterState[pageKey];
+  const select = wrap.querySelector('.date-filter-select');
+  const custom = wrap.querySelector('.date-filter-custom');
+  select.onchange = () => {
+    state.key = select.value;
+    if (state.key === 'custom') { custom.classList.remove('section-hidden'); return; }
+    onChange();
+  };
+  wrap.querySelector('.date-filter-apply').onclick = () => {
+    state.from = wrap.querySelector('.date-filter-from').value;
+    state.to = wrap.querySelector('.date-filter-to').value;
+    onChange();
+  };
+}
 
 /* ---- BOB mascot (lives top-left in the sidebar) ---- */
 const say = wireMascot('navMascot', ["Hi, I'm Bob!","Bump your dials — I'll do the math.","Looking sharp today!","Don't forget to log your lead costs."]);
@@ -96,26 +157,29 @@ document.getElementById('logoutBtn').onclick = async () => { await supabaseClien
 async function renderDesk(){
   mainInner.innerHTML = `<div class="page-header"><div><div class="page-eyebrow">Desk</div><h1>${me.name.split(' ')[0]}'s book</h1></div></div><p class="helptext">Loading…</p>`;
 
-  const [dash, expenses, policies, activityRows, goal] = await Promise.all([
-    apiFetch('/api/dashboard'),
-    apiFetch('/api/expenses'),
+  const range = computeDateRange(dateFilterState.desk.key, dateFilterState.desk.from, dateFilterState.desk.to);
+  const [dash, dashMonth, expenses, policies, activityAll, activityRange, goal] = await Promise.all([
+    apiFetch(`/api/dashboard?from=${range.from}&to=${range.to}`),
+    apiFetch(`/api/dashboard?from=${monthFirstISO()}&to=${todayISO()}`),
+    apiFetch(`/api/expenses?from=${range.from}&to=${range.to}`),
     apiFetch('/api/policies'),
     apiFetch('/api/activity'),
+    apiFetch(`/api/activity?from=${range.from}&to=${range.to}`),
     apiFetch(`/api/goals?month=${monthFirstISO()}`),
   ]);
   policiesCache = policies;
 
   const isAgency = dash.tier === 'agency_owner';
-  const funnel = activityRows.reduce((s,r) => ({
+  const funnel = activityRange.reduce((s,r) => ({
     dials: s.dials + r.dials, appointments: s.appointments + r.appointments,
     presentations: s.presentations + r.presentations, sales: s.sales + r.sales,
   }), { dials:0, appointments:0, presentations:0, sales:0 });
 
   const monthKey = todayISO().slice(0,7);
-  const monthActivity = activityRows.filter(r => r.date.slice(0,7) === monthKey)
+  const monthActivity = activityAll.filter(r => r.date.slice(0,7) === monthKey)
     .reduce((s,r) => ({ dials:s.dials+r.dials, appointments:s.appointments+r.appointments, presentations:s.presentations+r.presentations, sales:s.sales+r.sales }), {dials:0,appointments:0,presentations:0,sales:0});
 
-  const t = todayRow(activityRows);
+  const t = todayRow(activityAll);
 
   const categories = isAgency ? ['lead_cost','operations','staff','recruiting','travel'] : ['lead_cost','operations','travel'];
   const costLines = categories.map(cat => ({ cat, total: expenses.filter(e=>e.category===cat).reduce((s,e)=>s+Number(e.amount),0) })).filter(c=>c.total>0);
@@ -125,6 +189,8 @@ async function renderDesk(){
   mainInner.innerHTML = `
     <div class="page-header"><div><div class="page-eyebrow">Desk</div><h1>${me.name.split(' ')[0]}'s book</h1></div>
     <a class="ghost" href="#" onclick="go('book');return false;">Add a client ↗</a></div>
+
+    ${dateFilterHTML('desk')}
 
     <div class="grid" style="margin-bottom:18px;">
       <div class="card"><div class="stat-label">Net Profit</div><div class="stat-value ${dash.netProfit>=0?'pos':'neg'}">${fmt(dash.netProfit)}</div><div class="stat-sub">After chargebacks and costs</div></div>
@@ -147,7 +213,7 @@ async function renderDesk(){
 
     <div class="panel">
       <h2>Production funnel</h2>
-      <p class="helptext" style="margin:-8px 0 14px;">${funnel.dials} dials · ${funnel.appointments} set · ${funnel.presentations} sits · ${funnel.sales} sales (all time)</p>
+      <p class="helptext" style="margin:-8px 0 14px;">${funnel.dials} dials · ${funnel.appointments} set · ${funnel.presentations} sits · ${funnel.sales} sales (${fmtDate(range.from)}–${fmtDate(range.to)})</p>
       ${funnelRow('Dials', funnel.dials, funnel.dials, null)}
       ${funnelRow('Appointments set', funnel.appointments, funnel.dials, pct(funnel.appointments,funnel.dials))}
       ${funnelRow('Presentations', funnel.presentations, funnel.dials, pct(funnel.presentations,funnel.appointments))}
@@ -159,7 +225,7 @@ async function renderDesk(){
         ${goalCell('Appts', monthActivity.appointments, goal.appointmentsTarget)}
         ${goalCell('Sits', monthActivity.presentations, goal.sitsTarget)}
         ${goalCell('Sales', monthActivity.sales, goal.salesTarget)}
-        ${goalCell('FYC', dash.grossCommission, Number(goal.fycTarget), true)}
+        ${goalCell('FYC', dashMonth.grossCommission, Number(goal.fycTarget), true)}
       </div>
       <p class="helptext" style="margin-top:10px;"><a href="#" onclick="go('settings');return false;" style="color:var(--maroon); font-weight:700; text-decoration:none;">Set this month's goals →</a></p>
     </div>
@@ -181,6 +247,7 @@ async function renderDesk(){
     </div>
   `;
 
+  wireDateFilter('desk', renderDesk);
   document.querySelectorAll('.stepper-btn').forEach(btn => btn.onclick = () => bumpActivity(btn.dataset.field, Number(btn.dataset.delta)));
   renderNetChart(await monthlySeries());
   if (costLines.length) renderDonut('donutCanvas', costLines);
@@ -252,7 +319,7 @@ function renderNetChart(series){
   if (!ctx) return;
   if (netChart) netChart.destroy();
   netChart = new Chart(ctx, { type:'line', data:{ labels: series.labels, datasets:[{
-    data: series.data, borderColor:'#FF6B35', backgroundColor:'rgba(255,107,53,.15)',
+    data: series.data, borderColor:'#1B7A73', backgroundColor:'rgba(27,122,115,.15)',
     fill:true, tension:.45, cubicInterpolationMode:'monotone', pointRadius:0,
   }]}, options:{ responsive:true, maintainAspectRatio:false,
     plugins:{ legend:{ display:false } },
@@ -270,9 +337,14 @@ function renderDonut(id, costLines){
 /* ================= ACTIVITY ================= */
 async function renderActivity(){
   mainInner.innerHTML = `<div class="page-header"><div><div class="page-eyebrow">Activity</div><h1>Daily production log</h1></div></div><p class="helptext">Loading…</p>`;
-  const rows = await apiFetch('/api/activity');
-  const t = todayRow(rows);
-  const history = [...rows].sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,14);
+  const range = computeDateRange(dateFilterState.activity.key, dateFilterState.activity.from, dateFilterState.activity.to);
+  const [rowsAll, rowsRange] = await Promise.all([
+    apiFetch('/api/activity'),
+    apiFetch(`/api/activity?from=${range.from}&to=${range.to}`),
+  ]);
+  const t = todayRow(rowsAll);
+  const history = [...rowsRange].sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const totals = history.reduce((s,r) => ({ dials:s.dials+r.dials, appointments:s.appointments+r.appointments, presentations:s.presentations+r.presentations, sales:s.sales+r.sales }), {dials:0,appointments:0,presentations:0,sales:0});
 
   mainInner.innerHTML = `
     <div class="page-header"><div><div class="page-eyebrow">Activity</div><h1>Daily production log</h1></div></div>
@@ -288,11 +360,14 @@ async function renderActivity(){
       </div>
     </div>
     <div class="panel">
-      <h2>History</h2>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;"><h2 style="margin:0;">History</h2></div>
+      ${dateFilterHTML('activity')}
+      <p class="helptext">Totals: ${totals.dials} dials · ${totals.appointments} appts · ${totals.presentations} sits · ${totals.sales} sales</p>
       <table><thead><tr><th>Date</th><th>Dials</th><th>Appts</th><th>Sits</th><th>Sales</th></tr></thead>
-      <tbody>${history.map(r=>`<tr><td>${fmtDate(r.date)}</td><td>${r.dials}</td><td>${r.appointments}</td><td>${r.presentations}</td><td>${r.sales}</td></tr>`).join('') || '<tr><td colspan="5" class="helptext">No activity logged yet.</td></tr>'}</tbody></table>
+      <tbody>${history.map(r=>`<tr><td>${fmtDate(r.date)}</td><td>${r.dials}</td><td>${r.appointments}</td><td>${r.presentations}</td><td>${r.sales}</td></tr>`).join('') || '<tr><td colspan="5" class="helptext">No activity in this range.</td></tr>'}</tbody></table>
     </div>
   `;
+  wireDateFilter('activity', renderActivity);
   document.querySelectorAll('.stepper-btn').forEach(btn => btn.onclick = async () => {
     const row = await apiFetch('/api/activity/increment', { method:'POST', body:{ date: todayISO(), field: btn.dataset.field, delta: Number(btn.dataset.delta) } });
     document.getElementById('today-'+btn.dataset.field).textContent = row[btn.dataset.field];
@@ -481,14 +556,16 @@ function renderMapper(suggestion){
 /* ================= COSTS ================= */
 async function renderCosts(){
   mainInner.innerHTML = `<div class="page-header"><div><div class="page-eyebrow">Costs</div><h1>Where the money goes</h1></div></div><p class="helptext">Loading…</p>`;
-  const [expenses, meRes] = await Promise.all([apiFetch('/api/expenses'), apiFetch('/api/me')]);
+  const range = computeDateRange(dateFilterState.costs.key, dateFilterState.costs.from, dateFilterState.costs.to);
+  const [expenses, meRes] = await Promise.all([apiFetch(`/api/expenses?from=${range.from}&to=${range.to}`), apiFetch('/api/me')]);
   const isAgency = meRes.producer.subscriptionTier === 'agency_owner';
   const categories = isAgency ? ['lead_cost','operations','staff','recruiting','travel'] : ['lead_cost','operations','travel'];
   const costLines = categories.map(cat => ({ cat, total: expenses.filter(e=>e.category===cat).reduce((s,e)=>s+Number(e.amount),0) })).filter(c=>c.total>0);
 
   mainInner.innerHTML = `
     <div class="page-header"><div><div class="page-eyebrow">Costs</div><h1>Where the money goes</h1></div></div>
-    ${costLines.length ? `<div class="panel">${donutBlock(costLines)}</div>` : ''}
+    ${dateFilterHTML('costs')}
+    ${costLines.length ? `<div class="panel">${donutBlock(costLines)}</div>` : '<p class="helptext">No costs logged in this range.</p>'}
 
     <div class="panel">
       <h2>Log a Cost</h2>
@@ -515,6 +592,7 @@ async function renderCosts(){
   `;
   if (!isAgency) document.querySelectorAll('.agency-only-opt').forEach(o=>o.style.display='none');
   if (costLines.length) renderDonut('donutCanvas', costLines);
+  wireDateFilter('costs', renderCosts);
 
   document.getElementById('expForm').addEventListener('submit', async e => {
     e.preventDefault();
@@ -539,12 +617,18 @@ async function renderCosts(){
 const COMM_TYPE_MAP = { Initial:'advance', Renewal:'additional', Override:'override', Chargeback:'chargeback' };
 async function renderProfit(){
   mainInner.innerHTML = `<div class="page-header"><div><div class="page-eyebrow">Profit</div><h1>Net profit, case by case</h1></div></div><p class="helptext">Loading…</p>`;
-  const [dash, entries, policies] = await Promise.all([apiFetch('/api/dashboard'), apiFetch('/api/commission-entries'), apiFetch('/api/policies')]);
+  const range = computeDateRange(dateFilterState.profit.key, dateFilterState.profit.from, dateFilterState.profit.to);
+  const [dash, entries, policies] = await Promise.all([
+    apiFetch(`/api/dashboard?from=${range.from}&to=${range.to}`),
+    apiFetch(`/api/commission-entries?from=${range.from}&to=${range.to}`),
+    apiFetch('/api/policies'),
+  ]);
   policiesCache = policies;
   const isAgency = dash.tier === 'agency_owner';
 
   mainInner.innerHTML = `
     <div class="page-header"><div><div class="page-eyebrow">Profit</div><h1>Net profit, case by case</h1></div></div>
+    ${dateFilterHTML('profit')}
     <div class="grid" style="margin-bottom:18px;">
       <div class="card"><div class="stat-label">Net Profit</div><div class="stat-value ${dash.netProfit>=0?'pos':'neg'}">${fmt(dash.netProfit)}</div></div>
       <div class="card"><div class="stat-label">Gross Commission</div><div class="stat-value">${fmt(dash.grossCommission)}</div></div>
@@ -572,9 +656,10 @@ async function renderProfit(){
     <div class="panel">
       <h2>Commission History</h2>
       <table><thead><tr><th>Client</th><th>Type</th><th>Amount</th><th>Date</th></tr></thead>
-      <tbody>${[...entries].sort((a,b)=>new Date(b.entryDate)-new Date(a.entryDate)).map(c=>`<tr><td>${c.policy?.client?.name || (c.ownerType==='agency' ? 'Agency override' : '—')}</td><td>${c.entryType}</td><td>${fmt(c.amount)}</td><td>${fmtDate(c.entryDate)}</td></tr>`).join('') || '<tr><td colspan="4" class="helptext">No commissions logged yet.</td></tr>'}</tbody></table>
+      <tbody>${[...entries].sort((a,b)=>new Date(b.entryDate)-new Date(a.entryDate)).map(c=>`<tr><td>${c.policy?.client?.name || (c.ownerType==='agency' ? 'Agency override' : '—')}</td><td>${c.entryType}</td><td>${fmt(c.amount)}</td><td>${fmtDate(c.entryDate)}</td></tr>`).join('') || '<tr><td colspan="4" class="helptext">No commissions in this range.</td></tr>'}</tbody></table>
     </div>
   `;
+  wireDateFilter('profit', renderProfit);
   renderNetChart(await monthlySeries());
 
   document.getElementById('commForm').addEventListener('submit', async e => {

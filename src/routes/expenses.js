@@ -7,10 +7,18 @@ const router = express.Router();
 
 const VALID_CATEGORIES = ['lead_cost', 'operations', 'staff', 'recruiting', 'travel'];
 
-// GET /api/expenses
+// GET /api/expenses?from=YYYY-MM-DD&to=YYYY-MM-DD
 router.get('/', asyncHandler(async (req, res) => {
+  const { from, to } = req.query;
+  const dateFilter = {};
+  if (from) dateFilter.gte = new Date(from);
+  if (to) dateFilter.lte = new Date(to);
+
   const expenses = await prisma.expense.findMany({
-    where: { OR: [{ producerId: req.producerId }, { agency: { producers: { some: { id: req.producerId } } } }] },
+    where: {
+      OR: [{ producerId: req.producerId }, { agency: { producers: { some: { id: req.producerId } } } }],
+      ...(from || to ? { expenseDate: dateFilter } : {}),
+    },
     orderBy: { expenseDate: 'desc' },
   });
   res.json(expenses);

@@ -52,11 +52,11 @@ const BASE = {
     { name:'Danielle Brooks', email:'dbrooks@example.com', phone:'(469) 555-0177', carrier:'F&G', product:'Pathsetter IUL', policyNumber:'FG-44012', issued:'May 22', monthly:312.00, ap:3744.00, status:'issued' },
   ],
   costs: [
-    { label:'Lead flow', amount:2480, color:'#FF6B35' },
-    { label:'Staff', amount:1280, color:'#1B998B' },
-    { label:'Travel', amount:640, color:'#FF8C69' },
-    { label:'CRM / tools', amount:189, color:'#F7A934' },
-    { label:'E&O insurance', amount:52, color:'#5A3825' },
+    { label:'Lead flow', amount:2480, color:'#7A3B4A' },
+    { label:'Staff', amount:1280, color:'#A63D40' },
+    { label:'Travel', amount:640, color:'#D4A373' },
+    { label:'CRM / tools', amount:189, color:'#7C9473' },
+    { label:'E&O insurance', amount:52, color:'#D8CBB8' },
   ],
 };
 
@@ -182,7 +182,7 @@ function renderNetChart(){
   if (!ctx) return;
   if (netChart) netChart.destroy();
   netChart = new Chart(ctx, { type:'line', data:{ labels: BASE.netByMonth.labels, datasets:[{
-    data: BASE.netByMonth.data, borderColor:'#FF6B35', backgroundColor:'rgba(255,107,53,.15)',
+    data: BASE.netByMonth.data, borderColor:'#1B7A73', backgroundColor:'rgba(27,122,115,.15)',
     fill:true, tension:.45, cubicInterpolationMode:'monotone', pointRadius:0,
   }]}, options:{ responsive:true, maintainAspectRatio:false,
     plugins:{ legend:{ display:false } },

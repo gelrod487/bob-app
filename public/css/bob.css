@@ -1,29 +1,31 @@
 :root{
-  --cream:#FFF6EA;
+  --cream:#FBF7F1;
   --panel:#FFFFFF;
-  --panel-alt:#FCEEDD;
-  --ink:#5A3825;
-  --ink-soft:#8A6A54;
-  --maroon:#FF6B35;
-  --maroon-deep:#E4531F;
-  --gold:#F7A934;
-  --accent:#FF8C69;
-  --line:#F0DFC9;
-  --green:#1B998B;
-  --green-bg:#E1F3F0;
+  --panel-alt:#F2E9DC;
+  --ink:#3A2E27;
+  --ink-soft:#7D6C5E;
+  --maroon:#A63D40;
+  --maroon-deep:#873133;
+  --gold:#D4A373;
+  --accent:#D4A373;
+  --line:#D8CBB8;
+  --green:#1B7A73;
+  --green-bg:#DCEEEC;
   --amber:#9A6B00;
   --amber-bg:#FBEBC9;
-  --red:#B23A2A;
-  --red-bg:#F7E1DC;
-  --shadow: 0 10px 30px rgba(90,45,20,.10);
+  --red:#7A3B4A;
+  --red-bg:#F0E1E5;
+  --sage:#7C9473;
+  --sage-bg:#E6EBE1;
+  --shadow: 0 10px 30px rgba(58,46,39,.10);
   --radius: 18px;
 }
-/* Bob's palette is intentionally always this light warm cream — it doesn't follow the
+/* Bob's palette is intentionally always this warm ivory — it doesn't follow the
    visitor's OS/browser dark-mode preference. A manual toggle could still opt in by setting
    data-theme="dark" on <html>, which the block below supports, but nothing does that today. */
 :root[data-theme="dark"]{
-  --cream:#20140D; --panel:#2C1D14; --panel-alt:#3A2A1E; --ink:#FBEDE0; --ink-soft:#CBB6A8; --line:#4A362A;
-  --green-bg:#173330; --amber-bg:#3A2E10; --red-bg:#3A211C;
+  --cream:#221A15; --panel:#2E241D; --panel-alt:#3B2F27; --ink:#F3E9DE; --ink-soft:#C9B8AB; --line:#4A3C32;
+  --green-bg:#163330; --amber-bg:#3A2E10; --red-bg:#33232A;
   --shadow: 0 10px 30px rgba(0,0,0,.4);
 }
 *{box-sizing:border-box;}
@@ -235,6 +237,14 @@ footer.home-footer a{display:block; color:var(--ink-soft); text-decoration:none;
 .donut-legend-row{display:flex; align-items:center; justify-content:space-between; padding:6px 0; font-size:.86rem; border-bottom:1px solid var(--line);}
 .donut-legend-row:last-child{border-bottom:none;}
 .donut-legend-row .dot{width:9px; height:9px; border-radius:50%; display:inline-block; margin-right:8px;}
+
+/* ---- shared report date-range filter (Desk, Activity, Costs, Profit) ---- */
+.date-filter{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:16px;}
+.date-filter-select{min-width:140px;}
+.date-filter-custom{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+.date-filter-custom.section-hidden{display:none;}
+.date-filter-custom input[type="date"]{padding:8px 10px;}
+.date-filter-range{margin-left:auto;}
 
 /* ---- Book (clients & policies) list ---- */
 .book-filters{display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap;}
