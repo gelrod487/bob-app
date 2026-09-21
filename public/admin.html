@@ -37,7 +37,7 @@ function fmtDate(dateStr){ return new Date(dateStr).toLocaleDateString(undefined
 async function init(){
   const statusEl = document.getElementById('statusMsg');
   const { data: { session } } = await supabaseClient.auth.getSession();
-  if (!session) { window.location.href = '/login.html'; return; }
+  if (!session) { window.location.href = '/login.html?redirect=' + encodeURIComponent('/admin.html'); return; }
 
   try {
     const producers = await apiFetch('/api/admin/producers');

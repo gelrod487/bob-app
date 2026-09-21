@@ -117,12 +117,21 @@ function selectedTier(formEl) {
 }
 
 /* ---- after any successful auth, figure out where to send the user ---- */
+function safeRedirectTarget() {
+  const target = new URLSearchParams(window.location.search).get('redirect');
+  return target && target.startsWith('/') && !target.startsWith('//') ? target : null;
+}
 async function completeLoginFlow(email) {
   let me;
   try {
     me = await apiFetch('/api/me');
   } catch (err) {
     return; // apiFetch already redirects to /login.html on auth failure
+  }
+  const redirectTarget = safeRedirectTarget();
+  if (redirectTarget) {
+    window.location.href = redirectTarget;
+    return;
   }
   if (me.producer) {
     window.location.href = '/app.html';
