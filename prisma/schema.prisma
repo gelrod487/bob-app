@@ -113,6 +113,9 @@ model Policy {
   status         String   // 'active' | 'pending' | 'lapsed' | 'declined' | 'withdrawn'
   leadType       String?  @map("lead_type")   // descriptive only, not a real relationship
   leadVendor     String?  @map("lead_vendor") // descriptive only, not a real relationship
+  dateSubmitted  DateTime? @map("date_submitted") @db.Date
+  approvedDate   DateTime? @map("approved_date") @db.Date
+  notes          String?
   createdAt      DateTime @default(now()) @map("created_at")
 
   client            Client            @relation(fields: [clientId], references: [id])

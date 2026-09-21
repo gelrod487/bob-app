@@ -42,4 +42,24 @@ router.post('/increment', asyncHandler(async (req, res) => {
   res.json(row);
 }));
 
+// PUT /api/activity — body: { date, dials, appointments, presentations, sales }
+// Sets exact counts for a day (as opposed to /increment's delta bump). Powers the
+// "Log a day" form, which lets someone key in a past day's totals directly.
+router.put('/', asyncHandler(async (req, res) => {
+  const { date } = req.body;
+  if (!date) return res.status(400).json({ error: 'date is required.' });
+
+  const data = {};
+  for (const f of FIELDS) {
+    if (req.body[f] !== undefined) data[f] = Math.max(0, Number(req.body[f]) || 0);
+  }
+
+  const row = await prisma.dailyActivity.upsert({
+    where: { producerId_date: { producerId: req.producerId, date: new Date(date) } },
+    create: { producerId: req.producerId, date: new Date(date), ...data },
+    update: data,
+  });
+  res.json(row);
+}));
+
 module.exports = router;

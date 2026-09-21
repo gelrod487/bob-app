@@ -5,7 +5,10 @@ const asyncHandler = require('../middleware/asyncHandler');
 
 const router = express.Router();
 
-const VALID_CATEGORIES = ['lead_cost', 'operations', 'staff', 'recruiting', 'travel'];
+const VALID_CATEGORIES = [
+  'Lead flow', 'Marketing', 'E&O insurance', 'Licenses', 'CRM/Tools',
+  'Office', 'Travel', 'Staff', 'Insurance', 'Other',
+];
 
 // GET /api/expenses?from=YYYY-MM-DD&to=YYYY-MM-DD
 router.get('/', asyncHandler(async (req, res) => {

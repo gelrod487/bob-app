@@ -36,6 +36,7 @@ router.post('/', asyncHandler(async (req, res) => {
   const {
     clientId, policyNumber, carrier, productType, faceAmount,
     monthlyPremium, issueDate, status, leadType, leadVendor,
+    dateSubmitted, approvedDate, notes,
   } = req.body;
 
   if (!clientId || !carrier || !productType || !monthlyPremium || !issueDate || !status) {
@@ -54,6 +55,9 @@ router.post('/', asyncHandler(async (req, res) => {
       monthlyPremium,
       issueDate: new Date(issueDate),
       status, leadType, leadVendor,
+      dateSubmitted: dateSubmitted ? new Date(dateSubmitted) : new Date(issueDate),
+      approvedDate: approvedDate ? new Date(approvedDate) : null,
+      notes: notes || null,
     },
   });
 
@@ -70,6 +74,55 @@ router.post('/', asyncHandler(async (req, res) => {
   }
 
   res.status(201).json(policy);
+}));
+
+// PUT /api/policies/:id — used today for editing the notes field from the client detail view.
+router.put('/:id', asyncHandler(async (req, res) => {
+  const policy = await prisma.policy.findFirst({
+    where: { id: req.params.id, client: { producerId: req.producerId } },
+  });
+  if (!policy) return res.status(404).json({ error: 'Case not found.' });
+
+  const { notes } = req.body;
+  const updated = await prisma.policy.update({
+    where: { id: policy.id },
+    data: { notes: notes ?? policy.notes },
+  });
+  res.json(updated);
+}));
+
+// POST /api/policies/:id/chargeback — charges back the full commission paid on this case
+// (sum of every advance/additional/override entry logged against it) and marks it lapsed.
+router.post('/:id/chargeback', asyncHandler(async (req, res) => {
+  const policy = await prisma.policy.findFirst({
+    where: { id: req.params.id, client: { producerId: req.producerId } },
+    include: { commissionEntries: true },
+  });
+  if (!policy) return res.status(404).json({ error: 'Case not found.' });
+  if (policy.status !== 'active') {
+    return res.status(400).json({ error: 'Only an issued (active) case can be charged back.' });
+  }
+
+  const grossPaid = policy.commissionEntries
+    .filter((e) => ['advance', 'additional', 'override'].includes(e.entryType))
+    .reduce((sum, e) => sum + Number(e.amount), 0);
+
+  const [entry, updatedPolicy] = await prisma.$transaction([
+    prisma.commissionEntry.create({
+      data: {
+        policyId: policy.id,
+        ownerType: 'producer',
+        producerId: req.producerId,
+        entryType: 'chargeback',
+        amount: -Math.abs(grossPaid),
+        entryDate: new Date(),
+        notes: 'Full chargeback triggered from the case file.',
+      },
+    }),
+    prisma.policy.update({ where: { id: policy.id }, data: { status: 'lapsed' } }),
+  ]);
+
+  res.json({ policy: updatedPolicy, chargebackEntry: entry });
 }));
 
 module.exports = router;

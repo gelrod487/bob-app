@@ -41,13 +41,19 @@
 let me = null;
 let policiesCache = [];
 let clientsCache = [];
-const CATEGORY_META = {
-  lead_cost: { label: 'Lead cost', color: '#7A3B4A' },
-  operations: { label: 'Operations', color: '#7C9473' },
-  travel: { label: 'Travel', color: '#D4A373' },
-  staff: { label: 'Staff', color: '#A63D40' },
-  recruiting: { label: 'Recruiting', color: '#D8CBB8' },
-};
+const COST_CATEGORIES = [
+  { key:'Lead flow',      color:'#7A3B4A' },
+  { key:'Marketing',      color:'#A63D40' },
+  { key:'E&O insurance',  color:'#D8CBB8' },
+  { key:'Licenses',       color:'#9A8F7C' },
+  { key:'CRM/Tools',      color:'#7C9473' },
+  { key:'Office',         color:'#D4A373' },
+  { key:'Travel',         color:'#C9986B' },
+  { key:'Staff',          color:'#5F7A6E' },
+  { key:'Insurance',      color:'#8C5B63' },
+  { key:'Other',          color:'#B7ADA0' },
+];
+function costColor(cat){ return (COST_CATEGORIES.find(c=>c.key===cat) || {}).color || '#B7ADA0'; }
 const STATUS_TAG = {
   active: { cls: 'active-pol', label: 'Issued — paid' },
   pending: { cls: 'pending', label: 'Pending' },
@@ -57,6 +63,7 @@ const STATUS_TAG = {
 };
 
 function fmt(n){ return '$'+Number(n||0).toLocaleString(undefined,{maximumFractionDigits:0}); }
+function fmtMoney2(n){ return '$'+Number(n||0).toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2}); }
 function fmtDate(dateStr){ return new Date(dateStr).toLocaleDateString(undefined,{timeZone:'UTC', month:'short', day:'numeric'}); }
 function pct(a,b){ return b ? ((a/b)*100).toFixed(1)+'%' : '0%'; }
 function toISO(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
@@ -72,6 +79,7 @@ const DATE_RANGE_PRESETS = [
 const dateFilterState = {
   desk: { key: 'this_month', from: '', to: '' },
   activity: { key: 'this_month', from: '', to: '' },
+  book: { key: 'ytd', from: '', to: '' },
   costs: { key: 'this_month', from: '', to: '' },
   profit: { key: 'this_month', from: '', to: '' },
 };
@@ -124,13 +132,29 @@ function wireDateFilter(pageKey, onChange){
   };
 }
 
+/* ---- modal helper (add client, client detail, log a day, add cost) ---- */
+function openModal(innerHTML, opts){
+  closeModal();
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'activeModal';
+  overlay.innerHTML = `<div class="modal-box${opts && opts.wide ? ' modal-wide' : ''}">${innerHTML}</div>`;
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
+  document.body.appendChild(overlay);
+  return overlay;
+}
+function closeModal(){ const m = document.getElementById('activeModal'); if (m) m.remove(); }
+
 /* ---- BOB mascot (lives top-left in the sidebar) ---- */
 const say = wireMascot('navMascot', ["Hi, I'm Bob!","Bump your dials — I'll do the math.","Looking sharp today!","Don't forget to log your lead costs."]);
 
 /* ---- sidebar nav ---- */
 const mainInner = document.getElementById('mainInner');
 const PAGES = { desk: renderDesk, activity: renderActivity, book: () => renderBook('',''), costs: renderCosts, profit: renderProfit, subscribe: renderSubscribe, settings: renderSettings };
+let currentPage = 'desk';
+function renderCurrentPage(){ PAGES[currentPage](); }
 function go(page){
+  currentPage = page;
   document.querySelectorAll('#sidebarNav button, .sidebar-footer button[data-page]').forEach(b => b.classList.toggle('active', b.dataset.page === page));
   PAGES[page]();
 }
@@ -169,7 +193,6 @@ async function renderDesk(){
   ]);
   policiesCache = policies;
 
-  const isAgency = dash.tier === 'agency_owner';
   const funnel = activityRange.reduce((s,r) => ({
     dials: s.dials + r.dials, appointments: s.appointments + r.appointments,
     presentations: s.presentations + r.presentations, sales: s.sales + r.sales,
@@ -181,14 +204,13 @@ async function renderDesk(){
 
   const t = todayRow(activityAll);
 
-  const categories = isAgency ? ['lead_cost','operations','staff','recruiting','travel'] : ['lead_cost','operations','travel'];
-  const costLines = categories.map(cat => ({ cat, total: expenses.filter(e=>e.category===cat).reduce((s,e)=>s+Number(e.amount),0) })).filter(c=>c.total>0);
+  const costLines = COST_CATEGORIES.map(c => ({ cat:c.key, color:c.color, total: expenses.filter(e=>e.category===c.key).reduce((s,e)=>s+Number(e.amount),0) })).filter(c=>c.total>0);
 
   const recent = [...policies].sort((a,b)=>new Date(b.issueDate)-new Date(a.issueDate)).slice(0,5);
 
   mainInner.innerHTML = `
     <div class="page-header"><div><div class="page-eyebrow">Desk</div><h1>${me.name.split(' ')[0]}'s book</h1></div>
-    <a class="ghost" href="#" onclick="go('book');return false;">Add a client ↗</a></div>
+    <button class="ghost" type="button" id="addClientBtn">+ Add a client</button></div>
 
     ${dateFilterHTML('desk')}
 
@@ -248,6 +270,7 @@ async function renderDesk(){
   `;
 
   wireDateFilter('desk', renderDesk);
+  document.getElementById('addClientBtn').onclick = openAddClientModal;
   document.querySelectorAll('.stepper-btn').forEach(btn => btn.onclick = () => bumpActivity(btn.dataset.field, Number(btn.dataset.delta)));
   renderNetChart(await monthlySeries());
   if (costLines.length) renderDonut('donutCanvas', costLines);
@@ -281,7 +304,7 @@ function caseCardFromPolicy(p){
   const tag = STATUS_TAG[p.status] || STATUS_TAG.pending;
   const cb = policyChargeback(p);
   return `<div class="case-card">
-    <div><div class="case-name">${p.client?.name || '—'}</div><div class="case-sub">${p.productType} · ${p.carrier} · ${fmtDate(p.issueDate)}</div></div>
+    <div><button class="case-name-link" onclick="openClientDetail('${p.id}')">${p.client?.name || '—'}</button><div class="case-sub">${p.productType} · ${p.carrier} · ${fmtDate(p.issueDate)}</div></div>
     <div class="case-right">
       <div class="case-amount">${fmt(Number(p.monthlyPremium)*12)}</div>
       <div style="margin-top:4px;"><span class="tag ${tag.cls}">${tag.label}</span>${cb ? ` <span class="helptext" style="color:var(--red);">−${fmt(cb)} CB</span>`:''}</div>
@@ -292,7 +315,7 @@ function donutBlock(costLines){
   return `<div class="donut-wrap">
     <div class="chart-box" style="width:180px; height:180px; flex-shrink:0;"><canvas id="donutCanvas"></canvas></div>
     <div class="donut-legend">
-      ${costLines.map(c => `<div class="donut-legend-row"><span><span class="dot" style="background:${CATEGORY_META[c.cat].color}"></span>${CATEGORY_META[c.cat].label}</span><span>${fmt(c.total)}</span></div>`).join('')}
+      ${costLines.map(c => `<div class="donut-legend-row"><span><span class="dot" style="background:${c.color}"></span>${c.cat}</span><span>${fmt(c.total)}</span></div>`).join('')}
     </div>
   </div>`;
 }
@@ -330,24 +353,140 @@ function renderDonut(id, costLines){
   if (!ctx) return;
   if (donutChart) donutChart.destroy();
   donutChart = new Chart(ctx, { type:'doughnut', data:{
-    labels: costLines.map(c=>CATEGORY_META[c.cat].label), datasets:[{ data: costLines.map(c=>c.total), backgroundColor: costLines.map(c=>CATEGORY_META[c.cat].color) }]
+    labels: costLines.map(c=>c.cat), datasets:[{ data: costLines.map(c=>c.total), backgroundColor: costLines.map(c=>c.color) }]
   }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } }, cutout:'68%' } });
 }
 
+/* ================= ADD CLIENT (Desk + Book) ================= */
+function openAddClientModal(){
+  openModal(`
+    <div class="modal-head"><h2>Add a client</h2><button class="modal-close" onclick="closeModal()">×</button></div>
+    <form id="addClientForm">
+      <div class="detail-grid">
+        <div class="full" style="grid-column:1/-1;"><label>Client Name</label><input required name="name" placeholder="Jordan Alvarez"></div>
+        <div><label>Email</label><input type="email" name="email" placeholder="jordan@example.com"></div>
+        <div><label>Phone</label><input name="phone" placeholder="(555) 555-0100"></div>
+        <div><label>Carrier</label><input required name="carrier" placeholder="e.g. North Star Life"></div>
+        <div><label>Product Type</label><input required name="product" placeholder="e.g. Term 20"></div>
+        <div><label>Monthly Premium ($)</label><input required type="number" step="0.01" name="premium" placeholder="150"></div>
+        <div><label>Status</label><select name="status"><option value="active">Issued — paid</option><option value="pending">Pending</option></select></div>
+        <div><label>Lead Vendor</label><input name="leadVendor" placeholder="e.g. Facebook Leads"></div>
+        <div><label>Lead Type</label><input name="leadType" placeholder="e.g. Final Expense"></div>
+        <div class="full" style="grid-column:1/-1;"><label>Date Submitted</label><input required type="date" name="dateSubmitted" value="${todayISO()}"></div>
+        <div class="full" style="grid-column:1/-1;"><label>Notes</label><input name="notes" placeholder="Optional"></div>
+      </div>
+      <div class="modal-actions"><button class="primary" type="submit">Add Client</button><button class="ghost" type="button" onclick="closeModal()">Cancel</button></div>
+      <div class="errortext" id="addClientError"></div>
+    </form>
+  `);
+  document.getElementById('addClientForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const errEl = document.getElementById('addClientError');
+    errEl.textContent = '';
+    const f = new FormData(e.target);
+    const status = f.get('status');
+    const dateSubmitted = f.get('dateSubmitted');
+    const isPlaced = status === 'active';
+    try {
+      const client = await apiFetch('/api/clients', { method:'POST', body:{ name: f.get('name'), email: f.get('email')||null, phone: f.get('phone')||null } });
+      clientsCache.push(client);
+      await apiFetch('/api/policies', { method:'POST', body:{
+        clientId: client.id, carrier: f.get('carrier'), productType: f.get('product'),
+        monthlyPremium: Number(f.get('premium')), issueDate: dateSubmitted, status,
+        leadVendor: f.get('leadVendor')||null, leadType: f.get('leadType')||null,
+        dateSubmitted, approvedDate: isPlaced ? dateSubmitted : null, notes: f.get('notes')||null,
+      }});
+      closeModal();
+      say('Client added!');
+      renderCurrentPage();
+    } catch (err) { errEl.textContent = err.message; }
+  });
+}
+
+/* ================= CLIENT DETAIL ================= */
+async function openClientDetail(policyId){
+  let p = policiesCache.find(x => x.id === policyId);
+  if (!p) {
+    policiesCache = await apiFetch('/api/policies');
+    p = policiesCache.find(x => x.id === policyId);
+  }
+  if (!p) return;
+  const tag = STATUS_TAG[p.status] || STATUS_TAG.pending;
+  const contact = p.client?.contactInfo || {};
+  const paidSoFar = (p.commissionEntries||[]).filter(e=>['advance','additional','override'].includes(e.entryType)).reduce((s,e)=>s+Number(e.amount),0);
+  const cb = policyChargeback(p);
+
+  openModal(`
+    <div class="modal-head"><h2>${p.client?.name || '—'}</h2><button class="modal-close" onclick="closeModal()">×</button></div>
+    <p><span class="tag ${tag.cls}">${tag.label}</span>${cb ? ` <span class="helptext" style="color:var(--red); font-weight:700;">−${fmt(cb)} charged back</span>` : ''}</p>
+    <div class="detail-grid">
+      <div class="detail-item"><div class="dlabel">Email</div><div class="dvalue">${contact.email||'—'}</div></div>
+      <div class="detail-item"><div class="dlabel">Phone</div><div class="dvalue">${contact.phone||'—'}</div></div>
+      <div class="detail-item"><div class="dlabel">Carrier</div><div class="dvalue">${p.carrier}</div></div>
+      <div class="detail-item"><div class="dlabel">Product</div><div class="dvalue">${p.productType}</div></div>
+      <div class="detail-item"><div class="dlabel">Policy Number</div><div class="dvalue">${p.policyNumber||'—'}</div></div>
+      <div class="detail-item"><div class="dlabel">Coverage Amount</div><div class="dvalue">${p.faceAmount ? fmt(p.faceAmount) : '—'}</div></div>
+      <div class="detail-item"><div class="dlabel">Lead Vendor</div><div class="dvalue">${p.leadVendor||'—'}</div></div>
+      <div class="detail-item"><div class="dlabel">Lead Type</div><div class="dvalue">${p.leadType||'—'}</div></div>
+      <div class="detail-item"><div class="dlabel">Monthly Premium</div><div class="dvalue">${fmt(p.monthlyPremium)}</div></div>
+      <div class="detail-item"><div class="dlabel">Annual Premium</div><div class="dvalue">${fmt(Number(p.monthlyPremium)*12)}</div></div>
+      <div class="detail-item"><div class="dlabel">Date Submitted</div><div class="dvalue">${p.dateSubmitted ? fmtDate(p.dateSubmitted) : '—'}</div></div>
+      <div class="detail-item"><div class="dlabel">Approved Date</div><div class="dvalue">${p.approvedDate ? fmtDate(p.approvedDate) : '—'}</div></div>
+      <div class="detail-item"><div class="dlabel">Issue / Paid Date</div><div class="dvalue">${fmtDate(p.issueDate)}</div></div>
+      <div class="detail-item"><div class="dlabel">Issue Paid FYC</div><div class="dvalue">${fmt(paidSoFar)}</div></div>
+    </div>
+    <label>Notes</label>
+    <textarea id="clientNotes" rows="3" style="width:100%; padding:9px 11px; border-radius:10px; border:1.5px solid var(--line); background:var(--cream); color:var(--ink); font-family:'Inter'; font-size:.9rem;">${p.notes||''}</textarea>
+    <div class="modal-actions">
+      <button class="ghost" type="button" id="saveNotesBtn">Save notes</button>
+      ${p.status === 'active' ? `<button class="danger" type="button" id="chargebackBtn">Chargeback</button>` : ''}
+      <button class="ghost" type="button" onclick="closeModal()">Close</button>
+    </div>
+    <div class="errortext" id="detailError"></div>
+  `, { wide: true });
+
+  document.getElementById('saveNotesBtn').onclick = async () => {
+    try {
+      await apiFetch(`/api/policies/${p.id}`, { method:'PUT', body:{ notes: document.getElementById('clientNotes').value } });
+      say('Notes saved.');
+      closeModal();
+    } catch (err) { document.getElementById('detailError').textContent = err.message; }
+  };
+  const cbBtn = document.getElementById('chargebackBtn');
+  if (cbBtn) cbBtn.onclick = async () => {
+    if (!confirm(`Charge back the full ${fmt(paidSoFar)} commission on this policy? This will mark the case as lapsed.`)) return;
+    try {
+      await apiFetch(`/api/policies/${p.id}/chargeback`, { method:'POST' });
+      say('Chargeback logged.');
+      closeModal();
+      renderCurrentPage();
+    } catch (err) { document.getElementById('detailError').textContent = err.message; }
+  };
+}
+
 /* ================= ACTIVITY ================= */
+function daysAgoISO(n){ const d = new Date(); d.setDate(d.getDate()-n); return toISO(d); }
+function addDaysISO(iso, n){ const d = new Date(iso+'T00:00:00'); d.setDate(d.getDate()+n); return toISO(d); }
 async function renderActivity(){
   mainInner.innerHTML = `<div class="page-header"><div><div class="page-eyebrow">Activity</div><h1>Daily production log</h1></div></div><p class="helptext">Loading…</p>`;
   const range = computeDateRange(dateFilterState.activity.key, dateFilterState.activity.from, dateFilterState.activity.to);
   const [rowsAll, rowsRange] = await Promise.all([
-    apiFetch('/api/activity'),
+    apiFetch(`/api/activity?from=${daysAgoISO(6)}&to=${todayISO()}`),
     apiFetch(`/api/activity?from=${range.from}&to=${range.to}`),
   ]);
   const t = todayRow(rowsAll);
-  const history = [...rowsRange].sort((a,b)=>new Date(b.date)-new Date(a.date));
-  const totals = history.reduce((s,r) => ({ dials:s.dials+r.dials, appointments:s.appointments+r.appointments, presentations:s.presentations+r.presentations, sales:s.sales+r.sales }), {dials:0,appointments:0,presentations:0,sales:0});
+  const totals = rowsRange.reduce((s,r) => ({ dials:s.dials+r.dials, appointments:s.appointments+r.appointments, presentations:s.presentations+r.presentations, sales:s.sales+r.sales }), {dials:0,appointments:0,presentations:0,sales:0});
+
+  const last7 = [];
+  for (let i = 6; i >= 0; i--) {
+    const iso = daysAgoISO(i);
+    const row = rowsAll.find(r => r.date.slice(0,10) === iso) || { date: iso, dials:0, appointments:0, presentations:0, sales:0 };
+    last7.push(row);
+  }
 
   mainInner.innerHTML = `
-    <div class="page-header"><div><div class="page-eyebrow">Activity</div><h1>Daily production log</h1></div></div>
+    <div class="page-header"><div><div class="page-eyebrow">Activity</div><h1>Daily production log</h1></div>
+    <button class="primary" type="button" id="logDayBtn">+ Log a day</button></div>
     <div class="panel">
       <h2>Today</h2>
       <div class="stepper-grid">
@@ -359,19 +498,85 @@ async function renderActivity(){
           </div>`).join('')}
       </div>
     </div>
+
     <div class="panel">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;"><h2 style="margin:0;">History</h2></div>
+      <h2>Production trend</h2>
       ${dateFilterHTML('activity')}
-      <p class="helptext">Totals: ${totals.dials} dials · ${totals.appointments} appts · ${totals.presentations} sits · ${totals.sales} sales</p>
+      <p class="helptext" style="margin:-8px 0 14px;">${totals.dials} dials · ${totals.appointments} appts · ${totals.presentations} sits · ${totals.sales} sales in this range</p>
+      <div class="chart-box"><canvas id="activityChart"></canvas></div>
+    </div>
+
+    <div class="panel">
+      <h2>Last 7 days</h2>
       <table><thead><tr><th>Date</th><th>Dials</th><th>Appts</th><th>Sits</th><th>Sales</th></tr></thead>
-      <tbody>${history.map(r=>`<tr><td>${fmtDate(r.date)}</td><td>${r.dials}</td><td>${r.appointments}</td><td>${r.presentations}</td><td>${r.sales}</td></tr>`).join('') || '<tr><td colspan="5" class="helptext">No activity in this range.</td></tr>'}</tbody></table>
+      <tbody>${last7.slice().reverse().map(r=>`<tr><td>${fmtDate(r.date)}</td><td>${r.dials}</td><td>${r.appointments}</td><td>${r.presentations}</td><td>${r.sales}</td></tr>`).join('')}</tbody></table>
     </div>
   `;
   wireDateFilter('activity', renderActivity);
+  document.getElementById('logDayBtn').onclick = openLogDayModal;
   document.querySelectorAll('.stepper-btn').forEach(btn => btn.onclick = async () => {
     const row = await apiFetch('/api/activity/increment', { method:'POST', body:{ date: todayISO(), field: btn.dataset.field, delta: Number(btn.dataset.delta) } });
     document.getElementById('today-'+btn.dataset.field).textContent = row[btn.dataset.field];
     renderActivity();
+  });
+  renderActivityChart(range.from, range.to, rowsRange);
+}
+let activityChart;
+function renderActivityChart(from, to, rows){
+  const ctx = document.getElementById('activityChart');
+  if (!ctx) return;
+  if (activityChart) activityChart.destroy();
+  const days = [];
+  let cursor = from, guard = 0;
+  while (cursor <= to && guard < 400) { days.push(cursor); cursor = addDaysISO(cursor,1); guard++; }
+  const byDate = {};
+  rows.forEach(r => byDate[r.date.slice(0,10)] = r);
+  const series = (field) => days.map(d => (byDate[d] ? byDate[d][field] : 0));
+  const ink = getComputedStyle(document.body).color;
+  activityChart = new Chart(ctx, { type:'line', data:{
+    labels: days.map(d=>fmtDate(d)),
+    datasets: [
+      { label:'Dials', data: series('dials'), borderColor:'#A63D40', backgroundColor:'transparent', tension:.35, pointRadius:0, borderWidth:2, yAxisID:'yDials' },
+      { label:'Appointments', data: series('appointments'), borderColor:'#D4A373', backgroundColor:'transparent', tension:.35, pointRadius:0, borderWidth:2, yAxisID:'ySmall' },
+      { label:'Presentations', data: series('presentations'), borderColor:'#7C9473', backgroundColor:'transparent', tension:.35, pointRadius:0, borderWidth:2, yAxisID:'ySmall' },
+      { label:'Sales', data: series('sales'), borderColor:'#1B7A73', backgroundColor:'transparent', tension:.35, pointRadius:0, borderWidth:2.5, yAxisID:'ySmall' },
+    ],
+  }, options:{ responsive:true, maintainAspectRatio:false,
+    plugins:{ legend:{ position:'bottom', labels:{ color:ink, boxWidth:12 } } },
+    scales:{
+      x:{ ticks:{ color:ink, maxTicksLimit:10 } },
+      yDials:{ position:'left', ticks:{ color:ink }, title:{ display:true, text:'Dials', color:ink } },
+      ySmall:{ position:'right', ticks:{ color:ink }, grid:{ drawOnChartArea:false }, title:{ display:true, text:'Appts / Sits / Sales', color:ink } },
+    } } });
+}
+function openLogDayModal(){
+  openModal(`
+    <div class="modal-head"><h2>Log a day</h2><button class="modal-close" onclick="closeModal()">×</button></div>
+    <form id="logDayForm">
+      <div class="detail-grid">
+        <div class="full" style="grid-column:1/-1;"><label>Date</label><input required type="date" name="date" value="${todayISO()}" max="${todayISO()}"></div>
+        <div><label>Dials</label><input required type="number" min="0" name="dials" value="0"></div>
+        <div><label>Appointments</label><input required type="number" min="0" name="appointments" value="0"></div>
+        <div><label>Presentations</label><input required type="number" min="0" name="presentations" value="0"></div>
+        <div><label>Sales</label><input required type="number" min="0" name="sales" value="0"></div>
+      </div>
+      <div class="modal-actions"><button class="primary" type="submit">Save Day</button><button class="ghost" type="button" onclick="closeModal()">Cancel</button></div>
+      <div class="errortext" id="logDayError"></div>
+    </form>
+  `);
+  document.getElementById('logDayForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const errEl = document.getElementById('logDayError');
+    const f = new FormData(e.target);
+    try {
+      await apiFetch('/api/activity', { method:'PUT', body:{
+        date: f.get('date'), dials:Number(f.get('dials')), appointments:Number(f.get('appointments')),
+        presentations:Number(f.get('presentations')), sales:Number(f.get('sales')),
+      }});
+      closeModal();
+      say('Day logged.');
+      renderActivity();
+    } catch (err) { errEl.textContent = err.message; }
   });
 }
 
@@ -380,6 +585,7 @@ async function renderBook(filterText, statusFilter){
   filterText = (filterText||'').toLowerCase();
   mainInner.innerHTML = `<div class="page-header"><div><div class="page-eyebrow">Book</div><h1>Clients &amp; cases</h1></div></div><p class="helptext">Loading…</p>`;
 
+  const range = computeDateRange(dateFilterState.book.key, dateFilterState.book.from, dateFilterState.book.to);
   const [clients, policies, dash] = await Promise.all([apiFetch('/api/clients'), apiFetch('/api/policies'), apiFetch('/api/dashboard')]);
   clientsCache = clients; policiesCache = policies;
 
@@ -387,38 +593,25 @@ async function renderBook(filterText, statusFilter){
   const persistency = (dash.placedCount + lapsedCount) ? Math.round(dash.placedCount/(dash.placedCount+lapsedCount)*100) : 100;
 
   const filtered = policies.filter(p => {
+    const submitted = (p.dateSubmitted || p.issueDate).slice(0,10);
+    const inRange = submitted >= range.from && submitted <= range.to;
     const name = (p.client?.name || '').toLowerCase();
     const matchesText = !filterText || name.includes(filterText) || p.carrier.toLowerCase().includes(filterText);
     const matchesStatus = !statusFilter || p.status === statusFilter;
-    return matchesText && matchesStatus;
+    return inRange && matchesText && matchesStatus;
   }).sort((a,b)=>new Date(b.issueDate)-new Date(a.issueDate));
 
   mainInner.innerHTML = `
-    <div class="page-header"><div><div class="page-eyebrow">Book</div><h1>Clients &amp; cases</h1></div></div>
+    <div class="page-header"><div><div class="page-eyebrow">Book</div><h1>Clients &amp; cases</h1></div>
+    <button class="primary" type="button" id="addClientBtn2">+ Add client</button></div>
+
+    ${dateFilterHTML('book')}
 
     <div class="grid" style="margin-bottom:18px;">
       <div class="card"><div class="stat-label">Paid FYC</div><div class="stat-value">${fmt(dash.grossCommission)}</div></div>
       <div class="card"><div class="stat-label">In Pipeline</div><div class="stat-value" style="color:var(--gold)">${fmt(dash.pendingPremium)}</div></div>
       <div class="card"><div class="stat-label">Chargebacks</div><div class="stat-value neg">−${fmt(dash.chargebacks)}</div></div>
       <div class="card"><div class="stat-label">Persistency</div><div class="stat-value">${persistency}%</div></div>
-    </div>
-
-    <div class="panel">
-      <h2>Add Client / Case</h2>
-      <form class="entry" id="policyForm">
-        <div><label>Client Name</label><input required name="client" placeholder="Jordan Alvarez"></div>
-        <div><label>Carrier</label><input required name="carrier" placeholder="e.g. North Star Life"></div>
-        <div><label>Product Type</label>
-          <select name="product"><option>Term Life</option><option>Whole Life</option><option>IUL</option><option>Final Expense</option><option>Annuity</option></select>
-        </div>
-        <div><label>Monthly Premium ($)</label><input required type="number" step="0.01" name="premium" placeholder="100"></div>
-        <div><label>Issue Date</label><input required type="date" name="issued"></div>
-        <div><label>Status</label>
-          <select name="status"><option value="active">Issued — paid</option><option value="pending">Pending</option><option value="lapsed">Lapsed</option><option value="declined">Declined</option><option value="withdrawn">Withdrawn</option></select>
-        </div>
-        <div class="full"><button class="primary" type="submit">Add Case</button></div>
-        <div class="full errortext" id="policyError"></div>
-      </form>
     </div>
 
     <div class="panel">
@@ -443,9 +636,11 @@ async function renderBook(filterText, statusFilter){
         <option value="lapsed" ${statusFilter==='lapsed'?'selected':''}>Lapsed</option>
       </select>
     </div>
-    <div>${filtered.map(bookCaseCard).join('') || '<p class="helptext">No cases match.</p>'}</div>
+    <div>${filtered.map(bookCaseCard).join('') || '<p class="helptext">No cases match in this range.</p>'}</div>
   `;
 
+  wireDateFilter('book', () => renderBook(filterText, statusFilter));
+  document.getElementById('addClientBtn2').onclick = openAddClientModal;
   document.getElementById('bookSearch').oninput = (e) => renderBook(e.target.value, statusFilter);
   document.getElementById('bookStatus').onchange = (e) => renderBook(filterText, e.target.value);
   document.getElementById('toggleImport').onclick = () => {
@@ -454,46 +649,25 @@ async function renderBook(filterText, statusFilter){
     document.getElementById('toggleImport').textContent = area.classList.contains('section-hidden') ? 'Show' : 'Hide';
   };
   wireImport();
-
-  document.getElementById('policyForm').addEventListener('submit', async e => {
-    e.preventDefault();
-    const errEl = document.getElementById('policyError');
-    errEl.textContent = '';
-    const f = new FormData(e.target);
-    try {
-      const clientId = await findOrCreateClientByName(f.get('client'));
-      await apiFetch('/api/policies', { method:'POST', body:{
-        clientId, carrier:f.get('carrier'), productType:f.get('product'),
-        monthlyPremium: Number(f.get('premium')), issueDate: f.get('issued'), status: f.get('status'),
-      }});
-      say('Case added — nice work!');
-      renderBook(filterText, statusFilter);
-    } catch (err) { errEl.textContent = err.message; }
-  });
 }
 function bookCaseCard(p){
   const tag = STATUS_TAG[p.status] || STATUS_TAG.pending;
   const cb = policyChargeback(p);
+  const contact = p.client?.contactInfo || {};
   return `<div class="case-card">
     <div>
-      <div class="case-name">${p.client?.name || '—'}</div>
+      <button class="case-name-link" onclick="openClientDetail('${p.id}')">${p.client?.name || '—'}</button>
+      <div class="case-sub">${contact.email || '—'} · ${contact.phone || '—'}</div>
       <div class="case-sub">${p.carrier} · ${p.productType}</div>
       <div class="case-sub">${p.policyNumber || '—'}</div>
     </div>
     <div class="case-right">
-      <div class="case-sub">${fmtDate(p.issueDate)}</div>
+      <div class="case-sub">${fmtDate(p.dateSubmitted || p.issueDate)}</div>
       <div class="case-amount">${fmt(p.monthlyPremium)}/mo</div>
       <div class="case-sub">AP ${fmt(Number(p.monthlyPremium)*12)}</div>
       <div style="margin-top:4px;"><span class="tag ${tag.cls}">${tag.label}</span>${cb ? ` <span class="helptext" style="color:var(--red);">−${fmt(cb)} CB</span>`:''}</div>
     </div>
   </div>`;
-}
-async function findOrCreateClientByName(name){
-  const match = clientsCache.find(c => c.name.trim().toLowerCase() === name.trim().toLowerCase());
-  if (match) return match.id;
-  const created = await apiFetch('/api/clients', { method:'POST', body:{ name } });
-  clientsCache.push(created);
-  return created.id;
 }
 
 /* ---- CSV import (unchanged logic, just re-skinned) ---- */
@@ -557,56 +731,49 @@ function renderMapper(suggestion){
 async function renderCosts(){
   mainInner.innerHTML = `<div class="page-header"><div><div class="page-eyebrow">Costs</div><h1>Where the money goes</h1></div></div><p class="helptext">Loading…</p>`;
   const range = computeDateRange(dateFilterState.costs.key, dateFilterState.costs.from, dateFilterState.costs.to);
-  const [expenses, meRes] = await Promise.all([apiFetch(`/api/expenses?from=${range.from}&to=${range.to}`), apiFetch('/api/me')]);
-  const isAgency = meRes.producer.subscriptionTier === 'agency_owner';
-  const categories = isAgency ? ['lead_cost','operations','staff','recruiting','travel'] : ['lead_cost','operations','travel'];
-  const costLines = categories.map(cat => ({ cat, total: expenses.filter(e=>e.category===cat).reduce((s,e)=>s+Number(e.amount),0) })).filter(c=>c.total>0);
+  const expenses = await apiFetch(`/api/expenses?from=${range.from}&to=${range.to}`);
+  const costLines = COST_CATEGORIES.map(c => ({ cat:c.key, color:c.color, total: expenses.filter(e=>e.category===c.key).reduce((s,e)=>s+Number(e.amount),0) })).filter(c=>c.total>0);
 
   mainInner.innerHTML = `
-    <div class="page-header"><div><div class="page-eyebrow">Costs</div><h1>Where the money goes</h1></div></div>
+    <div class="page-header"><div><div class="page-eyebrow">Costs</div><h1>Where the money goes</h1></div>
+    <button class="primary" type="button" id="addCostBtn">+ Add cost</button></div>
     ${dateFilterHTML('costs')}
     ${costLines.length ? `<div class="panel">${donutBlock(costLines)}</div>` : '<p class="helptext">No costs logged in this range.</p>'}
 
     <div class="panel">
-      <h2>Log a Cost</h2>
-      <form class="entry" id="expForm">
-        <div><label>Category</label>
-          <select name="category">
-            <option value="lead_cost">Lead cost</option><option value="operations">Operations</option><option value="travel">Travel</option>
-            <option value="staff" class="agency-only-opt">Staff</option><option value="recruiting" class="agency-only-opt">Recruiting</option>
-          </select>
-        </div>
-        <div><label>Description</label><input name="desc" placeholder="e.g. Facebook lead gen"></div>
-        <div><label>Amount ($)</label><input required type="number" step="0.01" name="amount" placeholder="300"></div>
-        <div><label>Date</label><input required type="date" name="date"></div>
-        <div class="full"><button class="primary" type="submit">Log Cost</button></div>
-        <div class="full errortext" id="expError"></div>
-      </form>
-    </div>
-
-    <div class="panel">
       <h2>All cost lines</h2>
       <table><thead><tr><th>Category</th><th>Description</th><th>Amount</th><th>Date</th></tr></thead>
-      <tbody>${[...expenses].sort((a,b)=>new Date(b.expenseDate)-new Date(a.expenseDate)).map(e=>`<tr><td>${CATEGORY_META[e.category]?.label||e.category}</td><td>${e.description||''}</td><td>${fmt(e.amount)}</td><td>${fmtDate(e.expenseDate)}</td></tr>`).join('') || '<tr><td colspan="4" class="helptext">No costs logged yet.</td></tr>'}</tbody></table>
+      <tbody>${[...expenses].sort((a,b)=>new Date(b.expenseDate)-new Date(a.expenseDate)).map(e=>`<tr><td>${e.category}</td><td>${e.description||''}</td><td>${fmt(e.amount)}</td><td>${fmtDate(e.expenseDate)}</td></tr>`).join('') || '<tr><td colspan="4" class="helptext">No costs logged in this range.</td></tr>'}</tbody></table>
     </div>
   `;
-  if (!isAgency) document.querySelectorAll('.agency-only-opt').forEach(o=>o.style.display='none');
   if (costLines.length) renderDonut('donutCanvas', costLines);
   wireDateFilter('costs', renderCosts);
-
-  document.getElementById('expForm').addEventListener('submit', async e => {
+  document.getElementById('addCostBtn').onclick = openAddCostModal;
+}
+function openAddCostModal(){
+  openModal(`
+    <div class="modal-head"><h2>Add cost</h2><button class="modal-close" onclick="closeModal()">×</button></div>
+    <form id="addCostForm">
+      <div class="detail-grid">
+        <div><label>Category</label><select name="category">${COST_CATEGORIES.map(c=>`<option value="${c.key}">${c.key}</option>`).join('')}</select></div>
+        <div><label>Amount ($)</label><input required type="number" step="0.01" name="amount" placeholder="150"></div>
+        <div class="full" style="grid-column:1/-1;"><label>Date</label><input required type="date" name="date" value="${todayISO()}"></div>
+        <div class="full" style="grid-column:1/-1;"><label>Description</label><input name="description" placeholder="Optional"></div>
+      </div>
+      <div class="modal-actions"><button class="primary" type="submit">Add Cost</button><button class="ghost" type="button" onclick="closeModal()">Cancel</button></div>
+      <div class="errortext" id="addCostError"></div>
+    </form>
+  `);
+  document.getElementById('addCostForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const errEl = document.getElementById('expError');
-    errEl.textContent = '';
+    const errEl = document.getElementById('addCostError');
     const f = new FormData(e.target);
-    const category = f.get('category');
-    const ownerType = ['staff','recruiting'].includes(category) ? 'agency' : 'producer';
     try {
       await apiFetch('/api/expenses', { method:'POST', body:{
-        ownerType, category, description: f.get('desc') || null,
+        ownerType: 'producer', category: f.get('category'), description: f.get('description') || null,
         amount: Number(f.get('amount')), expenseDate: f.get('date'),
-        agencyId: ownerType === 'agency' ? me.agencyId : undefined,
       }});
+      closeModal();
       say('Cost logged.');
       renderCosts();
     } catch (err) { errEl.textContent = err.message; }
@@ -615,30 +782,121 @@ async function renderCosts(){
 
 /* ================= PROFIT ================= */
 const COMM_TYPE_MAP = { Initial:'advance', Renewal:'additional', Override:'override', Chargeback:'chargeback' };
+let trendMonths = 6;
+async function monthlyStatsReal(count){
+  const [activity, expenses, commissions] = await Promise.all([
+    apiFetch('/api/activity'), apiFetch('/api/expenses'), apiFetch('/api/commission-entries'),
+  ]);
+  const months = [];
+  const now = new Date();
+  for (let i = count-1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+    months.push({ key: `${d.getFullYear()}-${d.getMonth()}`, label: d.toLocaleString(undefined,{month:'short', year: count>12?'2-digit':undefined}) });
+  }
+  const monthKey = (dateStr) => { const d = new Date(dateStr); return `${d.getFullYear()}-${d.getMonth()}`; };
+  return months.map(m => {
+    const rows = activity.filter(a => monthKey(a.date) === m.key);
+    const dials = rows.reduce((s,a)=>s+a.dials,0);
+    const sales = rows.reduce((s,a)=>s+a.sales,0);
+    const monthCommissions = commissions.filter(c => monthKey(c.entryDate) === m.key);
+    const gross = monthCommissions.filter(c=>['advance','additional','other'].includes(c.entryType)).reduce((s,c)=>s+Number(c.amount),0);
+    const cb = Math.abs(monthCommissions.filter(c=>c.entryType==='chargeback').reduce((s,c)=>s+Number(c.amount),0));
+    const cost = expenses.filter(e => monthKey(e.expenseDate) === m.key).reduce((s,e)=>s+Number(e.amount),0);
+    return { label: m.label, dials, sales, gross, cb, cost, net: gross - cb - cost };
+  });
+}
 async function renderProfit(){
-  mainInner.innerHTML = `<div class="page-header"><div><div class="page-eyebrow">Profit</div><h1>Net profit, case by case</h1></div></div><p class="helptext">Loading…</p>`;
+  mainInner.innerHTML = `<div class="page-header"><div><div class="page-eyebrow">Profit</div><h1>Financial reporting</h1></div></div><p class="helptext">Loading…</p>`;
   const range = computeDateRange(dateFilterState.profit.key, dateFilterState.profit.from, dateFilterState.profit.to);
-  const [dash, entries, policies] = await Promise.all([
+  const [dash, dashAllTime, entries, policies, activityRange] = await Promise.all([
     apiFetch(`/api/dashboard?from=${range.from}&to=${range.to}`),
+    apiFetch('/api/dashboard'),
     apiFetch(`/api/commission-entries?from=${range.from}&to=${range.to}`),
     apiFetch('/api/policies'),
+    apiFetch(`/api/activity?from=${range.from}&to=${range.to}`),
   ]);
   policiesCache = policies;
   const isAgency = dash.tier === 'agency_owner';
 
+  const actTotals = activityRange.reduce((s,r)=>({dials:s.dials+r.dials, appointments:s.appointments+r.appointments, sales:s.sales+r.sales}), {dials:0,appointments:0,sales:0});
+  const placedRange = policies.filter(p => (p.status==='active'||p.status==='lapsed') && p.issueDate.slice(0,10) >= range.from && p.issueDate.slice(0,10) <= range.to);
+  const costPerSale = actTotals.sales ? dash.totalExpenses/actTotals.sales : 0;
+  const commissionPerDial = actTotals.dials ? dash.grossCommission/actTotals.dials : 0;
+  const costPerAppointment = actTotals.appointments ? dash.totalExpenses/actTotals.appointments : 0;
+  const costPerDial = actTotals.dials ? dash.totalExpenses/actTotals.dials : 0;
+  const avgCaseFYC = placedRange.length ? dash.grossCommission/placedRange.length : 0;
+  const avgAnnualPremium = placedRange.length ? placedRange.reduce((s,p)=>s+Number(p.monthlyPremium)*12,0)/placedRange.length : 0;
+
+  const profitMargin = dashAllTime.grossCommission ? (dashAllTime.netProfit/dashAllTime.grossCommission*100) : 0;
+  const chargebackRatio = dashAllTime.grossCommission ? (dashAllTime.chargebacks/dashAllTime.grossCommission*100) : 0;
+  const oneYearAgo = new Date(); oneYearAgo.setDate(oneYearAgo.getDate()-365);
+  const oneYearAgoISO = toISO(oneYearAgo);
+  const matured = policies.filter(p => (p.status==='active'||p.status==='lapsed') && p.issueDate.slice(0,10) <= oneYearAgoISO);
+  const persistency = matured.length ? Math.round(matured.filter(p=>p.status==='active').length/matured.length*100) : 100;
+
+  const stats = await monthlyStatsReal(trendMonths);
+
   mainInner.innerHTML = `
-    <div class="page-header"><div><div class="page-eyebrow">Profit</div><h1>Net profit, case by case</h1></div></div>
+    <div class="page-header"><div><div class="page-eyebrow">Profit</div><h1>Financial reporting</h1></div></div>
     ${dateFilterHTML('profit')}
-    <div class="grid" style="margin-bottom:18px;">
-      <div class="card"><div class="stat-label">Net Profit</div><div class="stat-value ${dash.netProfit>=0?'pos':'neg'}">${fmt(dash.netProfit)}</div></div>
-      <div class="card"><div class="stat-label">Gross Commission</div><div class="stat-value">${fmt(dash.grossCommission)}</div></div>
-      <div class="card"><div class="stat-label">Chargebacks</div><div class="stat-value neg">−${fmt(dash.chargebacks)}</div></div>
-      <div class="card"><div class="stat-label">Operating Costs</div><div class="stat-value">${fmt(dash.totalExpenses)}</div></div>
+
+    <div class="panel">
+      <h2>Statement</h2>
+      <p class="helptext" style="margin:-8px 0 14px;">${fmtDate(range.from)} – ${fmtDate(range.to)}</p>
+      <table class="statement-table">
+        <tbody>
+          <tr><td>Gross First-Year Commission</td><td>${fmt(dash.grossCommission)}</td></tr>
+          <tr><td>Chargebacks</td><td class="neg">−${fmt(dash.chargebacks)}</td></tr>
+          <tr class="statement-total"><td>Net Commission</td><td>${fmt(dash.grossCommission - dash.chargebacks)}</td></tr>
+          <tr><td>Operating Costs</td><td class="neg">−${fmt(dash.totalExpenses)}</td></tr>
+          <tr class="statement-total"><td>Net Profit</td><td class="${dash.netProfit>=0?'pos':'neg'}">${fmt(dash.netProfit)}</td></tr>
+          <tr><td>Pending (not yet paid)</td><td style="color:var(--gold);">${fmt(dash.pendingPremium)}</td></tr>
+        </tbody>
+      </table>
     </div>
 
     <div class="panel">
-      <h2>Net by month</h2>
+      <div class="trend-controls">
+        <h2 style="margin:0;">Net by month</h2>
+        <select id="trendRangeSelect" style="max-width:160px;">
+          <option value="3" ${trendMonths===3?'selected':''}>Last 3 months</option>
+          <option value="6" ${trendMonths===6?'selected':''}>Last 6 months</option>
+          <option value="12" ${trendMonths===12?'selected':''}>Last 12 months</option>
+          <option value="ytd" ${trendMonths==='ytd'?'selected':''}>Year to date</option>
+        </select>
+      </div>
       <div class="chart-box"><canvas id="netChart"></canvas></div>
+    </div>
+
+    <div class="panel">
+      <h2>Unit economics</h2>
+      <p class="helptext" style="margin:-8px 0 14px;">${fmtDate(range.from)} – ${fmtDate(range.to)}</p>
+      <div class="metrics-grid">
+        <div class="metric-cell"><div class="mlabel">Cost per Sale</div><div class="mvalue">${fmt(costPerSale)}</div></div>
+        <div class="metric-cell"><div class="mlabel">Commission per Dial</div><div class="mvalue">${fmtMoney2(commissionPerDial)}</div></div>
+        <div class="metric-cell"><div class="mlabel">Cost per Appointment</div><div class="mvalue">${fmt(costPerAppointment)}</div></div>
+        <div class="metric-cell"><div class="mlabel">Cost per Dial</div><div class="mvalue">${fmtMoney2(costPerDial)}</div></div>
+        <div class="metric-cell"><div class="mlabel">Average Case FYC</div><div class="mvalue">${fmt(avgCaseFYC)}</div></div>
+        <div class="metric-cell"><div class="mlabel">Average Annual Premium</div><div class="mvalue">${fmt(avgAnnualPremium)}</div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Health of the book</h2>
+      <p class="helptext" style="margin:-8px 0 14px;">Whole book, all time — not affected by the date filter above</p>
+      <table class="statement-table">
+        <tbody>
+          <tr><td>Profit margin on gross FYC</td><td>${profitMargin.toFixed(1)}%</td></tr>
+          <tr><td>Chargeback ratio</td><td class="${chargebackRatio>10?'neg':''}">${chargebackRatio.toFixed(1)}%</td></tr>
+          <tr><td>Persistency (12+ months on the books)</td><td class="pos">${persistency}%</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="panel">
+      <h2>Month over month</h2>
+      <table><thead><tr><th>Month</th><th>Dials</th><th>Sales</th><th>Gross Commission</th><th>Chargebacks</th><th>Costs</th><th>Net Profit</th></tr></thead>
+      <tbody>${stats.slice().reverse().map(m=>`<tr><td>${m.label}</td><td>${m.dials}</td><td>${m.sales}</td><td>${fmt(m.gross)}</td><td class="neg">−${fmt(m.cb)}</td><td>${fmt(m.cost)}</td><td class="${m.net>=0?'pos':'neg'}">${fmt(m.net)}</td></tr>`).join('')}</tbody></table>
     </div>
 
     <div class="panel">
@@ -660,7 +918,12 @@ async function renderProfit(){
     </div>
   `;
   wireDateFilter('profit', renderProfit);
-  renderNetChart(await monthlySeries());
+  document.getElementById('trendRangeSelect').onchange = (e) => {
+    const v = e.target.value;
+    trendMonths = v === 'ytd' ? (new Date().getMonth()+1) : Number(v);
+    renderProfit();
+  };
+  renderNetChart({ labels: stats.map(m=>m.label), data: stats.map(m=>m.net) });
 
   document.getElementById('commForm').addEventListener('submit', async e => {
     e.preventDefault();

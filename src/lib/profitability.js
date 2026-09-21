@@ -8,9 +8,8 @@ const prisma = require('./db');
 /**
  * Net profit for a single Individual Producer over a date range.
  * = commission ledger (advance + additional + chargeback + other)
- * - expenses in lead_cost / operations / travel
- * (staff & recruiting are agency-only categories and won't appear for an
- * individual producer, but are excluded explicitly for clarity anyway.)
+ * - every expense logged against the producer (the category list is just for
+ * the cost breakdown view now — there's no per-category tier restriction).
  */
 async function producerProfitability(producerId, { from, to } = {}) {
   const dateFilter = {};
@@ -28,7 +27,6 @@ async function producerProfitability(producerId, { from, to } = {}) {
   const expenseWhere = {
     ownerType: 'producer',
     producerId,
-    category: { in: ['lead_cost', 'operations', 'travel'] },
     ...(from || to ? { expenseDate: dateFilter } : {}),
   };
 
@@ -96,7 +94,6 @@ async function agencyProfitability(agencyId, { from, to } = {}) {
       { ownerType: 'producer', producerId: { in: producerIds } },
       { ownerType: 'agency', agencyId },
     ],
-    category: { in: ['lead_cost', 'operations', 'staff', 'recruiting', 'travel'] },
     ...(from || to ? { expenseDate: dateFilter } : {}),
   };
 
