@@ -76,18 +76,40 @@ router.post('/', asyncHandler(async (req, res) => {
   res.status(201).json(policy);
 }));
 
-// PUT /api/policies/:id — used today for editing the notes field from the client detail view.
+// PUT /api/policies/:id — edits from the client detail view: notes, and moving a case
+// through its status (e.g. pending -> active once it's approved and paid), along with
+// the issue date that transition actually happened on.
 router.put('/:id', asyncHandler(async (req, res) => {
   const policy = await prisma.policy.findFirst({
     where: { id: req.params.id, client: { producerId: req.producerId } },
   });
   if (!policy) return res.status(404).json({ error: 'Case not found.' });
 
-  const { notes } = req.body;
-  const updated = await prisma.policy.update({
-    where: { id: policy.id },
-    data: { notes: notes ?? policy.notes },
-  });
+  const { notes, status, issueDate, approvedDate } = req.body;
+  if (status !== undefined && !VALID_STATUSES.includes(status)) {
+    return res.status(400).json({ error: `status must be one of: ${VALID_STATUSES.join(', ')}` });
+  }
+
+  const data = { notes: notes ?? policy.notes };
+  if (status !== undefined) data.status = status;
+  if (issueDate) data.issueDate = new Date(issueDate);
+  if (approvedDate) data.approvedDate = new Date(approvedDate);
+
+  const updated = await prisma.policy.update({ where: { id: policy.id }, data });
+
+  // Moving into active for the first time should schedule the same payment reminders
+  // a brand-new active case gets — but only once, so a policy that already has them
+  // (e.g. was active before) doesn't get a duplicate set.
+  if (status === 'active' && policy.status !== 'active') {
+    const existingReminders = await prisma.paymentReminder.count({ where: { policyId: policy.id } });
+    if (existingReminders === 0) {
+      const reminders = buildReminderDates(updated.issueDate);
+      await prisma.paymentReminder.createMany({
+        data: reminders.map((r) => ({ policyId: policy.id, monthsAfterIssue: r.monthsAfterIssue, reminderDate: r.reminderDate })),
+      });
+    }
+  }
+
   res.json(updated);
 }));
 

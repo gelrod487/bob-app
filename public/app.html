@@ -433,13 +433,28 @@ async function openClientDetail(policyId){
       <div class="detail-item"><div class="dlabel">Annual Premium</div><div class="dvalue">${fmt(Number(p.monthlyPremium)*12)}</div></div>
       <div class="detail-item"><div class="dlabel">Date Submitted</div><div class="dvalue">${p.dateSubmitted ? fmtDate(p.dateSubmitted) : '—'}</div></div>
       <div class="detail-item"><div class="dlabel">Approved Date</div><div class="dvalue">${p.approvedDate ? fmtDate(p.approvedDate) : '—'}</div></div>
-      <div class="detail-item"><div class="dlabel">Issue / Paid Date</div><div class="dvalue">${fmtDate(p.issueDate)}</div></div>
       <div class="detail-item"><div class="dlabel">Issue Paid FYC</div><div class="dvalue">${fmt(paidSoFar)}</div></div>
+    </div>
+    <div class="detail-grid">
+      <div>
+        <label>Status</label>
+        <select id="clientStatus">
+          <option value="pending" ${p.status==='pending'?'selected':''}>Pending</option>
+          <option value="active" ${p.status==='active'?'selected':''}>Issued — paid</option>
+          <option value="lapsed" ${p.status==='lapsed'?'selected':''}>Lapsed</option>
+          <option value="declined" ${p.status==='declined'?'selected':''}>Declined</option>
+          <option value="withdrawn" ${p.status==='withdrawn'?'selected':''}>Withdrawn</option>
+        </select>
+      </div>
+      <div>
+        <label>Issue / Paid Date</label>
+        <input type="date" id="clientIssueDate" value="${p.issueDate.slice(0,10)}">
+      </div>
     </div>
     <label>Notes</label>
     <textarea id="clientNotes" rows="3" style="width:100%; padding:9px 11px; border-radius:10px; border:1.5px solid var(--line); background:var(--cream); color:var(--ink); font-family:'Inter'; font-size:.9rem;">${p.notes||''}</textarea>
     <div class="modal-actions">
-      <button class="ghost" type="button" id="saveNotesBtn">Save notes</button>
+      <button class="ghost" type="button" id="saveNotesBtn">Save changes</button>
       ${p.status === 'active' ? `<button class="danger" type="button" id="chargebackBtn">Chargeback</button>` : ''}
       <button class="ghost" type="button" onclick="closeModal()">Close</button>
     </div>
@@ -448,9 +463,14 @@ async function openClientDetail(policyId){
 
   document.getElementById('saveNotesBtn').onclick = async () => {
     try {
-      await apiFetch(`/api/policies/${p.id}`, { method:'PUT', body:{ notes: document.getElementById('clientNotes').value } });
-      say('Notes saved.');
+      await apiFetch(`/api/policies/${p.id}`, { method:'PUT', body:{
+        notes: document.getElementById('clientNotes').value,
+        status: document.getElementById('clientStatus').value,
+        issueDate: document.getElementById('clientIssueDate').value,
+      }});
+      say('Changes saved.');
       closeModal();
+      renderCurrentPage();
     } catch (err) { document.getElementById('detailError').textContent = err.message; }
   };
   const cbBtn = document.getElementById('chargebackBtn');

@@ -494,22 +494,44 @@ function openClientDetail(id){
       <div class="detail-item"><div class="dlabel">Annual Premium</div><div class="dvalue">${fmt(annualPremium(c))}</div></div>
       <div class="detail-item"><div class="dlabel">Date Submitted</div><div class="dvalue">${fmtDate(c.dateSubmitted)}</div></div>
       <div class="detail-item"><div class="dlabel">Approved Date</div><div class="dvalue">${fmtDate(c.approvedDate)}</div></div>
-      <div class="detail-item"><div class="dlabel">Issue / Paid Date</div><div class="dvalue">${fmtDate(c.issueDate)}</div></div>
       <div class="detail-item"><div class="dlabel">Issue Paid FYC</div><div class="dvalue">${fmt(c.issuePaidFYC)}</div></div>
+    </div>
+    <div class="detail-grid">
+      <div>
+        <label>Status</label>
+        <select id="clientStatusSel">
+          <option value="pending" ${c.status==='pending'?'selected':''}>Pending</option>
+          <option value="issued" ${c.status==='issued'?'selected':''}>Issued — paid</option>
+          <option value="lapsed" ${c.status==='lapsed'?'selected':''}>Lapsed</option>
+        </select>
+      </div>
+      <div>
+        <label>Issue / Paid Date</label>
+        <input type="date" id="clientIssueDateInput" value="${c.issueDate || todayISO()}">
+      </div>
     </div>
     <label>Notes</label>
     <textarea id="clientNotes" rows="3" style="width:100%; padding:9px 11px; border-radius:10px; border:1.5px solid var(--line); background:var(--cream); color:var(--ink); font-family:'Inter'; font-size:.9rem;">${c.notes||''}</textarea>
     <div class="modal-actions">
-      <button class="ghost" type="button" id="saveNotesBtn">Save notes</button>
+      <button class="ghost" type="button" id="saveNotesBtn">Save changes</button>
       ${c.status === 'issued' ? `<button class="danger" type="button" id="chargebackBtn">Chargeback</button>` : ''}
       <button class="ghost" type="button" onclick="closeModal()">Close</button>
     </div>
   `, { wide: true });
   document.getElementById('saveNotesBtn').onclick = () => {
+    const newStatus = document.getElementById('clientStatusSel').value;
+    const wasIssued = c.status === 'issued';
     c.notes = document.getElementById('clientNotes').value;
+    c.issueDate = document.getElementById('clientIssueDateInput').value;
+    c.status = newStatus;
+    if (newStatus === 'issued' && !wasIssued) {
+      if (!c.approvedDate) c.approvedDate = c.issueDate;
+      if (!c.issuePaidFYC) c.issuePaidFYC = Math.round(c.monthlyPremium * 12 * 0.75);
+    }
     saveStore();
-    say("Notes saved.");
+    say("Changes saved.");
     closeModal();
+    renderCurrentPage();
   };
   const cbBtn = document.getElementById('chargebackBtn');
   if (cbBtn) cbBtn.onclick = () => {
