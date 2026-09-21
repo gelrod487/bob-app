@@ -4,7 +4,7 @@ const express = require('express');
 
 const { producerProfitability, agencyProfitability } = require('./lib/profitability');
 const prisma = require('./lib/db');
-const { requireAuth, requireProducer } = require('./middleware/auth');
+const { requireAuth, requireProducer, requireAdmin } = require('./middleware/auth');
 const handleStripeWebhook = require('./routes/billingWebhook');
 const asyncHandler = require('./middleware/asyncHandler');
 
@@ -33,6 +33,7 @@ app.use('/api/import', requireProducer, require('./routes/import'));
 app.use('/api/billing', requireProducer, require('./routes/billing'));
 app.use('/api/activity', requireProducer, require('./routes/activity'));
 app.use('/api/goals', requireProducer, require('./routes/goals'));
+app.use('/api/admin', requireAdmin, require('./routes/admin'));
 
 // GET /api/dashboard — the numbers the mockup's dashboard tab needs, in one call.
 app.get('/api/dashboard', requireProducer, asyncHandler(async (req, res) => {

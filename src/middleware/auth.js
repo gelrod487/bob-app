@@ -30,4 +30,16 @@ function requireProducer(req, res, next) {
   next();
 }
 
-module.exports = { requireAuth: asyncHandler(requireAuth), requireProducer };
+// Gates the internal admin dashboard to a short allowlist of emails set via the
+// ADMIN_EMAILS env var (comma-separated) — deliberately not a DB flag, so granting or
+// revoking admin access is a Render dashboard change, not a code/data change.
+function requireAdmin(req, res, next) {
+  const allowlist = (process.env.ADMIN_EMAILS || '').split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
+  const email = (req.supabaseUser?.email || '').toLowerCase();
+  if (!email || !allowlist.includes(email)) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
+  next();
+}
+
+module.exports = { requireAuth: asyncHandler(requireAuth), requireProducer, requireAdmin };

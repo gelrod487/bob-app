@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>BOB — Admin</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<link rel="stylesheet" href="/css/bob.css">
+</head>
+<body>
+<div class="wrap">
+  <div class="page-header">
+    <div><div class="page-eyebrow">Admin</div><h1>Customers</h1></div>
+    <div style="display:flex; gap:10px;">
+      <a class="ghost" href="/">Back home</a>
+      <button class="ghost" id="logoutBtn" type="button">Log out</button>
+    </div>
+  </div>
+
+  <div id="statusMsg" class="helptext" style="margin-bottom:14px;"></div>
+
+  <div class="panel" id="tablePanel" style="display:none;">
+    <table>
+      <thead><tr><th>Name</th><th>Email</th><th>Agency</th><th>Plan</th><th>Status</th><th>Clients</th><th>Joined</th></tr></thead>
+      <tbody id="producerRows"></tbody>
+    </table>
+  </div>
+</div>
+
+<script src="/js/supabaseClient.js"></script>
+<script src="/js/api.js"></script>
+<script>
+function fmtDate(dateStr){ return new Date(dateStr).toLocaleDateString(undefined,{month:'short', day:'numeric', year:'numeric'}); }
+
+async function init(){
+  const statusEl = document.getElementById('statusMsg');
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (!session) { window.location.href = '/login.html'; return; }
+
+  try {
+    const producers = await apiFetch('/api/admin/producers');
+    document.getElementById('tablePanel').style.display = '';
+    document.getElementById('producerRows').innerHTML = producers.map(p => `
+      <tr>
+        <td>${p.name}</td>
+        <td>${p.email}</td>
+        <td>${p.agencyName || '—'}</td>
+        <td>${p.subscriptionTier === 'agency_owner' ? 'Agency' : 'Producer'}</td>
+        <td><span class="tag ${p.subscriptionStatus === 'active' ? 'active-pol' : 'pending'}">${p.subscriptionStatus}</span></td>
+        <td>${p.clientCount}</td>
+        <td>${fmtDate(p.createdAt)}</td>
+      </tr>`).join('') || '<tr><td colspan="7" class="helptext">No customers yet.</td></tr>';
+    statusEl.textContent = `${producers.length} customer${producers.length === 1 ? '' : 's'}`;
+  } catch (err) {
+    if (err.message === 'Not authorized.') {
+      statusEl.textContent = "This account isn't set up as an admin.";
+    } else {
+      statusEl.textContent = err.message;
+    }
+  }
+}
+document.getElementById('logoutBtn').onclick = async () => { await supabaseClient.auth.signOut(); window.location.href = '/login.html'; };
+init();
+</script>
+</body>
+</html>
