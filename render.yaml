@@ -2,7 +2,7 @@ services:
   - type: web
     name: bob-app
     runtime: node
-    plan: free
+    plan: pro
     buildCommand: npm install && npx prisma generate
     startCommand: npx prisma migrate deploy && npm start
     envVars:
