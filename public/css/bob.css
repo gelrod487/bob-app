@@ -245,7 +245,6 @@ footer.home-footer a{display:block; color:var(--ink-soft); text-decoration:none;
 .date-filter-custom.section-hidden{display:none;}
 .date-filter-custom input[type="date"]{padding:8px 10px;}
 .date-filter-range{margin-left:auto;}
-.date-filter-compact{margin-bottom:0;}
 
 /* ---- Activity page: "Today" summary + compact steppers + Log list ---- */
 .today-card{background:var(--panel); border-radius:var(--radius); padding:20px 22px; box-shadow:var(--shadow); border:1px solid var(--line); margin-bottom:18px;}

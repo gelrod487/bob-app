@@ -467,22 +467,6 @@ async function openClientDetail(policyId){
 /* ================= ACTIVITY ================= */
 function daysAgoISO(n){ const d = new Date(); d.setDate(d.getDate()-n); return toISO(d); }
 function addDaysISO(iso, n){ const d = new Date(iso+'T00:00:00'); d.setDate(d.getDate()+n); return toISO(d); }
-function activityFilterHTML(){
-  const state = dateFilterState.activity;
-  const range = computeDateRange(state.key, state.from, state.to);
-  return `
-  <div class="date-filter date-filter-compact" data-page="activity">
-    <select class="date-filter-select">
-      ${DATE_RANGE_PRESETS.map(([k,label]) => `<option value="${k}" ${state.key===k?'selected':''}>${label}</option>`).join('')}
-    </select>
-    <span class="date-filter-custom${state.key==='custom' ? '' : ' section-hidden'}">
-      <input type="date" class="date-filter-from" value="${range.from}">
-      <span>to</span>
-      <input type="date" class="date-filter-to" value="${range.to}">
-      <button type="button" class="ghost date-filter-apply">Apply</button>
-    </span>
-  </div>`;
-}
 function logRow(r){
   const d = new Date(r.date.slice(0,10)+'T00:00:00');
   return `<div class="log-row">
@@ -510,7 +494,7 @@ async function renderActivity(){
   mainInner.innerHTML = `
     <div class="page-header"><div><div class="page-eyebrow">Activity</div><h1>Daily production</h1></div>
     <button class="primary" type="button" id="logDayBtn">+ Log a day</button></div>
-    <div style="display:flex; justify-content:flex-end; margin-bottom:16px;">${activityFilterHTML()}</div>
+    ${dateFilterHTML('activity')}
 
     <div class="today-card">
       <div class="today-title">Today · ${todayLabel}</div>
