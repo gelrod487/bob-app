@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <link rel="stylesheet" href="/css/bob.css">
 </head>
@@ -619,9 +620,9 @@ async function renderBook(filterText, statusFilter){
         <button class="ghost" id="toggleImport" type="button">Show</button>
       </div>
       <div id="importArea" class="section-hidden">
-        <p class="helptext">Upload a CSV export of your current tracker. BOB reads the columns so you can map them — nothing gets added until you confirm.</p>
-        <div class="dropzone" id="dropzone">Drop a CSV file here, or click to choose one</div>
-        <input type="file" id="fileInput" accept=".csv" style="display:none;">
+        <p class="helptext">Upload a CSV or Excel export of your current tracker. BOB reads the columns so you can map them — nothing gets added until you confirm.</p>
+        <div class="dropzone" id="dropzone">Drop a CSV or Excel file here, or click to choose one</div>
+        <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" style="display:none;">
         <div id="mapArea" style="margin-top:16px;"></div>
       </div>
     </div>
@@ -688,17 +689,49 @@ function wireImport(){
   dropzone.addEventListener('drop', e=>{ if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
   fileInput.addEventListener('change', e=>{ if(e.target.files[0]) handleFile(e.target.files[0]); });
 }
+let importWorkbook = null;
 function handleFile(file){
-  Papa.parse(file, { header:true, skipEmptyLines:true, complete: async (res) => {
-    importRows = res.data;
-    const suggestion = await apiFetch('/api/import/suggest-mapping', { method:'POST', body:{ rows: importRows } });
-    renderMapper(suggestion);
-  }});
+  const isExcel = /\.xlsx?$/i.test(file.name);
+  if (!isExcel) {
+    Papa.parse(file, { header:true, skipEmptyLines:true, complete: async (res) => {
+      importRows = res.data;
+      const suggestion = await apiFetch('/api/import/suggest-mapping', { method:'POST', body:{ rows: importRows } });
+      renderMapper(suggestion);
+    }});
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    importWorkbook = XLSX.read(e.target.result, { type: 'array' });
+    if (importWorkbook.SheetNames.length === 1) {
+      await loadSheet(importWorkbook.SheetNames[0]);
+    } else {
+      renderSheetPicker(importWorkbook.SheetNames);
+    }
+  };
+  reader.readAsArrayBuffer(file);
 }
-function renderMapper(suggestion){
+async function loadSheet(sheetName){
+  const rows = XLSX.utils.sheet_to_json(importWorkbook.Sheets[sheetName], { defval: '', raw: false });
+  importRows = rows;
+  const area = document.getElementById('mapArea');
+  area.innerHTML = '<p class="helptext">Reading sheet…</p>';
+  const suggestion = await apiFetch('/api/import/suggest-mapping', { method:'POST', body:{ rows: importRows } });
+  renderMapper(suggestion, sheetName);
+}
+function renderSheetPicker(sheetNames){
+  const area = document.getElementById('mapArea');
+  area.innerHTML = `<h3 style="margin-top:0;">Which tab has your client &amp; case data?</h3>
+    <p class="helptext">This workbook has ${sheetNames.length} tabs. Pick the one to import — you can come back and import another tab afterward.</p>
+    <select id="sheetPicker">${sheetNames.map(n=>`<option value="${n}">${n}</option>`).join('')}</select>
+    <button class="primary" id="loadSheetBtn" type="button" style="margin-left:8px;">Use this tab</button>`;
+  document.getElementById('loadSheetBtn').onclick = () => loadSheet(document.getElementById('sheetPicker').value);
+}
+function renderMapper(suggestion, sheetName){
   const { headers, suggestedMapping, totalRows } = suggestion;
   const area = document.getElementById('mapArea');
-  area.innerHTML = `<h3 style="margin-top:0;">Map your columns</h3>
+  const multiSheet = importWorkbook && importWorkbook.SheetNames.length > 1;
+  area.innerHTML = `<h3 style="margin-top:0;">Map your columns${sheetName ? ` — "${sheetName}"` : ''}</h3>
     <p class="helptext">${totalRows} rows found. Match each field below to a column from your file, or leave it skipped.</p>
     <div class="grid" style="grid-template-columns:repeat(2,1fr);">
     ${IMPORT_FIELDS.map(([key,label])=>`
@@ -708,8 +741,10 @@ function renderMapper(suggestion){
       </select></div>`).join('')}
     </div>
     <div style="margin-top:16px;"><button class="primary" id="confirmImport" type="button">Import ${totalRows} Rows</button>
-    <button class="ghost" id="cancelImport" type="button" style="margin-left:8px;">Cancel</button></div>
+    <button class="ghost" id="cancelImport" type="button" style="margin-left:8px;">Cancel</button>
+    ${multiSheet ? `<button class="ghost" id="pickAnotherSheet" type="button" style="margin-left:8px;">Choose a different tab</button>` : ''}</div>
     <div id="importResult" style="margin-top:14px;"></div>`;
+  if (multiSheet) document.getElementById('pickAnotherSheet').onclick = () => renderSheetPicker(importWorkbook.SheetNames);
 
   document.getElementById('confirmImport').onclick = async () => {
     const mapping = {};
