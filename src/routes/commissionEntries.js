@@ -80,4 +80,41 @@ router.post('/', asyncHandler(async (req, res) => {
   res.status(201).json(entry);
 }));
 
+// PUT /api/commission-entries/:id
+router.put('/:id', asyncHandler(async (req, res) => {
+  const entry = await prisma.commissionEntry.findFirst({
+    where: { id: req.params.id, OR: [{ producerId: req.producerId }, { agency: { producers: { some: { id: req.producerId } } } }] },
+  });
+  if (!entry) return res.status(404).json({ error: 'Commission entry not found.' });
+
+  const { entryType, amount, entryDate, notes } = req.body;
+  if (entryType !== undefined && !VALID_ENTRY_TYPES.includes(entryType)) {
+    return res.status(400).json({ error: `entryType must be one of: ${VALID_ENTRY_TYPES.join(', ')}` });
+  }
+  const finalType = entryType ?? entry.entryType;
+  const rawAmount = amount !== undefined ? Number(amount) : Math.abs(Number(entry.amount));
+  const normalizedAmount = finalType === 'chargeback' ? -Math.abs(rawAmount) : rawAmount;
+
+  const updated = await prisma.commissionEntry.update({
+    where: { id: entry.id },
+    data: {
+      entryType: finalType,
+      amount: normalizedAmount,
+      entryDate: entryDate ? new Date(entryDate) : entry.entryDate,
+      notes: notes !== undefined ? (notes || null) : entry.notes,
+    },
+  });
+  res.json(updated);
+}));
+
+// DELETE /api/commission-entries/:id
+router.delete('/:id', asyncHandler(async (req, res) => {
+  const entry = await prisma.commissionEntry.findFirst({
+    where: { id: req.params.id, OR: [{ producerId: req.producerId }, { agency: { producers: { some: { id: req.producerId } } } }] },
+  });
+  if (!entry) return res.status(404).json({ error: 'Commission entry not found.' });
+  await prisma.commissionEntry.delete({ where: { id: entry.id } });
+  res.json({ ok: true });
+}));
+
 module.exports = router;

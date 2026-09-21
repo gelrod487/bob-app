@@ -62,4 +62,38 @@ router.post('/', asyncHandler(async (req, res) => {
   res.status(201).json(expense);
 }));
 
+// PUT /api/expenses/:id
+router.put('/:id', asyncHandler(async (req, res) => {
+  const expense = await prisma.expense.findFirst({
+    where: { id: req.params.id, OR: [{ producerId: req.producerId }, { agency: { producers: { some: { id: req.producerId } } } }] },
+  });
+  if (!expense) return res.status(404).json({ error: 'Cost not found.' });
+
+  const { category, description, amount, expenseDate } = req.body;
+  if (category !== undefined && !VALID_CATEGORIES.includes(category)) {
+    return res.status(400).json({ error: `category must be one of: ${VALID_CATEGORIES.join(', ')}` });
+  }
+
+  const updated = await prisma.expense.update({
+    where: { id: expense.id },
+    data: {
+      category: category ?? expense.category,
+      description: description !== undefined ? (description || null) : expense.description,
+      amount: amount ?? expense.amount,
+      expenseDate: expenseDate ? new Date(expenseDate) : expense.expenseDate,
+    },
+  });
+  res.json(updated);
+}));
+
+// DELETE /api/expenses/:id
+router.delete('/:id', asyncHandler(async (req, res) => {
+  const expense = await prisma.expense.findFirst({
+    where: { id: req.params.id, OR: [{ producerId: req.producerId }, { agency: { producers: { some: { id: req.producerId } } } }] },
+  });
+  if (!expense) return res.status(404).json({ error: 'Cost not found.' });
+  await prisma.expense.delete({ where: { id: expense.id } });
+  res.json({ ok: true });
+}));
+
 module.exports = router;

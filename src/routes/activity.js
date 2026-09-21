@@ -62,4 +62,14 @@ router.put('/', asyncHandler(async (req, res) => {
   res.json(row);
 }));
 
+// DELETE /api/activity/:date — removes a day's row entirely (e.g. a day logged by mistake).
+router.delete('/:date', asyncHandler(async (req, res) => {
+  const row = await prisma.dailyActivity.findUnique({
+    where: { producerId_date: { producerId: req.producerId, date: new Date(req.params.date) } },
+  });
+  if (!row) return res.status(404).json({ error: 'No activity logged for that date.' });
+  await prisma.dailyActivity.delete({ where: { id: row.id } });
+  res.json({ ok: true });
+}));
+
 module.exports = router;

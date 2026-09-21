@@ -423,19 +423,19 @@ async function openClientDetail(policyId){
     <div class="detail-grid">
       <div class="detail-item"><div class="dlabel">Email</div><div class="dvalue">${contact.email||'—'}</div></div>
       <div class="detail-item"><div class="dlabel">Phone</div><div class="dvalue">${contact.phone||'—'}</div></div>
-      <div class="detail-item"><div class="dlabel">Carrier</div><div class="dvalue">${p.carrier}</div></div>
-      <div class="detail-item"><div class="dlabel">Product</div><div class="dvalue">${p.productType}</div></div>
-      <div class="detail-item"><div class="dlabel">Policy Number</div><div class="dvalue">${p.policyNumber||'—'}</div></div>
-      <div class="detail-item"><div class="dlabel">Coverage Amount</div><div class="dvalue">${p.faceAmount ? fmt(p.faceAmount) : '—'}</div></div>
-      <div class="detail-item"><div class="dlabel">Lead Vendor</div><div class="dvalue">${p.leadVendor||'—'}</div></div>
-      <div class="detail-item"><div class="dlabel">Lead Type</div><div class="dvalue">${p.leadType||'—'}</div></div>
-      <div class="detail-item"><div class="dlabel">Monthly Premium</div><div class="dvalue">${fmt(p.monthlyPremium)}</div></div>
       <div class="detail-item"><div class="dlabel">Annual Premium</div><div class="dvalue">${fmt(Number(p.monthlyPremium)*12)}</div></div>
-      <div class="detail-item"><div class="dlabel">Date Submitted</div><div class="dvalue">${p.dateSubmitted ? fmtDate(p.dateSubmitted) : '—'}</div></div>
-      <div class="detail-item"><div class="dlabel">Approved Date</div><div class="dvalue">${p.approvedDate ? fmtDate(p.approvedDate) : '—'}</div></div>
       <div class="detail-item"><div class="dlabel">Issue Paid FYC</div><div class="dvalue">${fmt(paidSoFar)}</div></div>
     </div>
     <div class="detail-grid">
+      <div><label>Carrier</label><input id="editCarrier" value="${p.carrier}"></div>
+      <div><label>Product</label><input id="editProductType" value="${p.productType}"></div>
+      <div><label>Policy Number</label><input id="editPolicyNumber" value="${p.policyNumber||''}"></div>
+      <div><label>Coverage Amount</label><input id="editFaceAmount" type="number" step="0.01" value="${p.faceAmount||''}"></div>
+      <div><label>Lead Vendor</label><input id="editLeadVendor" value="${p.leadVendor||''}"></div>
+      <div><label>Lead Type</label><input id="editLeadType" value="${p.leadType||''}"></div>
+      <div><label>Monthly Premium</label><input id="editMonthlyPremium" type="number" step="0.01" value="${p.monthlyPremium}"></div>
+      <div><label>Date Submitted</label><input id="editDateSubmitted" type="date" value="${(p.dateSubmitted||p.issueDate).slice(0,10)}"></div>
+      <div><label>Approved Date</label><input id="editApprovedDate" type="date" value="${p.approvedDate ? p.approvedDate.slice(0,10) : ''}"></div>
       <div>
         <label>Status</label>
         <select id="clientStatus">
@@ -456,6 +456,7 @@ async function openClientDetail(policyId){
     <div class="modal-actions">
       <button class="ghost" type="button" id="saveNotesBtn">Save changes</button>
       ${p.status === 'active' ? `<button class="danger" type="button" id="chargebackBtn">Chargeback</button>` : ''}
+      <button class="danger" type="button" id="deleteCaseBtn">Delete case</button>
       <button class="ghost" type="button" onclick="closeModal()">Close</button>
     </div>
     <div class="errortext" id="detailError"></div>
@@ -467,6 +468,15 @@ async function openClientDetail(policyId){
         notes: document.getElementById('clientNotes').value,
         status: document.getElementById('clientStatus').value,
         issueDate: document.getElementById('clientIssueDate').value,
+        carrier: document.getElementById('editCarrier').value,
+        productType: document.getElementById('editProductType').value,
+        policyNumber: document.getElementById('editPolicyNumber').value || null,
+        faceAmount: document.getElementById('editFaceAmount').value ? Number(document.getElementById('editFaceAmount').value) : null,
+        leadVendor: document.getElementById('editLeadVendor').value || null,
+        leadType: document.getElementById('editLeadType').value || null,
+        monthlyPremium: Number(document.getElementById('editMonthlyPremium').value),
+        dateSubmitted: document.getElementById('editDateSubmitted').value,
+        approvedDate: document.getElementById('editApprovedDate').value || undefined,
       }});
       say('Changes saved.');
       closeModal();
@@ -483,14 +493,25 @@ async function openClientDetail(policyId){
       renderCurrentPage();
     } catch (err) { document.getElementById('detailError').textContent = err.message; }
   };
+  document.getElementById('deleteCaseBtn').onclick = async () => {
+    if (!confirm(`Delete this case for ${p.client?.name || 'this client'}? This removes it and all its commission entries. This can't be undone.`)) return;
+    try {
+      await apiFetch(`/api/policies/${p.id}`, { method:'DELETE' });
+      say('Case deleted.');
+      closeModal();
+      renderCurrentPage();
+    } catch (err) { document.getElementById('detailError').textContent = err.message; }
+  };
 }
 
 /* ================= ACTIVITY ================= */
 function daysAgoISO(n){ const d = new Date(); d.setDate(d.getDate()-n); return toISO(d); }
 function addDaysISO(iso, n){ const d = new Date(iso+'T00:00:00'); d.setDate(d.getDate()+n); return toISO(d); }
+let activityRowsCache = [];
 function logRow(r){
   const d = new Date(r.date.slice(0,10)+'T00:00:00');
-  return `<div class="log-row">
+  const dateKey = r.date.slice(0,10);
+  return `<div class="log-row row-clickable" onclick="openEditActivityModal('${dateKey}')">
     <div class="log-date"><div class="log-dow">${d.toLocaleDateString(undefined,{weekday:'short'})}</div><div class="log-daynum">${fmtDate(r.date)}</div></div>
     <div class="log-metrics">
       <div class="log-metric"><div class="lm-label">Dials</div><div class="lm-value">${r.dials}</div></div>
@@ -499,6 +520,49 @@ function logRow(r){
       <div class="log-metric"><div class="lm-label">Sales</div><div class="lm-value">${r.sales}</div></div>
     </div>
   </div>`;
+}
+function openEditActivityModal(dateKey){
+  const row = activityRowsCache.find(r => r.date.slice(0,10) === dateKey) || { date: dateKey, dials:0, appointments:0, presentations:0, sales:0 };
+  openModal(`
+    <div class="modal-head"><h2>Edit ${fmtDate(dateKey)}</h2><button class="modal-close" onclick="closeModal()">×</button></div>
+    <form id="editActivityForm">
+      <div class="detail-grid">
+        <div><label>Dials</label><input required type="number" min="0" name="dials" value="${row.dials}"></div>
+        <div><label>Appointments</label><input required type="number" min="0" name="appointments" value="${row.appointments}"></div>
+        <div><label>Presentations</label><input required type="number" min="0" name="presentations" value="${row.presentations}"></div>
+        <div><label>Sales</label><input required type="number" min="0" name="sales" value="${row.sales}"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="primary" type="submit">Save</button>
+        <button class="danger" type="button" id="deleteActivityBtn">Delete day</button>
+        <button class="ghost" type="button" onclick="closeModal()">Cancel</button>
+      </div>
+      <div class="errortext" id="editActivityError"></div>
+    </form>
+  `);
+  document.getElementById('editActivityForm').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const errEl = document.getElementById('editActivityError');
+    const f = new FormData(ev.target);
+    try {
+      await apiFetch('/api/activity', { method:'PUT', body:{
+        date: dateKey, dials:Number(f.get('dials')), appointments:Number(f.get('appointments')),
+        presentations:Number(f.get('presentations')), sales:Number(f.get('sales')),
+      }});
+      closeModal();
+      say('Day updated.');
+      renderActivity();
+    } catch (err) { errEl.textContent = err.message; }
+  });
+  document.getElementById('deleteActivityBtn').onclick = async () => {
+    if (!confirm(`Delete all activity logged for ${fmtDate(dateKey)}? This can't be undone.`)) return;
+    try {
+      await apiFetch(`/api/activity/${dateKey}`, { method:'DELETE' });
+      closeModal();
+      say('Day deleted.');
+      renderActivity();
+    } catch (err) { document.getElementById('editActivityError').textContent = err.message; }
+  };
 }
 async function renderActivity(){
   mainInner.innerHTML = `<div class="page-header"><div><div class="page-eyebrow">Activity</div><h1>Daily production</h1></div></div><p class="helptext">Loading…</p>`;
@@ -509,6 +573,7 @@ async function renderActivity(){
   ]);
   const t = todayRow(rowsAll);
   const sortedRows = [...rowsRange].sort((a,b)=>new Date(a.date)-new Date(b.date));
+  activityRowsCache = sortedRows;
   const totals = sortedRows.reduce((s,r) => ({ dials:s.dials+r.dials, appointments:s.appointments+r.appointments, presentations:s.presentations+r.presentations, sales:s.sales+r.sales }), {dials:0,appointments:0,presentations:0,sales:0});
   const todayLabel = new Date().toLocaleDateString(undefined,{weekday:'short', month:'short', day:'numeric', year:'numeric'});
 
@@ -782,10 +847,12 @@ function renderMapper(suggestion, sheetName){
 }
 
 /* ================= COSTS ================= */
+let expensesCache = [];
 async function renderCosts(){
   mainInner.innerHTML = `<div class="page-header"><div><div class="page-eyebrow">Costs</div><h1>Where the money goes</h1></div></div><p class="helptext">Loading…</p>`;
   const range = computeDateRange(dateFilterState.costs.key, dateFilterState.costs.from, dateFilterState.costs.to);
   const expenses = await apiFetch(`/api/expenses?from=${range.from}&to=${range.to}`);
+  expensesCache = expenses;
   const costLines = COST_CATEGORIES.map(c => ({ cat:c.key, color:c.color, total: expenses.filter(e=>e.category===c.key).reduce((s,e)=>s+Number(e.amount),0) })).filter(c=>c.total>0);
 
   mainInner.innerHTML = `
@@ -796,13 +863,58 @@ async function renderCosts(){
 
     <div class="panel">
       <h2>All cost lines</h2>
+      <p class="helptext" style="margin:-8px 0 14px;">Click a row to edit or delete it.</p>
       <table><thead><tr><th>Category</th><th>Description</th><th>Amount</th><th>Date</th></tr></thead>
-      <tbody>${[...expenses].sort((a,b)=>new Date(b.expenseDate)-new Date(a.expenseDate)).map(e=>`<tr><td>${e.category}</td><td>${e.description||''}</td><td>${fmt(e.amount)}</td><td>${fmtDate(e.expenseDate)}</td></tr>`).join('') || '<tr><td colspan="4" class="helptext">No costs logged in this range.</td></tr>'}</tbody></table>
+      <tbody>${[...expenses].sort((a,b)=>new Date(b.expenseDate)-new Date(a.expenseDate)).map(e=>`<tr class="row-clickable" onclick="openEditCostModal('${e.id}')"><td>${e.category}</td><td>${e.description||''}</td><td>${fmt(e.amount)}</td><td>${fmtDate(e.expenseDate)}</td></tr>`).join('') || '<tr><td colspan="4" class="helptext">No costs logged in this range.</td></tr>'}</tbody></table>
     </div>
   `;
   if (costLines.length) renderDonut('donutCanvas', costLines);
   wireDateFilter('costs', renderCosts);
   document.getElementById('addCostBtn').onclick = openAddCostModal;
+}
+function openEditCostModal(id){
+  const e = expensesCache.find(x => x.id === id);
+  if (!e) return;
+  openModal(`
+    <div class="modal-head"><h2>Edit cost</h2><button class="modal-close" onclick="closeModal()">×</button></div>
+    <form id="editCostForm">
+      <div class="detail-grid">
+        <div><label>Category</label><select name="category">${COST_CATEGORIES.map(c=>`<option value="${c.key}" ${c.key===e.category?'selected':''}>${c.key}</option>`).join('')}</select></div>
+        <div><label>Amount ($)</label><input required type="number" step="0.01" name="amount" value="${e.amount}"></div>
+        <div class="full" style="grid-column:1/-1;"><label>Date</label><input required type="date" name="date" value="${e.expenseDate.slice(0,10)}"></div>
+        <div class="full" style="grid-column:1/-1;"><label>Description</label><input name="description" value="${e.description||''}" placeholder="Optional"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="primary" type="submit">Save</button>
+        <button class="danger" type="button" id="deleteCostBtn">Delete</button>
+        <button class="ghost" type="button" onclick="closeModal()">Cancel</button>
+      </div>
+      <div class="errortext" id="editCostError"></div>
+    </form>
+  `);
+  document.getElementById('editCostForm').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const errEl = document.getElementById('editCostError');
+    const f = new FormData(ev.target);
+    try {
+      await apiFetch(`/api/expenses/${id}`, { method:'PUT', body:{
+        category: f.get('category'), description: f.get('description') || null,
+        amount: Number(f.get('amount')), expenseDate: f.get('date'),
+      }});
+      closeModal();
+      say('Cost updated.');
+      renderCosts();
+    } catch (err) { errEl.textContent = err.message; }
+  });
+  document.getElementById('deleteCostBtn').onclick = async () => {
+    if (!confirm('Delete this cost line? This can\'t be undone.')) return;
+    try {
+      await apiFetch(`/api/expenses/${id}`, { method:'DELETE' });
+      closeModal();
+      say('Cost deleted.');
+      renderCosts();
+    } catch (err) { document.getElementById('editCostError').textContent = err.message; }
+  };
 }
 function openAddCostModal(){
   openModal(`
@@ -836,7 +948,58 @@ function openAddCostModal(){
 
 /* ================= PROFIT ================= */
 const COMM_TYPE_MAP = { Initial:'advance', Renewal:'additional', Override:'override', Chargeback:'chargeback' };
+const COMM_TYPE_MAP_REV = { advance:'Initial', additional:'Renewal', override:'Override', chargeback:'Chargeback', other:'Renewal' };
 let trendMonths = 6;
+let commissionEntriesCache = [];
+function openEditCommissionModal(id){
+  const c = commissionEntriesCache.find(x => x.id === id);
+  if (!c) return;
+  const isAgency = me.subscriptionTier === 'agency_owner';
+  openModal(`
+    <div class="modal-head"><h2>Edit commission entry</h2><button class="modal-close" onclick="closeModal()">×</button></div>
+    <p class="helptext">${c.policy?.client?.name || (c.ownerType==='agency' ? 'Agency override' : '—')} — ${c.policy?.carrier||''} ${c.policy?.productType||''}</p>
+    <form id="editCommForm">
+      <div class="detail-grid">
+        <div><label>Type</label><select name="type">
+          <option value="Initial" ${COMM_TYPE_MAP_REV[c.entryType]==='Initial'?'selected':''}>Initial</option>
+          <option value="Renewal" ${COMM_TYPE_MAP_REV[c.entryType]==='Renewal'?'selected':''}>Renewal</option>
+          ${isAgency?`<option value="Override" ${COMM_TYPE_MAP_REV[c.entryType]==='Override'?'selected':''}>Override</option>`:''}
+          <option value="Chargeback" ${COMM_TYPE_MAP_REV[c.entryType]==='Chargeback'?'selected':''}>Chargeback</option>
+        </select></div>
+        <div><label>Amount ($)</label><input required type="number" step="0.01" name="amount" value="${Math.abs(c.amount)}"></div>
+        <div class="full" style="grid-column:1/-1;"><label>Date</label><input required type="date" name="date" value="${c.entryDate.slice(0,10)}"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="primary" type="submit">Save</button>
+        <button class="danger" type="button" id="deleteCommBtn">Delete</button>
+        <button class="ghost" type="button" onclick="closeModal()">Cancel</button>
+      </div>
+      <div class="errortext" id="editCommError"></div>
+    </form>
+  `);
+  document.getElementById('editCommForm').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const errEl = document.getElementById('editCommError');
+    const f = new FormData(ev.target);
+    try {
+      await apiFetch(`/api/commission-entries/${id}`, { method:'PUT', body:{
+        entryType: COMM_TYPE_MAP[f.get('type')], amount: Number(f.get('amount')), entryDate: f.get('date'),
+      }});
+      closeModal();
+      say('Commission entry updated.');
+      renderProfit();
+    } catch (err) { errEl.textContent = err.message; }
+  });
+  document.getElementById('deleteCommBtn').onclick = async () => {
+    if (!confirm('Delete this commission entry? This can\'t be undone.')) return;
+    try {
+      await apiFetch(`/api/commission-entries/${id}`, { method:'DELETE' });
+      closeModal();
+      say('Commission entry deleted.');
+      renderProfit();
+    } catch (err) { document.getElementById('editCommError').textContent = err.message; }
+  };
+}
 async function monthlyStatsReal(count){
   const [activity, expenses, commissions] = await Promise.all([
     apiFetch('/api/activity'), apiFetch('/api/expenses'), apiFetch('/api/commission-entries'),
@@ -967,10 +1130,12 @@ async function renderProfit(){
 
     <div class="panel">
       <h2>Commission History</h2>
+      <p class="helptext" style="margin:-8px 0 14px;">Click a row to edit or delete it.</p>
       <table><thead><tr><th>Client</th><th>Type</th><th>Amount</th><th>Date</th></tr></thead>
-      <tbody>${[...entries].sort((a,b)=>new Date(b.entryDate)-new Date(a.entryDate)).map(c=>`<tr><td>${c.policy?.client?.name || (c.ownerType==='agency' ? 'Agency override' : '—')}</td><td>${c.entryType}</td><td>${fmt(c.amount)}</td><td>${fmtDate(c.entryDate)}</td></tr>`).join('') || '<tr><td colspan="4" class="helptext">No commissions in this range.</td></tr>'}</tbody></table>
+      <tbody>${[...entries].sort((a,b)=>new Date(b.entryDate)-new Date(a.entryDate)).map(c=>`<tr class="row-clickable" onclick="openEditCommissionModal('${c.id}')"><td>${c.policy?.client?.name || (c.ownerType==='agency' ? 'Agency override' : '—')}</td><td>${c.entryType}</td><td>${fmt(c.amount)}</td><td>${fmtDate(c.entryDate)}</td></tr>`).join('') || '<tr><td colspan="4" class="helptext">No commissions in this range.</td></tr>'}</tbody></table>
     </div>
   `;
+  commissionEntriesCache = entries;
   wireDateFilter('profit', renderProfit);
   document.getElementById('trendRangeSelect').onchange = (e) => {
     const v = e.target.value;

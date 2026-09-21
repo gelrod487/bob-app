@@ -85,7 +85,10 @@ router.put('/:id', asyncHandler(async (req, res) => {
   });
   if (!policy) return res.status(404).json({ error: 'Case not found.' });
 
-  const { notes, status, issueDate, approvedDate } = req.body;
+  const {
+    notes, status, issueDate, approvedDate, dateSubmitted,
+    carrier, productType, policyNumber, faceAmount, monthlyPremium, leadType, leadVendor,
+  } = req.body;
   if (status !== undefined && !VALID_STATUSES.includes(status)) {
     return res.status(400).json({ error: `status must be one of: ${VALID_STATUSES.join(', ')}` });
   }
@@ -94,6 +97,14 @@ router.put('/:id', asyncHandler(async (req, res) => {
   if (status !== undefined) data.status = status;
   if (issueDate) data.issueDate = new Date(issueDate);
   if (approvedDate) data.approvedDate = new Date(approvedDate);
+  if (dateSubmitted) data.dateSubmitted = new Date(dateSubmitted);
+  if (carrier !== undefined) data.carrier = carrier;
+  if (productType !== undefined) data.productType = productType;
+  if (policyNumber !== undefined) data.policyNumber = policyNumber || null;
+  if (faceAmount !== undefined) data.faceAmount = faceAmount || null;
+  if (monthlyPremium !== undefined) data.monthlyPremium = monthlyPremium;
+  if (leadType !== undefined) data.leadType = leadType || null;
+  if (leadVendor !== undefined) data.leadVendor = leadVendor || null;
 
   const updated = await prisma.policy.update({ where: { id: policy.id }, data });
 
@@ -145,6 +156,22 @@ router.post('/:id/chargeback', asyncHandler(async (req, res) => {
   ]);
 
   res.json({ policy: updatedPolicy, chargebackEntry: entry });
+}));
+
+// DELETE /api/policies/:id — removes a case entirely, along with its commission
+// entries and payment reminders (nothing else references a policy).
+router.delete('/:id', asyncHandler(async (req, res) => {
+  const policy = await prisma.policy.findFirst({
+    where: { id: req.params.id, client: { producerId: req.producerId } },
+  });
+  if (!policy) return res.status(404).json({ error: 'Case not found.' });
+
+  await prisma.$transaction([
+    prisma.paymentReminder.deleteMany({ where: { policyId: policy.id } }),
+    prisma.commissionEntry.deleteMany({ where: { policyId: policy.id } }),
+    prisma.policy.delete({ where: { id: policy.id } }),
+  ]);
+  res.json({ ok: true });
 }));
 
 module.exports = router;

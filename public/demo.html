@@ -484,19 +484,19 @@ function openClientDetail(id){
     <div class="detail-grid">
       <div class="detail-item"><div class="dlabel">Email</div><div class="dvalue">${c.email||'—'}</div></div>
       <div class="detail-item"><div class="dlabel">Phone</div><div class="dvalue">${c.phone||'—'}</div></div>
-      <div class="detail-item"><div class="dlabel">Carrier</div><div class="dvalue">${c.carrier}</div></div>
-      <div class="detail-item"><div class="dlabel">Product</div><div class="dvalue">${c.product}</div></div>
-      <div class="detail-item"><div class="dlabel">Policy Number</div><div class="dvalue">${c.policyNumber||'—'}</div></div>
-      <div class="detail-item"><div class="dlabel">Coverage Amount</div><div class="dvalue">${fmt(c.faceAmount)}</div></div>
-      <div class="detail-item"><div class="dlabel">Lead Vendor</div><div class="dvalue">${c.leadVendor||'—'}</div></div>
-      <div class="detail-item"><div class="dlabel">Lead Type</div><div class="dvalue">${c.leadType||'—'}</div></div>
-      <div class="detail-item"><div class="dlabel">Monthly Premium</div><div class="dvalue">${fmt(c.monthlyPremium)}</div></div>
       <div class="detail-item"><div class="dlabel">Annual Premium</div><div class="dvalue">${fmt(annualPremium(c))}</div></div>
-      <div class="detail-item"><div class="dlabel">Date Submitted</div><div class="dvalue">${fmtDate(c.dateSubmitted)}</div></div>
-      <div class="detail-item"><div class="dlabel">Approved Date</div><div class="dvalue">${fmtDate(c.approvedDate)}</div></div>
       <div class="detail-item"><div class="dlabel">Issue Paid FYC</div><div class="dvalue">${fmt(c.issuePaidFYC)}</div></div>
     </div>
     <div class="detail-grid">
+      <div><label>Carrier</label><input id="editCarrier" value="${c.carrier}"></div>
+      <div><label>Product</label><input id="editProductType" value="${c.product}"></div>
+      <div><label>Policy Number</label><input id="editPolicyNumber" value="${c.policyNumber||''}"></div>
+      <div><label>Coverage Amount</label><input id="editFaceAmount" type="number" step="0.01" value="${c.faceAmount||''}"></div>
+      <div><label>Lead Vendor</label><input id="editLeadVendor" value="${c.leadVendor||''}"></div>
+      <div><label>Lead Type</label><input id="editLeadType" value="${c.leadType||''}"></div>
+      <div><label>Monthly Premium</label><input id="editMonthlyPremium" type="number" step="0.01" value="${c.monthlyPremium}"></div>
+      <div><label>Date Submitted</label><input id="editDateSubmitted" type="date" value="${c.dateSubmitted}"></div>
+      <div><label>Approved Date</label><input id="editApprovedDate" type="date" value="${c.approvedDate||''}"></div>
       <div>
         <label>Status</label>
         <select id="clientStatusSel">
@@ -515,6 +515,7 @@ function openClientDetail(id){
     <div class="modal-actions">
       <button class="ghost" type="button" id="saveNotesBtn">Save changes</button>
       ${c.status === 'issued' ? `<button class="danger" type="button" id="chargebackBtn">Chargeback</button>` : ''}
+      <button class="danger" type="button" id="deleteCaseBtn">Delete case</button>
       <button class="ghost" type="button" onclick="closeModal()">Close</button>
     </div>
   `, { wide: true });
@@ -524,6 +525,15 @@ function openClientDetail(id){
     c.notes = document.getElementById('clientNotes').value;
     c.issueDate = document.getElementById('clientIssueDateInput').value;
     c.status = newStatus;
+    c.carrier = document.getElementById('editCarrier').value;
+    c.product = document.getElementById('editProductType').value;
+    c.policyNumber = document.getElementById('editPolicyNumber').value || null;
+    c.faceAmount = Number(document.getElementById('editFaceAmount').value) || 0;
+    c.leadVendor = document.getElementById('editLeadVendor').value || null;
+    c.leadType = document.getElementById('editLeadType').value || null;
+    c.monthlyPremium = Number(document.getElementById('editMonthlyPremium').value);
+    c.dateSubmitted = document.getElementById('editDateSubmitted').value;
+    c.approvedDate = document.getElementById('editApprovedDate').value || null;
     if (newStatus === 'issued' && !wasIssued) {
       if (!c.approvedDate) c.approvedDate = c.issueDate;
       if (!c.issuePaidFYC) c.issuePaidFYC = Math.round(c.monthlyPremium * 12 * 0.75);
@@ -541,6 +551,14 @@ function openClientDetail(id){
     c.chargebackDate = todayISO();
     saveStore();
     say("Chargeback logged.");
+    closeModal();
+    renderCurrentPage();
+  };
+  document.getElementById('deleteCaseBtn').onclick = () => {
+    if (!confirm(`Delete this case for ${c.name}? This can't be undone.`)) return;
+    store.clients = store.clients.filter(x => x.id !== id);
+    saveStore();
+    say("Case deleted.");
     closeModal();
     renderCurrentPage();
   };
@@ -595,7 +613,7 @@ function renderActivity(){
 }
 function logRow(r){
   const d = new Date(r.date+'T00:00:00');
-  return `<div class="log-row">
+  return `<div class="log-row row-clickable" onclick="openEditActivityModal('${r.date}')">
     <div class="log-date"><div class="log-dow">${d.toLocaleDateString(undefined,{weekday:'short'})}</div><div class="log-daynum">${fmtDateShort(r.date)}</div></div>
     <div class="log-metrics">
       <div class="log-metric"><div class="lm-label">Dials</div><div class="lm-value">${r.dials}</div></div>
@@ -604,6 +622,45 @@ function logRow(r){
       <div class="log-metric"><div class="lm-label">Sales</div><div class="lm-value">${r.sales}</div></div>
     </div>
   </div>`;
+}
+function openEditActivityModal(dateKey){
+  const row = store.activity.find(r => r.date === dateKey) || { date: dateKey, dials:0, appointments:0, presentations:0, sales:0 };
+  openModal(`
+    <div class="modal-head"><h2>Edit ${fmtDate(dateKey)}</h2><button class="modal-close" onclick="closeModal()">×</button></div>
+    <form id="editActivityForm">
+      <div class="detail-grid">
+        <div><label>Dials</label><input required type="number" min="0" name="dials" value="${row.dials}"></div>
+        <div><label>Appointments</label><input required type="number" min="0" name="appointments" value="${row.appointments}"></div>
+        <div><label>Presentations</label><input required type="number" min="0" name="presentations" value="${row.presentations}"></div>
+        <div><label>Sales</label><input required type="number" min="0" name="sales" value="${row.sales}"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="primary" type="submit">Save</button>
+        <button class="danger" type="button" id="deleteActivityBtn">Delete day</button>
+        <button class="ghost" type="button" onclick="closeModal()">Cancel</button>
+      </div>
+    </form>
+  `);
+  document.getElementById('editActivityForm').addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    const f = new FormData(ev.target);
+    const values = { dials:Number(f.get('dials')), appointments:Number(f.get('appointments')), presentations:Number(f.get('presentations')), sales:Number(f.get('sales')) };
+    const existing = store.activity.find(r => r.date === dateKey);
+    if (existing) Object.assign(existing, values);
+    else store.activity.push({ date: dateKey, ...values });
+    saveStore();
+    closeModal();
+    say("Day updated.");
+    renderCurrentPage();
+  });
+  document.getElementById('deleteActivityBtn').onclick = () => {
+    if (!confirm(`Delete all activity logged for ${fmtDate(dateKey)}?`)) return;
+    store.activity = store.activity.filter(r => r.date !== dateKey);
+    saveStore();
+    closeModal();
+    say("Day deleted.");
+    renderCurrentPage();
+  };
 }
 function renderActivityChart(rows){
   const ctx = document.getElementById('activityChart');
@@ -721,13 +778,52 @@ function renderCosts(){
     ${costLines.length ? `<div class="panel">${donutBlock(costLines)}</div>` : '<p class="helptext">No costs logged in this range.</p>'}
     <div class="panel">
       <h2>All cost lines</h2>
+      <p class="helptext" style="margin:-8px 0 14px;">Click a row to edit or delete it.</p>
       <table><thead><tr><th>Category</th><th>Description</th><th>Amount</th><th>Date</th></tr></thead>
-      <tbody>${[...rangeCosts].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(e=>`<tr><td>${e.category}</td><td>${e.description||''}</td><td>${fmt(e.amount)}</td><td>${fmtDateShort(e.date)}</td></tr>`).join('') || '<tr><td colspan="4" class="helptext">No costs logged in this range.</td></tr>'}</tbody></table>
+      <tbody>${[...rangeCosts].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(e=>`<tr class="row-clickable" onclick="openEditCostModal('${e.id}')"><td>${e.category}</td><td>${e.description||''}</td><td>${fmt(e.amount)}</td><td>${fmtDateShort(e.date)}</td></tr>`).join('') || '<tr><td colspan="4" class="helptext">No costs logged in this range.</td></tr>'}</tbody></table>
     </div>
   `;
   wireDateFilter('costs', renderCosts);
   document.getElementById('addCostBtn').onclick = openAddCostModal;
   if (costLines.length) renderDonut('donutCanvas', costLines);
+}
+function openEditCostModal(id){
+  const e = store.costs.find(x => x.id === id);
+  if (!e) return;
+  openModal(`
+    <div class="modal-head"><h2>Edit cost</h2><button class="modal-close" onclick="closeModal()">×</button></div>
+    <form id="editCostForm">
+      <div class="detail-grid">
+        <div><label>Category</label><select name="category">${COST_CATEGORIES.map(c=>`<option value="${c.key}" ${c.key===e.category?'selected':''}>${c.key}</option>`).join('')}</select></div>
+        <div><label>Amount ($)</label><input required type="number" step="0.01" name="amount" value="${e.amount}"></div>
+        <div class="full" style="grid-column:1/-1;"><label>Date</label><input required type="date" name="date" value="${e.date}"></div>
+        <div class="full" style="grid-column:1/-1;"><label>Description</label><input name="description" value="${e.description||''}" placeholder="Optional"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="primary" type="submit">Save</button>
+        <button class="danger" type="button" id="deleteCostBtn">Delete</button>
+        <button class="ghost" type="button" onclick="closeModal()">Cancel</button>
+      </div>
+    </form>
+  `);
+  document.getElementById('editCostForm').addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    const f = new FormData(ev.target);
+    e.category = f.get('category'); e.amount = Number(f.get('amount'));
+    e.date = f.get('date'); e.description = f.get('description') || '';
+    saveStore();
+    closeModal();
+    say("Cost updated.");
+    renderCurrentPage();
+  });
+  document.getElementById('deleteCostBtn').onclick = () => {
+    if (!confirm("Delete this cost line?")) return;
+    store.costs = store.costs.filter(x => x.id !== id);
+    saveStore();
+    closeModal();
+    say("Cost deleted.");
+    renderCurrentPage();
+  };
 }
 function openAddCostModal(){
   openModal(`
