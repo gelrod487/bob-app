@@ -245,6 +245,27 @@ footer.home-footer a{display:block; color:var(--ink-soft); text-decoration:none;
 .date-filter-custom.section-hidden{display:none;}
 .date-filter-custom input[type="date"]{padding:8px 10px;}
 .date-filter-range{margin-left:auto;}
+.date-filter-compact{margin-bottom:0;}
+
+/* ---- Activity page: "Today" summary + compact steppers + Log list ---- */
+.today-card{background:var(--panel); border-radius:var(--radius); padding:20px 22px; box-shadow:var(--shadow); border:1px solid var(--line); margin-bottom:18px;}
+.today-title{font-weight:700; font-size:1.05rem;}
+.today-sub{font-size:.8rem; color:var(--ink-soft); margin-bottom:16px;}
+.mini-stepper-row{display:flex; gap:12px; flex-wrap:wrap;}
+.mini-stepper{flex:1; min-width:130px; background:var(--panel-alt); border-radius:14px; padding:8px 10px; display:flex; align-items:center; justify-content:space-between; gap:6px;}
+.mini-stepper-btn{width:30px; height:30px; flex-shrink:0; border-radius:50%; border:none; background:var(--panel); box-shadow:var(--shadow); font-size:1rem; cursor:pointer; color:var(--ink); font-family:'Inter';}
+.mini-stepper-mid{text-align:center; flex:1;}
+.mini-stepper-count{font-weight:800; font-size:1.3rem; font-family:'Playfair Display',serif;}
+.mini-stepper-label{font-size:.65rem; color:var(--ink-soft); text-transform:capitalize;}
+.log-row{display:flex; align-items:center; justify-content:space-between; gap:16px; padding:12px 0; border-bottom:1px solid var(--line); flex-wrap:wrap;}
+.log-row:last-child{border-bottom:none;}
+.log-date{min-width:70px;}
+.log-dow{font-size:.68rem; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.03em;}
+.log-daynum{font-weight:700;}
+.log-metrics{display:flex; gap:28px; flex-wrap:wrap;}
+.log-metric{text-align:left; min-width:50px;}
+.lm-label{font-size:.68rem; color:var(--ink-soft); text-transform:uppercase;}
+.lm-value{font-weight:700;}
 
 /* ---- Book (clients & policies) list ---- */
 .book-filters{display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap;}

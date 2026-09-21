@@ -467,87 +467,102 @@ async function openClientDetail(policyId){
 /* ================= ACTIVITY ================= */
 function daysAgoISO(n){ const d = new Date(); d.setDate(d.getDate()-n); return toISO(d); }
 function addDaysISO(iso, n){ const d = new Date(iso+'T00:00:00'); d.setDate(d.getDate()+n); return toISO(d); }
+function activityFilterHTML(){
+  const state = dateFilterState.activity;
+  const range = computeDateRange(state.key, state.from, state.to);
+  return `
+  <div class="date-filter date-filter-compact" data-page="activity">
+    <select class="date-filter-select">
+      ${DATE_RANGE_PRESETS.map(([k,label]) => `<option value="${k}" ${state.key===k?'selected':''}>${label}</option>`).join('')}
+    </select>
+    <span class="date-filter-custom${state.key==='custom' ? '' : ' section-hidden'}">
+      <input type="date" class="date-filter-from" value="${range.from}">
+      <span>to</span>
+      <input type="date" class="date-filter-to" value="${range.to}">
+      <button type="button" class="ghost date-filter-apply">Apply</button>
+    </span>
+  </div>`;
+}
+function logRow(r){
+  const d = new Date(r.date.slice(0,10)+'T00:00:00');
+  return `<div class="log-row">
+    <div class="log-date"><div class="log-dow">${d.toLocaleDateString(undefined,{weekday:'short'})}</div><div class="log-daynum">${fmtDate(r.date)}</div></div>
+    <div class="log-metrics">
+      <div class="log-metric"><div class="lm-label">Dials</div><div class="lm-value">${r.dials}</div></div>
+      <div class="log-metric"><div class="lm-label">Appts</div><div class="lm-value">${r.appointments}</div></div>
+      <div class="log-metric"><div class="lm-label">Sits</div><div class="lm-value">${r.presentations}</div></div>
+      <div class="log-metric"><div class="lm-label">Sales</div><div class="lm-value">${r.sales}</div></div>
+    </div>
+  </div>`;
+}
 async function renderActivity(){
-  mainInner.innerHTML = `<div class="page-header"><div><div class="page-eyebrow">Activity</div><h1>Daily production log</h1></div></div><p class="helptext">Loading…</p>`;
+  mainInner.innerHTML = `<div class="page-header"><div><div class="page-eyebrow">Activity</div><h1>Daily production</h1></div></div><p class="helptext">Loading…</p>`;
   const range = computeDateRange(dateFilterState.activity.key, dateFilterState.activity.from, dateFilterState.activity.to);
   const [rowsAll, rowsRange] = await Promise.all([
-    apiFetch(`/api/activity?from=${daysAgoISO(6)}&to=${todayISO()}`),
+    apiFetch(`/api/activity?from=${todayISO()}&to=${todayISO()}`),
     apiFetch(`/api/activity?from=${range.from}&to=${range.to}`),
   ]);
   const t = todayRow(rowsAll);
-  const totals = rowsRange.reduce((s,r) => ({ dials:s.dials+r.dials, appointments:s.appointments+r.appointments, presentations:s.presentations+r.presentations, sales:s.sales+r.sales }), {dials:0,appointments:0,presentations:0,sales:0});
-
-  const last7 = [];
-  for (let i = 6; i >= 0; i--) {
-    const iso = daysAgoISO(i);
-    const row = rowsAll.find(r => r.date.slice(0,10) === iso) || { date: iso, dials:0, appointments:0, presentations:0, sales:0 };
-    last7.push(row);
-  }
+  const sortedRows = [...rowsRange].sort((a,b)=>new Date(a.date)-new Date(b.date));
+  const totals = sortedRows.reduce((s,r) => ({ dials:s.dials+r.dials, appointments:s.appointments+r.appointments, presentations:s.presentations+r.presentations, sales:s.sales+r.sales }), {dials:0,appointments:0,presentations:0,sales:0});
+  const todayLabel = new Date().toLocaleDateString(undefined,{weekday:'short', month:'short', day:'numeric', year:'numeric'});
 
   mainInner.innerHTML = `
-    <div class="page-header"><div><div class="page-eyebrow">Activity</div><h1>Daily production log</h1></div>
+    <div class="page-header"><div><div class="page-eyebrow">Activity</div><h1>Daily production</h1></div>
     <button class="primary" type="button" id="logDayBtn">+ Log a day</button></div>
-    <div class="panel">
-      <h2>Today</h2>
-      <div class="stepper-grid">
+    <div style="display:flex; justify-content:flex-end; margin-bottom:16px;">${activityFilterHTML()}</div>
+
+    <div class="today-card">
+      <div class="today-title">Today · ${todayLabel}</div>
+      <div class="today-sub">${sortedRows.length} working day${sortedRows.length===1?'':'s'} in view</div>
+      <div class="mini-stepper-row">
         ${['dials','appointments','presentations','sales'].map(f => `
-          <div class="stepper-box">
-            <button class="stepper-btn" data-field="${f}" data-delta="-1">−</button>
-            <div class="count-wrap"><span class="count" id="today-${f}">${t[f]}</span><span class="count-label">${f}</span></div>
-            <button class="stepper-btn" data-field="${f}" data-delta="1">+</button>
+          <div class="mini-stepper">
+            <button class="mini-stepper-btn" data-field="${f}" data-delta="-1">−</button>
+            <div class="mini-stepper-mid"><div class="mini-stepper-count" id="today-${f}">${t[f]}</div><div class="mini-stepper-label">${f}</div></div>
+            <button class="mini-stepper-btn" data-field="${f}" data-delta="1">+</button>
           </div>`).join('')}
       </div>
     </div>
 
+    <div class="grid" style="margin-bottom:18px;">
+      <div class="card"><div class="stat-label">Dials</div><div class="stat-value">${totals.dials}</div><div class="stat-sub">${pct(totals.appointments,totals.dials)} to appt</div></div>
+      <div class="card"><div class="stat-label">Appointments</div><div class="stat-value">${totals.appointments}</div><div class="stat-sub">${pct(totals.presentations,totals.appointments)} sat</div></div>
+      <div class="card"><div class="stat-label">Presentations</div><div class="stat-value">${totals.presentations}</div><div class="stat-sub">${pct(totals.sales,totals.presentations)} closed</div></div>
+      <div class="card"><div class="stat-label">Sales</div><div class="stat-value">${totals.sales}</div><div class="stat-sub">${pct(totals.sales,totals.dials)} of dials</div></div>
+    </div>
+
     <div class="panel">
-      <h2>Production trend</h2>
-      ${dateFilterHTML('activity')}
-      <p class="helptext" style="margin:-8px 0 14px;">${totals.dials} dials · ${totals.appointments} appts · ${totals.presentations} sits · ${totals.sales} sales in this range</p>
+      <h2>Dials over the range</h2>
       <div class="chart-box"><canvas id="activityChart"></canvas></div>
     </div>
 
     <div class="panel">
-      <h2>Last 7 days</h2>
-      <table><thead><tr><th>Date</th><th>Dials</th><th>Appts</th><th>Sits</th><th>Sales</th></tr></thead>
-      <tbody>${last7.slice().reverse().map(r=>`<tr><td>${fmtDate(r.date)}</td><td>${r.dials}</td><td>${r.appointments}</td><td>${r.presentations}</td><td>${r.sales}</td></tr>`).join('')}</tbody></table>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;"><h2 style="margin:0;">Log</h2><span class="helptext">${sortedRows.length} day${sortedRows.length===1?'':'s'}</span></div>
+      ${sortedRows.slice().reverse().map(logRow).join('') || '<p class="helptext">No activity in this range.</p>'}
     </div>
   `;
   wireDateFilter('activity', renderActivity);
   document.getElementById('logDayBtn').onclick = openLogDayModal;
-  document.querySelectorAll('.stepper-btn').forEach(btn => btn.onclick = async () => {
+  document.querySelectorAll('.mini-stepper-btn').forEach(btn => btn.onclick = async () => {
     const row = await apiFetch('/api/activity/increment', { method:'POST', body:{ date: todayISO(), field: btn.dataset.field, delta: Number(btn.dataset.delta) } });
     document.getElementById('today-'+btn.dataset.field).textContent = row[btn.dataset.field];
     renderActivity();
   });
-  renderActivityChart(range.from, range.to, rowsRange);
+  renderActivityChart(sortedRows);
 }
 let activityChart;
-function renderActivityChart(from, to, rows){
+function renderActivityChart(rows){
   const ctx = document.getElementById('activityChart');
   if (!ctx) return;
   if (activityChart) activityChart.destroy();
-  const days = [];
-  let cursor = from, guard = 0;
-  while (cursor <= to && guard < 400) { days.push(cursor); cursor = addDaysISO(cursor,1); guard++; }
-  const byDate = {};
-  rows.forEach(r => byDate[r.date.slice(0,10)] = r);
-  const series = (field) => days.map(d => (byDate[d] ? byDate[d][field] : 0));
   const ink = getComputedStyle(document.body).color;
-  activityChart = new Chart(ctx, { type:'line', data:{
-    labels: days.map(d=>fmtDate(d)),
-    datasets: [
-      { label:'Dials', data: series('dials'), borderColor:'#A63D40', backgroundColor:'transparent', tension:.35, pointRadius:0, borderWidth:2, yAxisID:'yDials' },
-      { label:'Appointments', data: series('appointments'), borderColor:'#D4A373', backgroundColor:'transparent', tension:.35, pointRadius:0, borderWidth:2, yAxisID:'ySmall' },
-      { label:'Presentations', data: series('presentations'), borderColor:'#7C9473', backgroundColor:'transparent', tension:.35, pointRadius:0, borderWidth:2, yAxisID:'ySmall' },
-      { label:'Sales', data: series('sales'), borderColor:'#1B7A73', backgroundColor:'transparent', tension:.35, pointRadius:0, borderWidth:2.5, yAxisID:'ySmall' },
-    ],
+  activityChart = new Chart(ctx, { type:'bar', data:{
+    labels: rows.map(r=>fmtDate(r.date)),
+    datasets: [{ label:'Dials', data: rows.map(r=>r.dials), backgroundColor:'#D3A233', borderRadius:4, maxBarThickness:44 }],
   }, options:{ responsive:true, maintainAspectRatio:false,
-    plugins:{ legend:{ position:'bottom', labels:{ color:ink, boxWidth:12 } } },
-    scales:{
-      x:{ ticks:{ color:ink, maxTicksLimit:10 } },
-      yDials:{ position:'left', ticks:{ color:ink }, title:{ display:true, text:'Dials', color:ink } },
-      ySmall:{ position:'right', ticks:{ color:ink }, grid:{ drawOnChartArea:false }, title:{ display:true, text:'Appts / Sits / Sales', color:ink } },
-    } } });
+    plugins:{ legend:{ display:false } },
+    scales:{ x:{ ticks:{ color:ink } }, y:{ ticks:{ color:ink }, beginAtZero:true } } } });
 }
 function openLogDayModal(){
   openModal(`
