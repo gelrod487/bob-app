@@ -11,8 +11,11 @@
 </head>
 <body>
 <div class="demo-banner">
-  <span>Sample book — edits stay in this browser. Start a trial to keep your own cases.</span>
-  <a class="primary" href="/login.html">Start 14-day trial</a>
+  <span>Sample book — a fully interactive demo. Edits stay in this browser only.</span>
+  <div style="display:flex; gap:10px;">
+    <button class="ghost" id="resetDemoBtn" type="button" style="background:transparent; border-color:rgba(255,255,255,.6); color:#fff;">Reset demo data</button>
+    <a class="primary" href="/login.html">Start 14-day trial</a>
+  </div>
 </div>
 <div class="app-shell">
   <div class="sidebar">
@@ -37,56 +40,261 @@
 <script src="/js/mascot.js"></script>
 <script>
 wireMascot('navMascot', ["Hi, I'm Bob!", "This is a sample book — try the real thing!", "Edits here stay in your browser."]);
-/* ---- sample dataset (static — matches the numbers shown on the marketing site) ---- */
-const BASE = {
-  netProfit: 76, grossCommission: 5681, placedCount: 4, pendingPremium: 1764,
-  chargebacks: 964, lapsedCount: 1, operatingCosts: 4641,
-  funnel: { dials: 392, appointments: 18, presentations: 14, sales: 4 },
-  goals: { dials: [315, 400], appointments: [14, 20], sits: [11, 16], sales: [3, 16], fyc: [0, 15000] },
-  netByMonth: { labels: ['May','Jun','Jul','Aug','Sep'], data: [900, 3400, 2100, -1800, -1200] },
-  cases: [
-    { name:'Maria Delgado', email:'maria.delgado@example.com', phone:'(210) 555-0142', carrier:'Americo', product:'Instant IUL', policyNumber:'AM-10482', issued:'Jul 14', monthly:187.40, ap:2248.80, status:'issued' },
-    { name:'James Whitaker', email:'jwhitaker@example.com', phone:'(512) 555-0198', carrier:'Mutual of Omaha', product:'Living Promise', policyNumber:'BU-552190', issued:'Aug 3', monthly:62.10, ap:745.20, status:'issued' },
-    { name:'Elena Ruiz', email:'elena.ruiz@example.com', phone:'(830) 555-0110', carrier:'National Life', product:'Flexlife IUL', policyNumber:'LS-220188', issued:'Aug 21', monthly:210.00, ap:2520.00, status:'pending' },
-    { name:'Robert Chen', email:'rchen@example.com', phone:'(713) 555-0166', carrier:'Transamerica', product:'FE Express', policyNumber:'FEX-91822', issued:'Jun 11', monthly:94.50, ap:1134.00, status:'lapsed', chargeback:964 },
-    { name:'Danielle Brooks', email:'dbrooks@example.com', phone:'(469) 555-0177', carrier:'F&G', product:'Pathsetter IUL', policyNumber:'FG-44012', issued:'May 22', monthly:312.00, ap:3744.00, status:'issued' },
-  ],
-  costs: [
-    { label:'Lead flow', amount:2480, color:'#7A3B4A' },
-    { label:'Staff', amount:1280, color:'#A63D40' },
-    { label:'Travel', amount:640, color:'#D4A373' },
-    { label:'CRM / tools', amount:189, color:'#7C9473' },
-    { label:'E&O insurance', amount:52, color:'#D8CBB8' },
-  ],
-};
 
-/* ---- today's tally lives in localStorage so +/- feels real, but never leaves the browser ---- */
-const LS_KEY = 'bob_demo_today_v1';
-function loadToday(){ try { return JSON.parse(localStorage.getItem(LS_KEY)) || {dials:0,appointments:0,presentations:0,sales:0}; } catch(e){ return {dials:0,appointments:0,presentations:0,sales:0}; } }
-function saveToday(t){ try { localStorage.setItem(LS_KEY, JSON.stringify(t)); } catch(e){} }
-let today = loadToday();
-
+/* ============================================================
+   date helpers
+   ============================================================ */
+function toISO(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function todayISO(){ return toISO(new Date()); }
+function addDays(iso, n){ const d = new Date(iso+'T00:00:00'); d.setDate(d.getDate()+n); return toISO(d); }
+function daysAgoISO(n){ const d = new Date(); d.setDate(d.getDate()-n); return toISO(d); }
+function monthsAgoISO(n, day){ const d = new Date(); d.setDate(1); d.setMonth(d.getMonth()-n); if (day) d.setDate(Math.min(day,28)); return toISO(d); }
 function fmt(n){ return '$'+Number(n||0).toLocaleString(undefined,{maximumFractionDigits:0}); }
+function fmtMoney2(n){ return '$'+Number(n||0).toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2}); }
+function fmtDate(iso){ if(!iso) return '—'; return new Date(iso+'T00:00:00').toLocaleDateString(undefined,{month:'short', day:'numeric', year:'numeric'}); }
+function fmtDateShort(iso){ if(!iso) return '—'; return new Date(iso+'T00:00:00').toLocaleDateString(undefined,{month:'short', day:'numeric'}); }
 function pct(a,b){ return b ? ((a/b)*100).toFixed(1)+'%' : '0%'; }
+function uid(prefix){ return prefix+'_'+Math.random().toString(36).slice(2,9); }
+
+/* ============================================================
+   persisted store (clients, daily activity, cost lines) — all
+   local to this browser, seeded once with ~14 months of sample
+   history so every report/filter has something real to show.
+   ============================================================ */
+const STORE_KEY = 'bob_demo_store_v4';
+const COST_CATEGORIES = [
+  { key:'Lead flow',      color:'#7A3B4A' },
+  { key:'Marketing',      color:'#A63D40' },
+  { key:'E&O insurance',  color:'#D8CBB8' },
+  { key:'Licenses',       color:'#9A8F7C' },
+  { key:'CRM/Tools',      color:'#7C9473' },
+  { key:'Office',         color:'#D4A373' },
+  { key:'Travel',         color:'#C9986B' },
+  { key:'Staff',          color:'#5F7A6E' },
+  { key:'Insurance',      color:'#8C5B63' },
+  { key:'Other',          color:'#B7ADA0' },
+];
+function costColor(cat){ return (COST_CATEGORIES.find(c=>c.key===cat) || {}).color || '#B7ADA0'; }
+
+function seedStore(){
+  const CARRIERS = ['Americo','Mutual of Omaha','National Life','Transamerica','F&G','Foresters','Corebridge'];
+  const PRODUCTS = ['Instant IUL','Living Promise','Flexlife IUL','FE Express','Pathsetter IUL','Term 20','Whole Life'];
+  const NAMES = ['Maria Delgado','James Whitaker','Elena Ruiz','Robert Chen','Danielle Brooks','Carlos Mendoza','Ashley Cooper','Michael Torres','Sarah Kim','David Nguyen','Patricia Owens','Kevin Walsh','Nicole Foster','Brian Alvarez'];
+  const LEAD_VENDORS = ['Facebook Leads','Google Ads','Referral','Direct Mail','Aged Leads Co'];
+  const LEAD_TYPES = ['Final Expense','Mortgage Protection','IUL','Annuity Lead'];
+  const MONTHLIES = [62.10,94.50,120.00,150.00,187.40,210.00,240.00,312.00,275.00,98.00,155.00,205.00,132.00,178.50];
+  const STATUS_PLAN = ['issued','issued','pending','lapsed','issued','issued','pending','issued','issued','issued','lapsed','issued','pending','issued'];
+
+  const clients = NAMES.map((name, i) => {
+    const monthsBack = 13 - Math.floor(i * 13 / (NAMES.length - 1)); // spreads ~0..13 months back, oldest first
+    let dayOfMonth = 3 + (i*7)%24;
+    if (monthsBack === 0) dayOfMonth = Math.min(dayOfMonth, new Date().getDate() - 1); // never seed a future date
+    const submitted = monthsAgoISO(monthsBack, dayOfMonth);
+    const status = STATUS_PLAN[i];
+    const monthlyPremium = MONTHLIES[i];
+    const isPlaced = status === 'issued' || status === 'lapsed';
+    const approvedDate = isPlaced ? addDays(submitted, 5) : null;
+    const issueDate = isPlaced ? addDays(submitted, 9) : null;
+    const issuePaidFYC = isPlaced ? Math.round(monthlyPremium * 12 * 0.75) : 0;
+    const chargebackAmount = status === 'lapsed' ? issuePaidFYC : 0;
+    const chargebackDate = status === 'lapsed' ? addDays(issueDate, 60) : null;
+    return {
+      id: uid('c'), name,
+      email: name.toLowerCase().replace(/[^a-z]+/g,'.') + '@example.com',
+      phone: `(${200+i*11}) 555-0${100+i*7}`,
+      carrier: CARRIERS[i % CARRIERS.length],
+      product: PRODUCTS[i % PRODUCTS.length],
+      policyNumber: status === 'pending' ? null : `${CARRIERS[i % CARRIERS.length].slice(0,2).toUpperCase()}-${10000+i*137}`,
+      faceAmount: Math.round(monthlyPremium * 12 * 18),
+      monthlyPremium, status,
+      leadVendor: LEAD_VENDORS[i % LEAD_VENDORS.length],
+      leadType: LEAD_TYPES[i % LEAD_TYPES.length],
+      dateSubmitted: submitted, approvedDate, issueDate, issuePaidFYC,
+      chargebackAmount, chargebackDate,
+      notes: '',
+    };
+  });
+
+  // ~11 months of weekday activity, with occasional zero/skip days for realism
+  const activity = [];
+  for (let d = 335; d >= 0; d--) {
+    const iso = daysAgoISO(d);
+    const dow = new Date(iso+'T00:00:00').getDay();
+    if (dow === 0 || dow === 6) continue; // skip weekends
+    if (Math.random() < 0.08) continue; // the occasional day off
+    const dials = 55 + Math.floor(Math.random()*55);
+    const appointments = Math.round(dials * (0.035 + Math.random()*0.03));
+    const presentations = Math.round(appointments * (0.55 + Math.random()*0.3));
+    const sales = Math.round(presentations * (0.15 + Math.random()*0.25));
+    activity.push({ date: iso, dials, appointments, presentations, sales });
+  }
+
+  // cost lines spread over the last ~11 months across every category
+  const costs = [];
+  for (let m = 10; m >= 0; m--) {
+    COST_CATEGORIES.forEach((cat, ci) => {
+      if (Math.random() < 0.12) return; // not every category every month
+      const base = { 'Lead flow':320,'Marketing':110,'E&O insurance':45,'Licenses':35,'CRM/Tools':85,'Office':55,'Travel':65,'Staff':60,'Insurance':50,'Other':30 }[cat.key] || 40;
+      const amount = Math.round(base * (0.7 + Math.random()*0.7));
+      costs.push({ id: uid('e'), date: monthsAgoISO(m, 5 + ci*2), amount, category: cat.key, description: '' });
+    });
+  }
+
+  return { clients, activity, costs };
+}
+function loadStore(){
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch(e){}
+  const fresh = seedStore();
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(fresh)); } catch(e){}
+  return fresh;
+}
+function saveStore(){ try { localStorage.setItem(STORE_KEY, JSON.stringify(store)); } catch(e){} }
+let store = loadStore();
+
+function annualPremium(c){ return c.monthlyPremium * 12; }
+function clientsSubmittedInRange(from,to){ return store.clients.filter(c => c.dateSubmitted >= from && c.dateSubmitted <= to); }
+function activityInRange(from,to){ return store.activity.filter(a => a.date >= from && a.date <= to); }
+function costsInRange(from,to){ return store.costs.filter(c => c.date >= from && c.date <= to); }
+function sumActivity(rows){ return rows.reduce((s,r)=>({dials:s.dials+r.dials, appointments:s.appointments+r.appointments, presentations:s.presentations+r.presentations, sales:s.sales+r.sales}), {dials:0,appointments:0,presentations:0,sales:0}); }
+function grossFYCInRange(from,to){ return store.clients.filter(c => (c.status==='issued'||c.status==='lapsed') && c.issueDate>=from && c.issueDate<=to).reduce((s,c)=>s+c.issuePaidFYC,0); }
+function placedInRange(from,to){ return store.clients.filter(c => (c.status==='issued'||c.status==='lapsed') && c.issueDate>=from && c.issueDate<=to); }
+function chargebacksInRange(from,to){ return store.clients.filter(c => c.chargebackDate && c.chargebackDate>=from && c.chargebackDate<=to).reduce((s,c)=>s+c.chargebackAmount,0); }
+function costsTotalInRange(from,to){ return costsInRange(from,to).reduce((s,c)=>s+c.amount,0); }
+function pendingAsOf(to){ return store.clients.filter(c => c.status==='pending' && c.dateSubmitted<=to).reduce((s,c)=>s+annualPremium(c),0); }
+function statement(from,to){
+  const gross = grossFYCInRange(from,to);
+  const cb = chargebacksInRange(from,to);
+  const netCommission = gross - cb;
+  const costsTotal = costsTotalInRange(from,to);
+  const netProfit = netCommission - costsTotal;
+  const pending = pendingAsOf(to);
+  return { gross, cb, netCommission, costsTotal, netProfit, pending };
+}
+
+/* ============================================================
+   shared date-range report filter (Desk, Activity, Book, Costs, Profit)
+   ============================================================ */
+const DATE_RANGE_PRESETS = [
+  ['today','Today'], ['yesterday','Yesterday'], ['this_week','This week'], ['this_month','This month'],
+  ['last_month','Last month'], ['this_quarter','This quarter'], ['ytd','Year to date'], ['custom','Custom'],
+];
+const dateFilterState = {
+  desk: { key: 'this_month', from: '', to: '' },
+  activity: { key: 'this_month', from: '', to: '' },
+  book: { key: 'ytd', from: '', to: '' },
+  costs: { key: 'this_month', from: '', to: '' },
+  profit: { key: 'this_month', from: '', to: '' },
+};
+function computeDateRange(key, customFrom, customTo){
+  const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth(), d = now.getDate();
+  switch (key) {
+    case 'today': { const t = toISO(now); return { from: t, to: t }; }
+    case 'yesterday': { const t = toISO(new Date(y,m,d-1)); return { from: t, to: t }; }
+    case 'this_week': { const start = new Date(y,m,d - now.getDay()); return { from: toISO(start), to: toISO(now) }; }
+    case 'last_month': return { from: toISO(new Date(y,m-1,1)), to: toISO(new Date(y,m,0)) };
+    case 'this_quarter': { const q = Math.floor(m/3); return { from: toISO(new Date(y,q*3,1)), to: toISO(now) }; }
+    case 'ytd': return { from: toISO(new Date(y,0,1)), to: toISO(now) };
+    case 'custom': return { from: customFrom || toISO(new Date(y,m,1)), to: customTo || toISO(now) };
+    case 'this_month': default: return { from: toISO(new Date(y,m,1)), to: toISO(now) };
+  }
+}
+function dateFilterHTML(pageKey){
+  const state = dateFilterState[pageKey];
+  const range = computeDateRange(state.key, state.from, state.to);
+  return `
+  <div class="date-filter" data-page="${pageKey}">
+    <select class="date-filter-select">
+      ${DATE_RANGE_PRESETS.map(([k,label]) => `<option value="${k}" ${state.key===k?'selected':''}>${label}</option>`).join('')}
+    </select>
+    <span class="date-filter-custom${state.key==='custom' ? '' : ' section-hidden'}">
+      <input type="date" class="date-filter-from" value="${range.from}">
+      <span>to</span>
+      <input type="date" class="date-filter-to" value="${range.to}">
+      <button type="button" class="ghost date-filter-apply">Apply</button>
+    </span>
+    <span class="date-filter-range helptext">${fmtDateShort(range.from)} – ${fmtDateShort(range.to)}</span>
+  </div>`;
+}
+function wireDateFilter(pageKey, onChange){
+  const wrap = mainInner.querySelector(`.date-filter[data-page="${pageKey}"]`);
+  if (!wrap) return;
+  const state = dateFilterState[pageKey];
+  const select = wrap.querySelector('.date-filter-select');
+  const custom = wrap.querySelector('.date-filter-custom');
+  select.onchange = () => {
+    state.key = select.value;
+    if (state.key === 'custom') { custom.classList.remove('section-hidden'); return; }
+    onChange();
+  };
+  wrap.querySelector('.date-filter-apply').onclick = () => {
+    state.from = wrap.querySelector('.date-filter-from').value;
+    state.to = wrap.querySelector('.date-filter-to').value;
+    onChange();
+  };
+}
+
+/* ============================================================
+   modal helper
+   ============================================================ */
+function openModal(innerHTML, opts){
+  closeModal();
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'activeModal';
+  overlay.innerHTML = `<div class="modal-box${opts && opts.wide ? ' modal-wide' : ''}">${innerHTML}</div>`;
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
+  document.body.appendChild(overlay);
+  return overlay;
+}
+function closeModal(){ const m = document.getElementById('activeModal'); if (m) m.remove(); }
+
+/* ---- today's tally lives alongside the rest of the store ---- */
+function todayRow(){
+  let row = store.activity.find(r => r.date === todayISO());
+  if (!row) { row = { date: todayISO(), dials:0, appointments:0, presentations:0, sales:0 }; store.activity.push(row); }
+  return row;
+}
+function bump(field, delta){
+  const row = todayRow();
+  row[field] = Math.max(0, row[field] + delta);
+  saveStore();
+  renderCurrentPage();
+}
 
 const mainInner = document.getElementById('mainInner');
 
 /* ================= DESK ================= */
 function renderDesk(){
-  const dials = BASE.funnel.dials + today.dials;
-  const appts = BASE.funnel.appointments + today.appointments;
-  const pres = BASE.funnel.presentations + today.presentations;
-  const sales = BASE.funnel.sales + today.sales;
+  const range = computeDateRange(dateFilterState.desk.key, dateFilterState.desk.from, dateFilterState.desk.to);
+  const st = statement(range.from, range.to);
+  const funnel = sumActivity(activityInRange(range.from, range.to));
+  const t = todayRow();
+  const placedAll = store.clients.filter(c => c.status==='issued'||c.status==='lapsed').length;
+
+  const monthFrom = toISO(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  const monthTo = todayISO();
+  const monthActivity = sumActivity(activityInRange(monthFrom, monthTo));
+  const monthFYC = grossFYCInRange(monthFrom, monthTo);
+  const GOALS = { dials:[monthActivity.dials,4000], appointments:[monthActivity.appointments,160], sits:[monthActivity.presentations,120], sales:[monthActivity.sales,20], fyc:[monthFYC,15000] };
+
+  const recent = [...store.clients].sort((a,b)=>new Date(b.dateSubmitted)-new Date(a.dateSubmitted)).slice(0,5);
+  const costLines = COST_CATEGORIES.map(c => ({ cat:c.key, color:c.color, total: costsInRange(range.from,range.to).filter(e=>e.category===c.key).reduce((s,e)=>s+e.amount,0) })).filter(c=>c.total>0);
 
   mainInner.innerHTML = `
     <div class="page-header"><div><div class="page-eyebrow">Desk</div><h1>Sample producer's book</h1></div>
-    <a class="ghost" href="#" onclick="return false;">Add a client ↗</a></div>
+    <button class="ghost" type="button" id="addClientBtn">+ Add a client</button></div>
+
+    ${dateFilterHTML('desk')}
 
     <div class="grid" style="margin-bottom:18px;">
-      <div class="card"><div class="stat-label">Net Profit</div><div class="stat-value pos">${fmt(BASE.netProfit)}</div><div class="stat-sub">After chargebacks and costs</div></div>
-      <div class="card"><div class="stat-label">Gross Commission</div><div class="stat-value">${fmt(BASE.grossCommission)}</div><div class="stat-sub">${BASE.placedCount} placed · ${fmt(BASE.pendingPremium)} pending</div></div>
-      <div class="card"><div class="stat-label">Chargebacks</div><div class="stat-value neg">−${fmt(BASE.chargebacks)}</div><div class="stat-sub">${BASE.lapsedCount} lapsed</div></div>
-      <div class="card"><div class="stat-label">Operating Costs</div><div class="stat-value">${fmt(BASE.operatingCosts)}</div><div class="stat-sub">${fmt(BASE.operatingCosts/BASE.placedCount)} / sale</div></div>
+      <div class="card"><div class="stat-label">Net Profit</div><div class="stat-value ${st.netProfit>=0?'pos':'neg'}">${fmt(st.netProfit)}</div><div class="stat-sub">After chargebacks and costs</div></div>
+      <div class="card"><div class="stat-label">Gross Commission</div><div class="stat-value">${fmt(st.gross)}</div><div class="stat-sub">${placedAll} placed · ${fmt(st.pending)} pending</div></div>
+      <div class="card"><div class="stat-label">Chargebacks</div><div class="stat-value neg">−${fmt(st.cb)}</div><div class="stat-sub">${store.clients.filter(c=>c.status==='lapsed').length} lapsed</div></div>
+      <div class="card"><div class="stat-label">Operating Costs</div><div class="stat-value">${fmt(st.costsTotal)}</div><div class="stat-sub">${fmt(st.costsTotal/(funnel.sales||1))} / sale</div></div>
     </div>
 
     <div class="panel">
@@ -95,7 +303,7 @@ function renderDesk(){
         ${['dials','appointments','presentations','sales'].map(f => `
           <div class="stepper-box">
             <button class="stepper-btn" onclick="bump('${f}',-1)">−</button>
-            <div class="count-wrap"><span class="count" id="today-${f}">${today[f]}</span><span class="count-label">${f}</span></div>
+            <div class="count-wrap"><span class="count" id="today-${f}">${t[f]}</span><span class="count-label">${f}</span></div>
             <button class="stepper-btn" onclick="bump('${f}',1)">+</button>
           </div>`).join('')}
       </div>
@@ -103,20 +311,21 @@ function renderDesk(){
 
     <div class="panel">
       <h2>Production funnel</h2>
-      <p class="helptext" style="margin:-8px 0 14px;">${dials} dials · ${appts} set · ${pres} sits · ${sales} sales</p>
-      ${funnelRow('Dials', dials, dials, null)}
-      ${funnelRow('Appointments set', appts, dials, pct(appts,dials))}
-      ${funnelRow('Presentations', pres, dials, pct(pres,appts))}
-      ${funnelRow('Sales', sales, dials, pct(sales,pres))}
-      <p class="helptext">${pct(sales,dials)} of dials became a sale.</p>
+      <p class="helptext" style="margin:-8px 0 14px;">${funnel.dials} dials · ${funnel.appointments} set · ${funnel.presentations} sits · ${funnel.sales} sales (${fmtDateShort(range.from)}–${fmtDateShort(range.to)})</p>
+      ${funnelRow('Dials', funnel.dials, funnel.dials, null)}
+      ${funnelRow('Appointments set', funnel.appointments, funnel.dials, pct(funnel.appointments,funnel.dials))}
+      ${funnelRow('Presentations', funnel.presentations, funnel.dials, pct(funnel.presentations,funnel.appointments))}
+      ${funnelRow('Sales', funnel.sales, funnel.dials, pct(funnel.sales,funnel.presentations))}
+      <p class="helptext">${pct(funnel.sales,funnel.dials)} of dials became a sale.</p>
 
       <div class="goal-grid">
-        ${goalCell('Dials', BASE.goals.dials)}
-        ${goalCell('Appts', BASE.goals.appointments)}
-        ${goalCell('Sits', BASE.goals.sits)}
-        ${goalCell('Sales', BASE.goals.sales)}
-        ${goalCell('FYC', BASE.goals.fyc, true)}
+        ${goalCell('Dials', GOALS.dials)}
+        ${goalCell('Appts', GOALS.appointments)}
+        ${goalCell('Sits', GOALS.sits)}
+        ${goalCell('Sales', GOALS.sales)}
+        ${goalCell('FYC', GOALS.fyc, true)}
       </div>
+      <p class="helptext" style="margin-top:10px;">This month vs. a sample goal — unaffected by the date filter above.</p>
     </div>
 
     <div class="panel">
@@ -127,23 +336,25 @@ function renderDesk(){
 
     <div class="panel">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;"><h2 style="margin:0;">Recent cases</h2><a href="#" onclick="go('book');return false;" style="font-size:.85rem; font-weight:700; color:var(--maroon); text-decoration:none;">Open book</a></div>
-      ${BASE.cases.map(caseRow).join('')}
+      ${recent.map(caseRow).join('')}
     </div>
 
     <div class="panel">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;"><h2 style="margin:0;">Where the money goes</h2><a href="#" onclick="go('costs');return false;" style="font-size:.85rem; font-weight:700; color:var(--maroon); text-decoration:none;">All costs</a></div>
-      ${donutBlock()}
+      ${costLines.length ? donutBlock(costLines) : '<p class="helptext">No costs logged in this range.</p>'}
     </div>
   `;
 
-  renderNetChart();
-  renderDonut('donutCanvas');
+  wireDateFilter('desk', renderDesk);
+  document.getElementById('addClientBtn').onclick = openAddClientModal;
+  renderNetChart(monthlyStats(6).map(m=>m.net), monthlyStats(6).map(m=>m.label));
+  if (costLines.length) renderDonut('donutCanvas', costLines);
 }
 
 function funnelRow(label, value, total, conv){
   return `<div class="funnel-row">
     <div class="row-top"><span>${label}</span><span>${value}${conv ? ` <span class="conv">· ${conv} conv</span>`:''}</span></div>
-    <div class="bar-track"><div class="bar-fill" style="width:${total ? (value/total*100) : 0}%"></div></div>
+    <div class="bar-track"><div class="bar-fill" style="width:${total ? Math.min(100,(value/total*100)) : 0}%"></div></div>
   </div>`;
 }
 function goalCell(label, [have, target], isMoney){
@@ -158,103 +369,295 @@ function caseRow(c){
   const tagClass = c.status === 'issued' ? 'active-pol' : c.status === 'lapsed' ? 'lapsed' : 'pending';
   const tagLabel = c.status === 'issued' ? 'Issued — paid' : c.status === 'lapsed' ? 'Lapsed' : 'Pending';
   return `<div class="case-card">
-    <div><div class="case-name">${c.name}</div><div class="case-sub">${c.product} · ${c.carrier} · ${c.issued}</div></div>
+    <div><button class="case-name-link" onclick="openClientDetail('${c.id}')">${c.name}</button><div class="case-sub">${c.product} · ${c.carrier} · ${fmtDateShort(c.dateSubmitted)}</div></div>
     <div class="case-right">
-      <div class="case-amount">${fmt(c.status === 'pending' ? c.ap : c.monthly*12)}</div>
-      <div style="margin-top:4px;"><span class="tag ${tagClass}">${tagLabel}</span>${c.chargeback ? ` <span class="helptext" style="color:var(--red);">−${fmt(c.chargeback)} CB</span>`:''}</div>
+      <div class="case-amount">${fmt(c.status === 'pending' ? annualPremium(c) : c.monthlyPremium*12)}</div>
+      <div style="margin-top:4px;"><span class="tag ${tagClass}">${tagLabel}</span>${c.chargebackAmount ? ` <span class="helptext" style="color:var(--red);">−${fmt(c.chargebackAmount)} CB</span>`:''}</div>
     </div>
   </div>`;
 }
-function donutBlock(){
-  const total = BASE.costs.reduce((s,c)=>s+c.amount,0);
+function donutBlock(costLines){
   return `<div class="donut-wrap">
     <div class="chart-box" style="width:180px; height:180px; flex-shrink:0;"><canvas id="donutCanvas"></canvas></div>
     <div class="donut-legend">
-      ${BASE.costs.map(c => `<div class="donut-legend-row"><span><span class="dot" style="background:${c.color}"></span>${c.label}</span><span>${fmt(c.amount)}</span></div>`).join('')}
+      ${costLines.map(c => `<div class="donut-legend-row"><span><span class="dot" style="background:${c.color}"></span>${c.cat}</span><span>${fmt(c.total)}</span></div>`).join('')}
     </div>
-  </div>
-  <p class="helptext" style="margin-top:14px;">Persistency on placed cases: 75% · $1,764 sitting in pending</p>`;
+  </div>`;
 }
 
-let netChart, donutChart;
-function renderNetChart(){
+let netChart, donutChart, activityChart;
+function renderNetChart(data, labels){
   const ctx = document.getElementById('netChart');
   if (!ctx) return;
   if (netChart) netChart.destroy();
-  netChart = new Chart(ctx, { type:'line', data:{ labels: BASE.netByMonth.labels, datasets:[{
-    data: BASE.netByMonth.data, borderColor:'#1B7A73', backgroundColor:'rgba(27,122,115,.15)',
+  netChart = new Chart(ctx, { type:'line', data:{ labels, datasets:[{
+    data, borderColor:'#1B7A73', backgroundColor:'rgba(27,122,115,.15)',
     fill:true, tension:.45, cubicInterpolationMode:'monotone', pointRadius:0,
   }]}, options:{ responsive:true, maintainAspectRatio:false,
     plugins:{ legend:{ display:false } },
     scales:{ x:{ ticks:{ color:getComputedStyle(document.body).color } }, y:{ ticks:{ color:getComputedStyle(document.body).color } } } } });
 }
-function renderDonut(id){
+function renderDonut(id, costLines){
   const ctx = document.getElementById(id);
   if (!ctx) return;
   if (donutChart) donutChart.destroy();
   donutChart = new Chart(ctx, { type:'doughnut', data:{
-    labels: BASE.costs.map(c=>c.label), datasets:[{ data: BASE.costs.map(c=>c.amount), backgroundColor: BASE.costs.map(c=>c.color) }]
+    labels: costLines.map(c=>c.cat), datasets:[{ data: costLines.map(c=>c.total), backgroundColor: costLines.map(c=>c.color) }]
   }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } }, cutout:'68%' } });
 }
 
-function bump(field, delta){
-  today[field] = Math.max(0, today[field] + delta);
-  saveToday(today);
-  document.getElementById('today-'+field).textContent = today[field];
-  renderDeskFunnelOnly();
+function monthBuckets(count){
+  const months = [];
+  const now = new Date();
+  for (let i = count-1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+    const start = toISO(d);
+    const end = toISO(new Date(now.getFullYear(), now.getMonth()-i+1, 0));
+    months.push({ label: d.toLocaleString(undefined,{month:'short', year: count>12?'2-digit':undefined}), start, end });
+  }
+  return months;
 }
-function renderDeskFunnelOnly(){
-  // cheap full re-render keeps funnel/goal math in sync without duplicating the formulas
-  renderDesk();
+function monthlyStats(count){
+  return monthBuckets(count).map(m => {
+    const act = sumActivity(activityInRange(m.start,m.end));
+    const gross = grossFYCInRange(m.start,m.end);
+    const cb = chargebacksInRange(m.start,m.end);
+    const cost = costsTotalInRange(m.start,m.end);
+    return { label:m.label, dials:act.dials, sales:act.sales, gross, cb, cost, net: gross-cb-cost };
+  });
+}
+
+/* ================= ADD CLIENT ================= */
+function openAddClientModal(){
+  openModal(`
+    <div class="modal-head"><h2>Add a client</h2><button class="modal-close" onclick="closeModal()">×</button></div>
+    <form id="addClientForm">
+      <div class="detail-grid">
+        <div class="full" style="grid-column:1/-1;"><label>Client Name</label><input required name="name" placeholder="Jordan Alvarez"></div>
+        <div><label>Email</label><input type="email" name="email" placeholder="jordan@example.com"></div>
+        <div><label>Phone</label><input name="phone" placeholder="(555) 555-0100"></div>
+        <div><label>Carrier</label><input required name="carrier" placeholder="e.g. North Star Life"></div>
+        <div><label>Product</label><input required name="product" placeholder="e.g. Term 20"></div>
+        <div><label>Monthly Premium ($)</label><input required type="number" step="0.01" name="premium" placeholder="150"></div>
+        <div><label>Status</label><select name="status"><option value="issued">Issued — paid</option><option value="pending">Pending</option></select></div>
+        <div><label>Lead Vendor</label><input name="leadVendor" placeholder="e.g. Facebook Leads"></div>
+        <div><label>Lead Type</label><input name="leadType" placeholder="e.g. Final Expense"></div>
+        <div class="full" style="grid-column:1/-1;"><label>Date Submitted</label><input required type="date" name="dateSubmitted" value="${todayISO()}"></div>
+        <div class="full" style="grid-column:1/-1;"><label>Notes</label><input name="notes" placeholder="Optional"></div>
+      </div>
+      <div class="modal-actions"><button class="primary" type="submit">Add Client</button><button class="ghost" type="button" onclick="closeModal()">Cancel</button></div>
+    </form>
+  `);
+  document.getElementById('addClientForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const status = f.get('status');
+    const dateSubmitted = f.get('dateSubmitted');
+    const monthlyPremium = Number(f.get('premium'));
+    const isPlaced = status === 'issued';
+    const approvedDate = isPlaced ? addDays(dateSubmitted,5) : null;
+    const issueDate = isPlaced ? addDays(dateSubmitted,9) : null;
+    const issuePaidFYC = isPlaced ? Math.round(monthlyPremium*12*0.75) : 0;
+    store.clients.unshift({
+      id: uid('c'), name: f.get('name'), email: f.get('email')||'', phone: f.get('phone')||'',
+      carrier: f.get('carrier'), product: f.get('product'),
+      policyNumber: isPlaced ? `NEW-${Math.floor(1000+Math.random()*9000)}` : null,
+      faceAmount: Math.round(monthlyPremium*12*18), monthlyPremium, status,
+      leadVendor: f.get('leadVendor')||'', leadType: f.get('leadType')||'',
+      dateSubmitted, approvedDate, issueDate, issuePaidFYC,
+      chargebackAmount: 0, chargebackDate: null, notes: f.get('notes')||'',
+    });
+    saveStore();
+    closeModal();
+    renderCurrentPage();
+  });
+}
+
+/* ================= CLIENT DETAIL ================= */
+function openClientDetail(id){
+  const c = store.clients.find(x => x.id === id);
+  if (!c) return;
+  const tag = c.status === 'issued' ? {cls:'active-pol', label:'Issued — paid'} : c.status === 'lapsed' ? {cls:'lapsed', label:'Lapsed'} : {cls:'pending', label:'Pending'};
+  openModal(`
+    <div class="modal-head"><h2>${c.name}</h2><button class="modal-close" onclick="closeModal()">×</button></div>
+    <p><span class="tag ${tag.cls}">${tag.label}</span>${c.chargebackAmount ? ` <span class="helptext" style="color:var(--red); font-weight:700;">−${fmt(c.chargebackAmount)} charged back ${fmtDate(c.chargebackDate)}</span>` : ''}</p>
+    <div class="detail-grid">
+      <div class="detail-item"><div class="dlabel">Email</div><div class="dvalue">${c.email||'—'}</div></div>
+      <div class="detail-item"><div class="dlabel">Phone</div><div class="dvalue">${c.phone||'—'}</div></div>
+      <div class="detail-item"><div class="dlabel">Carrier</div><div class="dvalue">${c.carrier}</div></div>
+      <div class="detail-item"><div class="dlabel">Product</div><div class="dvalue">${c.product}</div></div>
+      <div class="detail-item"><div class="dlabel">Policy Number</div><div class="dvalue">${c.policyNumber||'—'}</div></div>
+      <div class="detail-item"><div class="dlabel">Coverage Amount</div><div class="dvalue">${fmt(c.faceAmount)}</div></div>
+      <div class="detail-item"><div class="dlabel">Lead Vendor</div><div class="dvalue">${c.leadVendor||'—'}</div></div>
+      <div class="detail-item"><div class="dlabel">Lead Type</div><div class="dvalue">${c.leadType||'—'}</div></div>
+      <div class="detail-item"><div class="dlabel">Monthly Premium</div><div class="dvalue">${fmt(c.monthlyPremium)}</div></div>
+      <div class="detail-item"><div class="dlabel">Annual Premium</div><div class="dvalue">${fmt(annualPremium(c))}</div></div>
+      <div class="detail-item"><div class="dlabel">Date Submitted</div><div class="dvalue">${fmtDate(c.dateSubmitted)}</div></div>
+      <div class="detail-item"><div class="dlabel">Approved Date</div><div class="dvalue">${fmtDate(c.approvedDate)}</div></div>
+      <div class="detail-item"><div class="dlabel">Issue / Paid Date</div><div class="dvalue">${fmtDate(c.issueDate)}</div></div>
+      <div class="detail-item"><div class="dlabel">Issue Paid FYC</div><div class="dvalue">${fmt(c.issuePaidFYC)}</div></div>
+    </div>
+    <label>Notes</label>
+    <textarea id="clientNotes" rows="3" style="width:100%; padding:9px 11px; border-radius:10px; border:1.5px solid var(--line); background:var(--cream); color:var(--ink); font-family:'Inter'; font-size:.9rem;">${c.notes||''}</textarea>
+    <div class="modal-actions">
+      <button class="ghost" type="button" id="saveNotesBtn">Save notes</button>
+      ${c.status === 'issued' ? `<button class="danger" type="button" id="chargebackBtn">Chargeback</button>` : ''}
+      <button class="ghost" type="button" onclick="closeModal()">Close</button>
+    </div>
+  `, { wide: true });
+  document.getElementById('saveNotesBtn').onclick = () => {
+    c.notes = document.getElementById('clientNotes').value;
+    saveStore();
+    say("Notes saved.");
+    closeModal();
+  };
+  const cbBtn = document.getElementById('chargebackBtn');
+  if (cbBtn) cbBtn.onclick = () => {
+    if (!confirm(`Charge back the full ${fmt(c.issuePaidFYC)} commission on ${c.name}'s policy? This will mark the case as lapsed.`)) return;
+    c.status = 'lapsed';
+    c.chargebackAmount = c.issuePaidFYC;
+    c.chargebackDate = todayISO();
+    saveStore();
+    say("Chargeback logged.");
+    closeModal();
+    renderCurrentPage();
+  };
 }
 
 /* ================= ACTIVITY ================= */
 function renderActivity(){
+  const range = computeDateRange(dateFilterState.activity.key, dateFilterState.activity.from, dateFilterState.activity.to);
+  const t = todayRow();
+  const last7 = [];
+  for (let i = 6; i >= 0; i--) {
+    const iso = daysAgoISO(i);
+    const row = store.activity.find(r => r.date === iso) || { date: iso, dials:0, appointments:0, presentations:0, sales:0 };
+    last7.push(row);
+  }
+  const rangeRows = activityInRange(range.from, range.to);
+  const totals = sumActivity(rangeRows);
+
   mainInner.innerHTML = `
-    <div class="page-header"><div><div class="page-eyebrow">Activity</div><h1>Daily production log</h1></div></div>
+    <div class="page-header"><div><div class="page-eyebrow">Activity</div><h1>Daily production log</h1></div>
+    <button class="primary" type="button" id="logDayBtn">+ Log a day</button></div>
     <div class="panel">
       <h2>Today</h2>
       <div class="stepper-grid">
         ${['dials','appointments','presentations','sales'].map(f => `
           <div class="stepper-box">
             <button class="stepper-btn" onclick="bump('${f}',-1)">−</button>
-            <div class="count-wrap"><span class="count" id="today-${f}">${today[f]}</span><span class="count-label">${f}</span></div>
+            <div class="count-wrap"><span class="count" id="today-${f}">${t[f]}</span><span class="count-label">${f}</span></div>
             <button class="stepper-btn" onclick="bump('${f}',1)">+</button>
           </div>`).join('')}
       </div>
     </div>
+
     <div class="panel">
-      <h2>Last 5 days (sample)</h2>
+      <h2>Production trend</h2>
+      ${dateFilterHTML('activity')}
+      <p class="helptext" style="margin:-8px 0 14px;">${totals.dials} dials · ${totals.appointments} appts · ${totals.presentations} sits · ${totals.sales} sales in this range</p>
+      <div class="chart-box"><canvas id="activityChart"></canvas></div>
+    </div>
+
+    <div class="panel">
+      <h2>Last 7 days</h2>
       <table><thead><tr><th>Date</th><th>Dials</th><th>Appts</th><th>Sits</th><th>Sales</th></tr></thead>
-      <tbody>
-        <tr><td>Sep 18</td><td>88</td><td>4</td><td>3</td><td>1</td></tr>
-        <tr><td>Sep 17</td><td>76</td><td>3</td><td>2</td><td>0</td></tr>
-        <tr><td>Sep 16</td><td>91</td><td>5</td><td>4</td><td>2</td></tr>
-        <tr><td>Sep 15</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
-        <tr><td>Sep 14</td><td>82</td><td>3</td><td>3</td><td>1</td></tr>
-      </tbody></table>
+      <tbody>${last7.slice().reverse().map(r=>`<tr><td>${fmtDateShort(r.date)}</td><td>${r.dials}</td><td>${r.appointments}</td><td>${r.presentations}</td><td>${r.sales}</td></tr>`).join('')}</tbody></table>
     </div>
   `;
+  wireDateFilter('activity', renderActivity);
+  document.getElementById('logDayBtn').onclick = openLogDayModal;
+  renderActivityChart(range.from, range.to);
+}
+function renderActivityChart(from, to){
+  const ctx = document.getElementById('activityChart');
+  if (!ctx) return;
+  if (activityChart) activityChart.destroy();
+  const days = [];
+  let cursor = from;
+  let guard = 0;
+  while (cursor <= to && guard < 400) { days.push(cursor); cursor = addDays(cursor,1); guard++; }
+  const byDate = {};
+  store.activity.forEach(r => byDate[r.date] = r);
+  const series = (field) => days.map(d => (byDate[d] ? byDate[d][field] : 0));
+  const ink = getComputedStyle(document.body).color;
+  activityChart = new Chart(ctx, { type:'line', data:{
+    labels: days.map(fmtDateShort),
+    datasets: [
+      { label:'Dials', data: series('dials'), borderColor:'#A63D40', backgroundColor:'transparent', tension:.35, pointRadius:0, borderWidth:2, yAxisID:'yDials' },
+      { label:'Appointments', data: series('appointments'), borderColor:'#D4A373', backgroundColor:'transparent', tension:.35, pointRadius:0, borderWidth:2, yAxisID:'ySmall' },
+      { label:'Presentations', data: series('presentations'), borderColor:'#7C9473', backgroundColor:'transparent', tension:.35, pointRadius:0, borderWidth:2, yAxisID:'ySmall' },
+      { label:'Sales', data: series('sales'), borderColor:'#1B7A73', backgroundColor:'transparent', tension:.35, pointRadius:0, borderWidth:2.5, yAxisID:'ySmall' },
+    ],
+  }, options:{ responsive:true, maintainAspectRatio:false,
+    plugins:{ legend:{ position:'bottom', labels:{ color:ink, boxWidth:12 } } },
+    scales:{
+      x:{ ticks:{ color:ink, maxTicksLimit:10 } },
+      yDials:{ position:'left', ticks:{ color:ink }, title:{ display:true, text:'Dials', color:ink } },
+      ySmall:{ position:'right', ticks:{ color:ink }, grid:{ drawOnChartArea:false }, title:{ display:true, text:'Appts / Sits / Sales', color:ink } },
+    } } });
+}
+
+/* ================= LOG A DAY ================= */
+function openLogDayModal(){
+  openModal(`
+    <div class="modal-head"><h2>Log a day</h2><button class="modal-close" onclick="closeModal()">×</button></div>
+    <form id="logDayForm">
+      <div class="detail-grid">
+        <div class="full" style="grid-column:1/-1;"><label>Date</label><input required type="date" name="date" value="${todayISO()}" max="${todayISO()}"></div>
+        <div><label>Dials</label><input required type="number" min="0" name="dials" value="0"></div>
+        <div><label>Appointments</label><input required type="number" min="0" name="appointments" value="0"></div>
+        <div><label>Presentations</label><input required type="number" min="0" name="presentations" value="0"></div>
+        <div><label>Sales</label><input required type="number" min="0" name="sales" value="0"></div>
+      </div>
+      <div class="modal-actions"><button class="primary" type="submit">Save Day</button><button class="ghost" type="button" onclick="closeModal()">Cancel</button></div>
+    </form>
+  `);
+  document.getElementById('logDayForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const date = f.get('date');
+    const values = { dials:Number(f.get('dials')), appointments:Number(f.get('appointments')), presentations:Number(f.get('presentations')), sales:Number(f.get('sales')) };
+    const existing = store.activity.find(r => r.date === date);
+    if (existing) Object.assign(existing, values);
+    else store.activity.push({ date, ...values });
+    saveStore();
+    closeModal();
+    say("Day logged.");
+    renderCurrentPage();
+  });
 }
 
 /* ================= BOOK ================= */
 function renderBook(filterText, statusFilter){
   filterText = (filterText||'').toLowerCase();
-  const filtered = BASE.cases.filter(c =>
-    (!filterText || c.name.toLowerCase().includes(filterText) || c.email.includes(filterText)) &&
-    (!statusFilter || c.status === statusFilter)
-  );
+  const range = computeDateRange(dateFilterState.book.key, dateFilterState.book.from, dateFilterState.book.to);
+  const inRange = clientsSubmittedInRange(range.from, range.to);
+  const placedAll = store.clients.filter(c=>c.status==='issued'||c.status==='lapsed');
+  const lapsedCount = store.clients.filter(c=>c.status==='lapsed').length;
+  const persistency = (placedAll.length) ? Math.round((placedAll.length-lapsedCount)/placedAll.length*100) : 100;
+  const st = statement(range.from, range.to);
+
+  const filtered = inRange.filter(c => {
+    const matchesText = !filterText || c.name.toLowerCase().includes(filterText) || (c.email||'').includes(filterText);
+    const matchesStatus = !statusFilter || c.status === statusFilter;
+    return matchesText && matchesStatus;
+  }).sort((a,b)=>new Date(b.dateSubmitted)-new Date(a.dateSubmitted));
+
   mainInner.innerHTML = `
     <div class="page-header"><div><div class="page-eyebrow">Book</div><h1>Clients &amp; cases</h1></div>
-    <a class="primary" href="#" onclick="return false;">+ Add client</a></div>
+    <button class="primary" type="button" id="addClientBtn2">+ Add client</button></div>
+
+    ${dateFilterHTML('book')}
+
     <div class="grid" style="margin-bottom:18px;">
-      <div class="card"><div class="stat-label">Paid FYC</div><div class="stat-value">${fmt(BASE.grossCommission)}</div></div>
-      <div class="card"><div class="stat-label">In Pipeline</div><div class="stat-value" style="color:var(--gold)">${fmt(BASE.pendingPremium)}</div></div>
-      <div class="card"><div class="stat-label">Chargebacks</div><div class="stat-value neg">−${fmt(BASE.chargebacks)}</div></div>
-      <div class="card"><div class="stat-label">Persistency</div><div class="stat-value">75%</div></div>
+      <div class="card"><div class="stat-label">Paid FYC</div><div class="stat-value">${fmt(st.gross)}</div></div>
+      <div class="card"><div class="stat-label">In Pipeline</div><div class="stat-value" style="color:var(--gold)">${fmt(st.pending)}</div></div>
+      <div class="card"><div class="stat-label">Chargebacks</div><div class="stat-value neg">−${fmt(st.cb)}</div></div>
+      <div class="card"><div class="stat-label">Persistency</div><div class="stat-value">${persistency}%</div></div>
     </div>
     <div class="book-filters">
-      <input id="bookSearch" placeholder="Search name, email, phone" value="${filterText}">
+      <input id="bookSearch" placeholder="Search name or email" value="${filterText}">
       <select id="bookStatus">
         <option value="">All statuses</option>
         <option value="issued" ${statusFilter==='issued'?'selected':''}>Issued</option>
@@ -265,64 +668,194 @@ function renderBook(filterText, statusFilter){
     <div>${filtered.map(c => `
       <div class="case-card">
         <div>
-          <div class="case-name">${c.name}</div>
-          <div class="case-sub">${c.email} · ${c.phone}</div>
+          <button class="case-name-link" onclick="openClientDetail('${c.id}')">${c.name}</button>
+          <div class="case-sub">${c.email||'—'} · ${c.phone||'—'}</div>
           <div class="case-sub">${c.carrier} · ${c.product}</div>
-          <div class="case-sub">${c.policyNumber}</div>
+          <div class="case-sub">${c.policyNumber || '—'}</div>
         </div>
         <div class="case-right">
-          <div class="case-sub">${c.issued}</div>
-          <div class="case-amount">${fmt(c.monthly)}/mo</div>
-          <div class="case-sub">AP ${fmt(c.ap)}</div>
-          <div style="margin-top:4px;"><span class="tag ${c.status==='issued'?'active-pol':c.status==='lapsed'?'lapsed':'pending'}">${c.status==='issued'?'Issued':c.status==='lapsed'?'Lapsed':'Pending'}</span>${c.chargeback?` <span class="helptext" style="color:var(--red);">−${fmt(c.chargeback)} CB</span>`:''}</div>
+          <div class="case-sub">${fmtDateShort(c.dateSubmitted)}</div>
+          <div class="case-amount">${fmt(c.monthlyPremium)}/mo</div>
+          <div class="case-sub">AP ${fmt(annualPremium(c))}</div>
+          <div style="margin-top:4px;"><span class="tag ${c.status==='issued'?'active-pol':c.status==='lapsed'?'lapsed':'pending'}">${c.status==='issued'?'Issued':c.status==='lapsed'?'Lapsed':'Pending'}</span>${c.chargebackAmount?` <span class="helptext" style="color:var(--red);">−${fmt(c.chargebackAmount)} CB</span>`:''}</div>
         </div>
-      </div>`).join('') || '<p class="helptext">No cases match.</p>'}
+      </div>`).join('') || '<p class="helptext">No cases match in this range.</p>'}
     </div>
   `;
+  wireDateFilter('book', () => renderBook(filterText, statusFilter));
+  document.getElementById('addClientBtn2').onclick = openAddClientModal;
   document.getElementById('bookSearch').oninput = (e) => renderBook(e.target.value, statusFilter);
   document.getElementById('bookStatus').onchange = (e) => renderBook(filterText, e.target.value);
 }
 
 /* ================= COSTS ================= */
 function renderCosts(){
+  const range = computeDateRange(dateFilterState.costs.key, dateFilterState.costs.from, dateFilterState.costs.to);
+  const rangeCosts = costsInRange(range.from, range.to);
+  const costLines = COST_CATEGORIES.map(c => ({ cat:c.key, color:c.color, total: rangeCosts.filter(e=>e.category===c.key).reduce((s,e)=>s+e.amount,0) })).filter(c=>c.total>0);
+
   mainInner.innerHTML = `
-    <div class="page-header"><div><div class="page-eyebrow">Costs</div><h1>Where the money goes</h1></div></div>
-    <div class="panel">${donutBlock()}</div>
+    <div class="page-header"><div><div class="page-eyebrow">Costs</div><h1>Where the money goes</h1></div>
+    <button class="primary" type="button" id="addCostBtn">+ Add cost</button></div>
+    ${dateFilterHTML('costs')}
+    ${costLines.length ? `<div class="panel">${donutBlock(costLines)}</div>` : '<p class="helptext">No costs logged in this range.</p>'}
     <div class="panel">
       <h2>All cost lines</h2>
-      <table><thead><tr><th>Category</th><th>Amount</th></tr></thead>
-      <tbody>${BASE.costs.map(c=>`<tr><td>${c.label}</td><td>${fmt(c.amount)}</td></tr>`).join('')}</tbody></table>
+      <table><thead><tr><th>Category</th><th>Description</th><th>Amount</th><th>Date</th></tr></thead>
+      <tbody>${[...rangeCosts].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(e=>`<tr><td>${e.category}</td><td>${e.description||''}</td><td>${fmt(e.amount)}</td><td>${fmtDateShort(e.date)}</td></tr>`).join('') || '<tr><td colspan="4" class="helptext">No costs logged in this range.</td></tr>'}</tbody></table>
     </div>
   `;
-  renderDonut('donutCanvas');
+  wireDateFilter('costs', renderCosts);
+  document.getElementById('addCostBtn').onclick = openAddCostModal;
+  if (costLines.length) renderDonut('donutCanvas', costLines);
+}
+function openAddCostModal(){
+  openModal(`
+    <div class="modal-head"><h2>Add cost</h2><button class="modal-close" onclick="closeModal()">×</button></div>
+    <form id="addCostForm">
+      <div class="detail-grid">
+        <div><label>Category</label><select name="category">${COST_CATEGORIES.map(c=>`<option value="${c.key}">${c.key}</option>`).join('')}</select></div>
+        <div><label>Amount ($)</label><input required type="number" step="0.01" name="amount" placeholder="150"></div>
+        <div class="full" style="grid-column:1/-1;"><label>Date</label><input required type="date" name="date" value="${todayISO()}"></div>
+        <div class="full" style="grid-column:1/-1;"><label>Description</label><input name="description" placeholder="Optional"></div>
+      </div>
+      <div class="modal-actions"><button class="primary" type="submit">Add Cost</button><button class="ghost" type="button" onclick="closeModal()">Cancel</button></div>
+    </form>
+  `);
+  document.getElementById('addCostForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    store.costs.unshift({ id: uid('e'), date: f.get('date'), amount: Number(f.get('amount')), category: f.get('category'), description: f.get('description')||'' });
+    saveStore();
+    closeModal();
+    say("Cost logged.");
+    renderCurrentPage();
+  });
 }
 
 /* ================= PROFIT ================= */
+let trendMonths = 6;
 function renderProfit(){
+  const range = computeDateRange(dateFilterState.profit.key, dateFilterState.profit.from, dateFilterState.profit.to);
+  const st = statement(range.from, range.to);
+  const rangeActivity = sumActivity(activityInRange(range.from, range.to));
+  const placedRange = placedInRange(range.from, range.to);
+
+  const costPerSale = rangeActivity.sales ? st.costsTotal/rangeActivity.sales : 0;
+  const commissionPerDial = rangeActivity.dials ? st.gross/rangeActivity.dials : 0;
+  const costPerAppointment = rangeActivity.appointments ? st.costsTotal/rangeActivity.appointments : 0;
+  const costPerDial = rangeActivity.dials ? st.costsTotal/rangeActivity.dials : 0;
+  const avgCaseFYC = placedRange.length ? st.gross/placedRange.length : 0;
+  const avgAnnualPremium = placedRange.length ? placedRange.reduce((s,c)=>s+annualPremium(c),0)/placedRange.length : 0;
+
+  // Health of the book — whole-book, not limited to the selected range
+  const allGross = grossFYCInRange('2000-01-01', todayISO());
+  const allCB = chargebacksInRange('2000-01-01', todayISO());
+  const allCosts = costsTotalInRange('2000-01-01', todayISO());
+  const allNet = (allGross - allCB) - allCosts;
+  const profitMargin = allGross ? (allNet/allGross*100) : 0;
+  const chargebackRatio = allGross ? (allCB/allGross*100) : 0;
+  const oneYearAgo = daysAgoISO(365);
+  const matured = store.clients.filter(c => (c.status==='issued'||c.status==='lapsed') && c.issueDate <= oneYearAgo);
+  const maturedRetained = matured.filter(c => c.status==='issued').length;
+  const persistency = matured.length ? Math.round(maturedRetained/matured.length*100) : 100;
+
+  const stats = monthlyStats(trendMonths);
+
   mainInner.innerHTML = `
-    <div class="page-header"><div><div class="page-eyebrow">Profit</div><h1>Net profit, month by month</h1></div></div>
-    <div class="grid" style="margin-bottom:18px;">
-      <div class="card"><div class="stat-label">Net Profit YTD</div><div class="stat-value pos">${fmt(BASE.netProfit)}</div></div>
-      <div class="card"><div class="stat-label">Gross Commission</div><div class="stat-value">${fmt(BASE.grossCommission)}</div></div>
-      <div class="card"><div class="stat-label">Chargebacks</div><div class="stat-value neg">−${fmt(BASE.chargebacks)}</div></div>
-      <div class="card"><div class="stat-label">Operating Costs</div><div class="stat-value">${fmt(BASE.operatingCosts)}</div></div>
-    </div>
+    <div class="page-header"><div><div class="page-eyebrow">Profit</div><h1>Financial reporting</h1></div></div>
+    ${dateFilterHTML('profit')}
+
     <div class="panel">
-      <h2>Net by month</h2>
+      <h2>Statement</h2>
+      <p class="helptext" style="margin:-8px 0 14px;">${fmtDateShort(range.from)} – ${fmtDateShort(range.to)}</p>
+      <table class="statement-table">
+        <tbody>
+          <tr><td>Gross First-Year Commission</td><td>${fmt(st.gross)}</td></tr>
+          <tr><td>Chargebacks</td><td class="neg">−${fmt(st.cb)}</td></tr>
+          <tr class="statement-total"><td>Net Commission</td><td>${fmt(st.netCommission)}</td></tr>
+          <tr><td>Operating Costs</td><td class="neg">−${fmt(st.costsTotal)}</td></tr>
+          <tr class="statement-total"><td>Net Profit</td><td class="${st.netProfit>=0?'pos':'neg'}">${fmt(st.netProfit)}</td></tr>
+          <tr><td>Pending (not yet paid)</td><td style="color:var(--gold);">${fmt(st.pending)}</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="panel">
+      <div class="trend-controls">
+        <h2 style="margin:0;">Net by month</h2>
+        <select id="trendRangeSelect" style="max-width:160px;">
+          <option value="3" ${trendMonths===3?'selected':''}>Last 3 months</option>
+          <option value="6" ${trendMonths===6?'selected':''}>Last 6 months</option>
+          <option value="12" ${trendMonths===12?'selected':''}>Last 12 months</option>
+          <option value="ytd" ${trendMonths==='ytd'?'selected':''}>Year to date</option>
+        </select>
+      </div>
       <div class="chart-box"><canvas id="netChart"></canvas></div>
     </div>
+
+    <div class="panel">
+      <h2>Unit economics</h2>
+      <p class="helptext" style="margin:-8px 0 14px;">${fmtDateShort(range.from)} – ${fmtDateShort(range.to)}</p>
+      <div class="metrics-grid">
+        <div class="metric-cell"><div class="mlabel">Cost per Sale</div><div class="mvalue">${fmt(costPerSale)}</div></div>
+        <div class="metric-cell"><div class="mlabel">Commission per Dial</div><div class="mvalue">${fmtMoney2(commissionPerDial)}</div></div>
+        <div class="metric-cell"><div class="mlabel">Cost per Appointment</div><div class="mvalue">${fmt(costPerAppointment)}</div></div>
+        <div class="metric-cell"><div class="mlabel">Cost per Dial</div><div class="mvalue">${fmtMoney2(costPerDial)}</div></div>
+        <div class="metric-cell"><div class="mlabel">Average Case FYC</div><div class="mvalue">${fmt(avgCaseFYC)}</div></div>
+        <div class="metric-cell"><div class="mlabel">Average Annual Premium</div><div class="mvalue">${fmt(avgAnnualPremium)}</div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Health of the book</h2>
+      <p class="helptext" style="margin:-8px 0 14px;">Whole book, all time — not affected by the date filter above</p>
+      <table class="statement-table">
+        <tbody>
+          <tr><td>Profit margin on gross FYC</td><td>${profitMargin.toFixed(1)}%</td></tr>
+          <tr><td>Chargeback ratio</td><td class="${chargebackRatio>10?'neg':''}">${chargebackRatio.toFixed(1)}%</td></tr>
+          <tr><td>Persistency (12+ months on the books)</td><td class="pos">${persistency}%</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="panel">
+      <h2>Month over month</h2>
+      <table><thead><tr><th>Month</th><th>Dials</th><th>Sales</th><th>Gross Commission</th><th>Chargebacks</th><th>Costs</th><th>Net Profit</th></tr></thead>
+      <tbody>${stats.slice().reverse().map(m=>`<tr><td>${m.label}</td><td>${m.dials}</td><td>${m.sales}</td><td>${fmt(m.gross)}</td><td class="neg">−${fmt(m.cb)}</td><td>${fmt(m.cost)}</td><td class="${m.net>=0?'pos':'neg'}">${fmt(m.net)}</td></tr>`).join('')}</tbody></table>
+    </div>
   `;
-  renderNetChart();
+  wireDateFilter('profit', renderProfit);
+  document.getElementById('trendRangeSelect').onchange = (e) => {
+    const v = e.target.value;
+    trendMonths = v === 'ytd' ? (new Date().getMonth()+1) : Number(v);
+    renderProfit();
+  };
+  renderNetChart(stats.map(m=>m.net), stats.map(m=>m.label));
 }
+
+/* ---- Bob's speech bubble, wired once per page mount ---- */
+let say = () => {};
 
 /* ---- nav ---- */
 const PAGES = { desk: renderDesk, activity: renderActivity, book: () => renderBook('',''), costs: renderCosts, profit: renderProfit };
+let currentPage = 'desk';
+function renderCurrentPage(){ PAGES[currentPage](); }
 function go(page){
+  currentPage = page;
   document.querySelectorAll('#sidebarNav button').forEach(b => b.classList.toggle('active', b.dataset.page === page));
   PAGES[page]();
 }
 document.querySelectorAll('#sidebarNav button').forEach(b => b.onclick = () => go(b.dataset.page));
 
+document.getElementById('resetDemoBtn').onclick = () => {
+  if (!confirm('Reset the sample book back to its original demo data? This clears everything you added in this browser.')) return;
+  localStorage.removeItem(STORE_KEY);
+  store = loadStore();
+  renderCurrentPage();
+};
+
+say = wireMascot('navMascot', ["Hi, I'm Bob!", "This is a sample book — try the real thing!", "Edits here stay in your browser."]);
 go('desk');
 </script>
 </body>
