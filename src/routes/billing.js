@@ -40,6 +40,10 @@ router.post('/checkout-session', asyncHandler(async (req, res) => {
     cancel_url: `${origin}/app.html?checkout=cancelled`,
     metadata: { producerId: producer.id, tier },
     subscription_data: { metadata: { producerId: producer.id, tier } },
+    // Shows an "Add promotion code" field on the Stripe-hosted checkout page.
+    // Codes themselves are created and managed entirely in the Stripe Dashboard —
+    // nothing to store or validate on our side.
+    allow_promotion_codes: true,
   });
 
   res.json({ url: session.url });
