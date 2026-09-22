@@ -1,6 +1,7 @@
 const express = require('express');
 const prisma = require('../lib/db');
 const asyncHandler = require('../middleware/asyncHandler');
+const { trialEndsAt } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -11,6 +12,8 @@ router.get('/', asyncHandler(async (req, res) => {
   if (!req.producerId) return res.json({ producer: null });
 
   const producer = await prisma.producer.findUnique({ where: { id: req.producerId } });
+  const endsAt = trialEndsAt(producer);
+  const trialExpired = !['active', 'past_due'].includes(producer.subscriptionStatus) && new Date() >= endsAt;
   res.json({
     producer: {
       id: producer.id,
@@ -19,6 +22,8 @@ router.get('/', asyncHandler(async (req, res) => {
       agencyId: producer.agencyId,
       subscriptionTier: producer.subscriptionTier,
       subscriptionStatus: producer.subscriptionStatus,
+      trialEndsAt: endsAt.toISOString(),
+      trialExpired,
     },
   });
 }));

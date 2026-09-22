@@ -30,6 +30,25 @@ function requireProducer(req, res, next) {
   next();
 }
 
+const TRIAL_DAYS = 14;
+
+function trialEndsAt(producer) {
+  return new Date(producer.createdAt.getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
+}
+
+// Apply after requireProducer on any route that should stop working once a free trial
+// runs out and was never converted to a paid subscription. Deliberately NOT applied to
+// /api/me (needs to report trial status even when expired) or /api/billing (has to stay
+// reachable so an expired producer can still subscribe).
+function requireActiveOrTrial(req, res, next) {
+  const producer = req.producer;
+  const stillTrialing = new Date() < trialEndsAt(producer);
+  if (producer.subscriptionStatus === 'active' || producer.subscriptionStatus === 'past_due' || stillTrialing) {
+    return next();
+  }
+  return res.status(402).json({ error: 'Your 14-day trial has ended. Subscribe to keep using BOB.', trialExpired: true });
+}
+
 // Gates the internal admin dashboard to a short allowlist of emails set via the
 // ADMIN_EMAILS env var (comma-separated) — deliberately not a DB flag, so granting or
 // revoking admin access is a Render dashboard change, not a code/data change.
@@ -42,4 +61,6 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-module.exports = { requireAuth: asyncHandler(requireAuth), requireProducer, requireAdmin };
+module.exports = {
+  requireAuth: asyncHandler(requireAuth), requireProducer, requireAdmin, requireActiveOrTrial, trialEndsAt,
+};

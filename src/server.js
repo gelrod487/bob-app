@@ -4,7 +4,7 @@ const express = require('express');
 
 const { producerProfitability, agencyProfitability } = require('./lib/profitability');
 const prisma = require('./lib/db');
-const { requireAuth, requireProducer, requireAdmin } = require('./middleware/auth');
+const { requireAuth, requireProducer, requireAdmin, requireActiveOrTrial } = require('./middleware/auth');
 const handleStripeWebhook = require('./routes/billingWebhook');
 const asyncHandler = require('./middleware/asyncHandler');
 
@@ -23,20 +23,22 @@ app.use('/api', requireAuth);
 
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/me', require('./routes/me'));
-app.use('/api/clients', requireProducer, require('./routes/clients'));
-app.use('/api/policies', requireProducer, require('./routes/policies'));
-app.use('/api/commission-entries', requireProducer, require('./routes/commissionEntries'));
-app.use('/api/expenses', requireProducer, require('./routes/expenses'));
-app.use('/api/payment-reminders', requireProducer, require('./routes/paymentReminders'));
-app.use('/api/owner-draws', requireProducer, require('./routes/ownerDraws'));
-app.use('/api/import', requireProducer, require('./routes/import'));
+app.use('/api/clients', requireProducer, requireActiveOrTrial, require('./routes/clients'));
+app.use('/api/policies', requireProducer, requireActiveOrTrial, require('./routes/policies'));
+app.use('/api/commission-entries', requireProducer, requireActiveOrTrial, require('./routes/commissionEntries'));
+app.use('/api/expenses', requireProducer, requireActiveOrTrial, require('./routes/expenses'));
+app.use('/api/payment-reminders', requireProducer, requireActiveOrTrial, require('./routes/paymentReminders'));
+app.use('/api/owner-draws', requireProducer, requireActiveOrTrial, require('./routes/ownerDraws'));
+app.use('/api/import', requireProducer, requireActiveOrTrial, require('./routes/import'));
+// Deliberately no requireActiveOrTrial here — an expired producer must still be able to
+// reach checkout-session/portal-session to subscribe and lift their own gate.
 app.use('/api/billing', requireProducer, require('./routes/billing'));
-app.use('/api/activity', requireProducer, require('./routes/activity'));
-app.use('/api/goals', requireProducer, require('./routes/goals'));
+app.use('/api/activity', requireProducer, requireActiveOrTrial, require('./routes/activity'));
+app.use('/api/goals', requireProducer, requireActiveOrTrial, require('./routes/goals'));
 app.use('/api/admin', requireAdmin, require('./routes/admin'));
 
 // GET /api/dashboard — the numbers the mockup's dashboard tab needs, in one call.
-app.get('/api/dashboard', requireProducer, asyncHandler(async (req, res) => {
+app.get('/api/dashboard', requireProducer, requireActiveOrTrial, asyncHandler(async (req, res) => {
   const producer = await prisma.producer.findUnique({ where: { id: req.producerId } });
   if (!producer) return res.status(404).json({ error: 'Producer not found.' });
 

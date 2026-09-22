@@ -155,6 +155,10 @@ const PAGES = { desk: renderDesk, activity: renderActivity, book: () => renderBo
 let currentPage = 'desk';
 function renderCurrentPage(){ PAGES[currentPage](); }
 function go(page){
+  // A producer whose trial has run out (and never subscribed) can only reach the
+  // Subscribe page — every other tab calls an endpoint the backend now blocks with a 402
+  // (see requireActiveOrTrial in src/middleware/auth.js), so there's nothing for them there.
+  if (me.trialExpired && page !== 'subscribe') page = 'subscribe';
   currentPage = page;
   document.querySelectorAll('#sidebarNav button, .sidebar-footer button[data-page]').forEach(b => b.classList.toggle('active', b.dataset.page === page));
   PAGES[page]();
@@ -175,7 +179,7 @@ document.getElementById('logoutBtn').onclick = async () => { await supabaseClien
   statusPill.className = 'pill ' + me.subscriptionStatus;
 
   setTimeout(()=>say("Hi, I'm Bob!"), 900);
-  go('desk');
+  go(me.trialExpired ? 'subscribe' : 'desk');
 })();
 
 /* ================= DESK ================= */
@@ -1167,6 +1171,7 @@ async function renderProfit(){
 async function renderSubscribe(){
   mainInner.innerHTML = `
     <div class="page-header"><div><div class="page-eyebrow">Subscribe</div><h1>Your plan</h1></div></div>
+    ${me.trialExpired ? `<div class="panel" style="border-color:var(--maroon); margin-bottom:16px;"><p class="helptext" style="color:var(--maroon); font-weight:600;">Your 14-day free trial has ended. Subscribe below to keep using your book.</p></div>` : ''}
     <div class="panel">
       <p class="helptext">Current plan: <strong>${me.subscriptionTier === 'agency_owner' ? 'Agency' : 'Producer'}</strong> · Status: <span class="pill ${me.subscriptionStatus}">${me.subscriptionStatus}</span></p>
       <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:16px;">
