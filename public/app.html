@@ -1170,8 +1170,8 @@ async function renderSubscribe(){
     <div class="panel">
       <p class="helptext">Current plan: <strong>${me.subscriptionTier === 'agency_owner' ? 'Agency' : 'Producer'}</strong> · Status: <span class="pill ${me.subscriptionStatus}">${me.subscriptionStatus}</span></p>
       <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:16px;">
-        <button class="primary" id="subscribeIndividualBtn">Subscribe — Producer ($49/mo)</button>
-        <button class="primary" id="subscribeAgencyBtn">Subscribe — Agency ($129/mo)</button>
+        <button class="primary" id="subscribeIndividualBtn">Subscribe — Producer ($29/mo)</button>
+        <button class="primary" id="subscribeAgencyBtn">Subscribe — Agency ($79/mo)</button>
         <button class="ghost" id="manageBillingBtn" style="${me.subscriptionStatus==='active'?'':'display:none;'}">Manage Billing</button>
       </div>
       <div class="errortext" id="billingError"></div>
