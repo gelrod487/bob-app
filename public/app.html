@@ -1177,8 +1177,16 @@ async function renderProfit(){
 
 /* ================= SUBSCRIBE (billing) ================= */
 async function renderSubscribe(){
+  // A producer whose trial already ran out can only reach this page (see go()) — no way
+  // back to the app until they subscribe, so no back button for them. Anyone who still has
+  // trial time or an active subscription just clicked in on their own and should be able
+  // to leave again.
+  const canGoBack = !me.trialExpired;
   mainInner.innerHTML = `
-    <div class="page-header"><div><div class="page-eyebrow">Subscribe</div><h1>Your plan</h1></div></div>
+    <div class="page-header">
+      <div><div class="page-eyebrow">Subscribe</div><h1>Your plan</h1></div>
+      ${canGoBack ? `<button class="ghost" type="button" id="backToDeskBtn">← Back to Desk</button>` : ''}
+    </div>
     ${me.trialExpired ? `<div class="panel" style="border-color:var(--maroon); margin-bottom:16px;"><p class="helptext" style="color:var(--maroon); font-weight:600;">Your 14-day free trial has ended. Subscribe below to keep using your book.</p></div>` : ''}
     <div class="panel">
       <p class="helptext">Current plan: <strong>${me.subscriptionTier === 'agency_owner' ? 'Agency' : 'Producer'}</strong> · Status: <span class="pill ${me.subscriptionStatus}">${me.subscriptionStatus}</span></p>
@@ -1190,6 +1198,7 @@ async function renderSubscribe(){
       <div class="errortext" id="billingError"></div>
     </div>
   `;
+  if (canGoBack) document.getElementById('backToDeskBtn').onclick = () => go('desk');
   document.getElementById('subscribeIndividualBtn').onclick = () => startCheckout('individual');
   document.getElementById('subscribeAgencyBtn').onclick = () => startCheckout('agency_owner');
   document.getElementById('manageBillingBtn').onclick = async () => {
