@@ -35,6 +35,7 @@ app.use('/api/import', requireProducer, requireActiveOrTrial, require('./routes/
 app.use('/api/billing', requireProducer, require('./routes/billing'));
 app.use('/api/activity', requireProducer, requireActiveOrTrial, require('./routes/activity'));
 app.use('/api/goals', requireProducer, requireActiveOrTrial, require('./routes/goals'));
+app.use('/api/team', requireProducer, requireActiveOrTrial, require('./routes/team'));
 app.use('/api/admin', requireAdmin, require('./routes/admin'));
 
 // GET /api/dashboard — the numbers the mockup's dashboard tab needs, in one call.
