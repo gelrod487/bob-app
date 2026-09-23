@@ -216,7 +216,7 @@ footer.home-footer a{display:block; color:var(--ink-soft); text-decoration:none;
      zero width here, since .sidebar-footer's own auto-basis content claimed all the space
      first and left the nav tabs nothing to grow into. flex:none + shrink:0 on each button
      keeps every tab at its natural width instead. */
-  .sidebar{width:100%; height:auto; position:static; flex-direction:row; padding:10px; align-items:center; overflow-x:auto;}
+  .sidebar{width:100%; height:auto; position:sticky; top:0; z-index:20; flex-direction:row; padding:10px; align-items:center; overflow-x:auto; overflow-y:hidden; border-right:none; border-bottom:1px solid var(--line);}
   .sidebar .brand{padding:0; margin-right:4px; flex-shrink:0;}
   .sidebar .brand .brand-name{display:none;}
   .sidebar-nav{flex:none; flex-direction:row; flex-shrink:0;}
