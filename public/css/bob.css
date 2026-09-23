@@ -168,6 +168,10 @@ footer.hint{text-align:center; color:var(--ink-soft); font-size:.78rem; margin-t
 .faq-item summary::after{content:'+'; font-size:1.3rem; color:var(--maroon); font-weight:400; flex-shrink:0;}
 .faq-item[open] summary::after{content:'−';}
 .faq-item p{margin:0 0 18px; font-size:.9rem; color:var(--ink-soft); line-height:1.6;}
+.faq-item p strong{color:var(--ink);}
+.faq-item ol{margin:0 0 18px; padding-left:22px; font-size:.9rem; color:var(--ink-soft); line-height:1.7;}
+.faq-item ol li{margin-bottom:4px;}
+.faq-item ol strong{color:var(--ink);}
 
 .pricing-grid{display:grid; grid-template-columns:1fr 1fr; gap:22px; max-width:760px; margin:0 auto;}
 @media(max-width:700px){.pricing-grid{grid-template-columns:1fr;}}
