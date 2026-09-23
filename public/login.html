@@ -38,6 +38,17 @@
       <div><label>Password</label><input required type="password" name="password" placeholder="••••••••"></div>
       <button class="primary" type="submit">Sign In</button>
       <div class="errortext" id="signinError"></div>
+      <p class="helptext" style="text-align:right;"><a class="link-accent" href="#" id="forgotPasswordLink">Forgot password?</a></p>
+    </form>
+
+    <!-- FORGOT PASSWORD -->
+    <form class="auth-form section-hidden" id="forgotForm">
+      <p class="helptext">Enter your email and we'll send you a link to reset your password.</p>
+      <div><label>Email</label><input required type="email" name="email" placeholder="you@example.com"></div>
+      <button class="primary" type="submit">Send reset link</button>
+      <div class="errortext" id="forgotError"></div>
+      <div class="helptext" id="forgotNotice"></div>
+      <p class="helptext" style="text-align:center;"><a class="link-accent" href="#" id="backToSigninLink">← Back to sign in</a></p>
     </form>
 
     <!-- SIGN UP -->
@@ -160,6 +171,37 @@ async function completeLoginFlow(email) {
   completeForm.classList.remove('section-hidden');
   completeForm.dataset.email = email;
 }
+
+/* ---- forgot password ---- */
+const forgotForm = document.getElementById('forgotForm');
+document.getElementById('forgotPasswordLink').onclick = (e) => {
+  e.preventDefault();
+  document.getElementById('forgotError').textContent = '';
+  document.getElementById('forgotNotice').textContent = '';
+  if (signinForm.email.value) forgotForm.email.value = signinForm.email.value;
+  document.getElementById('authTabs').classList.add('section-hidden');
+  signinForm.classList.add('section-hidden');
+  signupForm.classList.add('section-hidden');
+  forgotForm.classList.remove('section-hidden');
+};
+document.getElementById('backToSigninLink').onclick = (e) => {
+  e.preventDefault();
+  forgotForm.classList.add('section-hidden');
+  document.getElementById('authTabs').classList.remove('section-hidden');
+  signinForm.classList.remove('section-hidden');
+};
+forgotForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const errEl = document.getElementById('forgotError');
+  const noticeEl = document.getElementById('forgotNotice');
+  errEl.textContent = ''; noticeEl.textContent = '';
+  const { error } = await supabaseClient.auth.resetPasswordForEmail(f.get('email'), {
+    redirectTo: `${window.location.origin}/reset-password.html`,
+  });
+  if (error) { errEl.textContent = error.message; return; }
+  noticeEl.textContent = "Check your email for a link to reset your password.";
+});
 
 /* ---- sign in ---- */
 signinForm.addEventListener('submit', async (e) => {

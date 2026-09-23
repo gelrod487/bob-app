@@ -91,6 +91,7 @@ input,select{
 .dropzone.drag{border-color:var(--maroon); background:var(--panel-alt);}
 .section-hidden{display:none;}
 .helptext{font-size:.8rem; color:var(--ink-soft); margin-top:2px;}
+.link-accent{color:var(--maroon); text-decoration:underline; cursor:pointer;}
 .errortext{font-size:.82rem; color:var(--red); margin-top:8px; font-weight:600;}
 .chart-box{position:relative; height:230px;}
 footer.hint{text-align:center; color:var(--ink-soft); font-size:.78rem; margin-top:30px;}
