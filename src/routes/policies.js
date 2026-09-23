@@ -4,7 +4,10 @@ const asyncHandler = require('../middleware/asyncHandler');
 
 const router = express.Router();
 
-const VALID_STATUSES = ['active', 'pending', 'lapsed', 'declined', 'withdrawn'];
+// 'active' is the internal key for "Issue paid" (kept as-is so existing rows and the
+// reminder/chargeback logic below don't need a data migration) — see STATUS_TAG in
+// app.html for the label shown to users.
+const VALID_STATUSES = ['pending', 'approved_not_paid', 'active', 'declined', 'withdrawn', 'cancelled', 'lapsed'];
 
 // bob-schema.md: reminders only ever get generated for an active policy, at
 // months 10/11/12/13 after issue. Kept as its own function so the import

@@ -30,10 +30,12 @@ const FIELD_SYNONYMS = {
 // (an application that never issued has nowhere else to note why). Recognize it
 // instead of failing the row.
 const STATUS_KEYWORDS = {
-  active: ['approved', 'paid', 'issued'],
+  active: ['issued', 'paid'],
+  approved_not_paid: ['approved'],
   declined: ['declined', 'denied', 'refused'],
   withdrawn: ['withdrew', 'withdrawn'],
-  lapsed: ['cancelled', 'canceled', 'lapsed'],
+  cancelled: ['cancelled', 'canceled'],
+  lapsed: ['lapsed'],
   pending: ['pending'],
 };
 
@@ -143,10 +145,12 @@ router.post('/commit', asyncHandler(async (req, res) => {
       const statusRaw = mapping.status ? String(row[mapping.status] || '').toLowerCase() : '';
       let status = recoveredStatus && recoveredStatus !== 'UNRECOGNIZED' ? recoveredStatus : null;
       if (!status) {
-        if (statusRaw.includes('approv') || statusRaw.includes('paid')) status = 'active';
+        if (statusRaw.includes('issu') || statusRaw.includes('paid')) status = 'active';
+        else if (statusRaw.includes('approv')) status = 'approved_not_paid';
         else if (statusRaw.includes('declin') || statusRaw.includes('refus')) status = 'declined';
         else if (statusRaw.includes('withdr')) status = 'withdrawn';
-        else if (statusRaw.includes('cancel') || statusRaw.includes('laps')) status = 'lapsed';
+        else if (statusRaw.includes('cancel')) status = 'cancelled';
+        else if (statusRaw.includes('laps')) status = 'lapsed';
         else if (statusRaw.includes('pending')) status = 'pending';
         else status = monthlyPremium ? 'active' : 'pending';
       }

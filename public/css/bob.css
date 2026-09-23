@@ -74,6 +74,7 @@ tr.row-clickable:hover td{background:var(--panel-alt);}
 .tag.active-pol{background:var(--green-bg); color:var(--green);}
 .tag.lapsed{background:var(--red-bg); color:var(--red);}
 .tag.pending{background:var(--amber-bg); color:var(--amber);}
+.tag.approved{background:var(--sage-bg); color:var(--sage);}
 
 /* ---- Forms ---- */
 form.entry{display:grid; grid-template-columns:repeat(2,1fr); gap:12px;}

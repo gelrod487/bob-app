@@ -63,12 +63,16 @@ const COST_CATEGORIES = [
   { key:'Other',          color:'#B7ADA0' },
 ];
 function costColor(cat){ return (COST_CATEGORIES.find(c=>c.key===cat) || {}).color || '#B7ADA0'; }
+// 'active' stays the internal key for "Issue paid" — see the comment on VALID_STATUSES
+// in src/routes/policies.js for why the key names don't all match their display labels.
 const STATUS_TAG = {
-  active: { cls: 'active-pol', label: 'Issued — paid' },
   pending: { cls: 'pending', label: 'Pending' },
-  lapsed: { cls: 'lapsed', label: 'Lapsed' },
+  approved_not_paid: { cls: 'approved', label: 'Approved not paid' },
+  active: { cls: 'active-pol', label: 'Issue paid' },
   declined: { cls: 'lapsed', label: 'Declined' },
-  withdrawn: { cls: 'lapsed', label: 'Withdrawn' },
+  withdrawn: { cls: 'lapsed', label: 'Withdrew' },
+  cancelled: { cls: 'lapsed', label: 'Cancelled' },
+  lapsed: { cls: 'lapsed', label: 'Lapsed' },
 };
 
 function fmt(n){ return '$'+Number(n||0).toLocaleString(undefined,{maximumFractionDigits:0}); }
@@ -382,7 +386,15 @@ function openAddClientModal(){
         <div><label>Carrier</label><input required name="carrier" placeholder="e.g. North Star Life"></div>
         <div><label>Product Type</label><input required name="product" placeholder="e.g. Term 20"></div>
         <div><label>Monthly Premium ($)</label><input required type="number" step="0.01" name="premium" placeholder="150"></div>
-        <div><label>Status</label><select name="status"><option value="active">Issued — paid</option><option value="pending">Pending</option></select></div>
+        <div><label>Status</label><select name="status">
+          <option value="pending">Pending</option>
+          <option value="approved_not_paid">Approved not paid</option>
+          <option value="active">Issue paid</option>
+          <option value="declined">Declined</option>
+          <option value="withdrawn">Withdrew</option>
+          <option value="cancelled">Cancelled</option>
+          <option value="lapsed">Lapsed</option>
+        </select></div>
         <div><label>Lead Vendor</label><input name="leadVendor" placeholder="e.g. Facebook Leads"></div>
         <div><label>Lead Type</label><input name="leadType" placeholder="e.g. Final Expense"></div>
         <div class="full" style="grid-column:1/-1;"><label>Date Submitted</label><input required type="date" name="dateSubmitted" value="${todayISO()}"></div>
@@ -452,10 +464,12 @@ async function openClientDetail(policyId){
         <label>Status</label>
         <select id="clientStatus">
           <option value="pending" ${p.status==='pending'?'selected':''}>Pending</option>
-          <option value="active" ${p.status==='active'?'selected':''}>Issued — paid</option>
-          <option value="lapsed" ${p.status==='lapsed'?'selected':''}>Lapsed</option>
+          <option value="approved_not_paid" ${p.status==='approved_not_paid'?'selected':''}>Approved not paid</option>
+          <option value="active" ${p.status==='active'?'selected':''}>Issue paid</option>
           <option value="declined" ${p.status==='declined'?'selected':''}>Declined</option>
-          <option value="withdrawn" ${p.status==='withdrawn'?'selected':''}>Withdrawn</option>
+          <option value="withdrawn" ${p.status==='withdrawn'?'selected':''}>Withdrew</option>
+          <option value="cancelled" ${p.status==='cancelled'?'selected':''}>Cancelled</option>
+          <option value="lapsed" ${p.status==='lapsed'?'selected':''}>Lapsed</option>
         </select>
       </div>
       <div>
@@ -728,8 +742,12 @@ async function renderBook(filterText, statusFilter){
       <input id="bookSearch" placeholder="Search client or carrier" value="${filterText}">
       <select id="bookStatus">
         <option value="">All statuses</option>
-        <option value="active" ${statusFilter==='active'?'selected':''}>Issued</option>
         <option value="pending" ${statusFilter==='pending'?'selected':''}>Pending</option>
+        <option value="approved_not_paid" ${statusFilter==='approved_not_paid'?'selected':''}>Approved not paid</option>
+        <option value="active" ${statusFilter==='active'?'selected':''}>Issue paid</option>
+        <option value="declined" ${statusFilter==='declined'?'selected':''}>Declined</option>
+        <option value="withdrawn" ${statusFilter==='withdrawn'?'selected':''}>Withdrew</option>
+        <option value="cancelled" ${statusFilter==='cancelled'?'selected':''}>Cancelled</option>
         <option value="lapsed" ${statusFilter==='lapsed'?'selected':''}>Lapsed</option>
       </select>
     </div>
