@@ -53,10 +53,11 @@
 
     <!-- SIGN UP -->
     <form class="auth-form section-hidden" id="signupForm">
+      <div id="inviteNotice" class="helptext section-hidden" style="background:var(--panel-alt); padding:10px 12px; border-radius:8px;"></div>
       <div><label>Your Name</label><input required name="name" placeholder="Jordan Alvarez"></div>
       <div><label>Email</label><input required type="email" name="email" placeholder="you@example.com"></div>
       <div><label>Password</label><input required type="password" name="password" placeholder="At least 6 characters" minlength="6"></div>
-      <div>
+      <div id="tierPickerField">
         <label>Plan</label>
         <div class="tier-options">
           <div class="tier-option selected" data-tier="individual">Producer</div>
@@ -75,7 +76,7 @@
     <form class="auth-form section-hidden" id="completeForm">
       <p class="helptext">Just a couple more details to finish setting up your account.</p>
       <div><label>Your Name</label><input required name="name" placeholder="Jordan Alvarez"></div>
-      <div>
+      <div id="completeTierPickerField">
         <label>Plan</label>
         <div class="tier-options">
           <div class="tier-option selected" data-tier="individual">Producer</div>
@@ -133,6 +134,23 @@ if (requestedTier === 'individual' || requestedTier === 'agency_owner') {
 }
 function selectedTier(formEl) {
   return formEl.querySelector('.tier-option.selected').dataset.tier;
+}
+
+/* ---- arriving from an agency owner's invite link (/login.html?invite=<agencyId>) ----
+   Joining an agency only decides whose dashboard this producer's numbers roll up into —
+   they still get the normal 14-day trial and still need their own Producer subscription
+   afterward, so the tier picker is hidden (always "individual") rather than skipping
+   billing entirely. */
+const inviteAgencyId = new URLSearchParams(window.location.search).get('invite');
+if (inviteAgencyId) {
+  document.querySelector('.auth-tab[data-mode="signup"]').click();
+  document.getElementById('tierPickerField').classList.add('section-hidden');
+  document.getElementById('agencyNameField').classList.add('section-hidden');
+  const notice = document.getElementById('inviteNotice');
+  notice.textContent = "You've been invited to join an agency as a producer. You'll get the same 14-day free trial, then a Producer ($29/mo) subscription to keep going.";
+  notice.classList.remove('section-hidden');
+  document.getElementById('completeTierPickerField').classList.add('section-hidden');
+  document.getElementById('completeAgencyNameField').classList.add('section-hidden');
 }
 
 /* ---- after any successful auth, figure out where to send the user ---- */
@@ -225,12 +243,9 @@ signupForm.addEventListener('submit', async (e) => {
   errEl.textContent = ''; noticeEl.textContent = '';
 
   const email = f.get('email');
-  const pending = {
-    name: f.get('name'),
-    tier: selectedTier(signupForm),
-    agencyName: f.get('agencyName') || null,
-    email,
-  };
+  const pending = inviteAgencyId
+    ? { name: f.get('name'), inviteAgencyId, email }
+    : { name: f.get('name'), tier: selectedTier(signupForm), agencyName: f.get('agencyName') || null, email };
 
   const { data, error } = await supabaseClient.auth.signUp({ email, password: f.get('password') });
   if (error) { errEl.textContent = error.message; return; }
@@ -252,14 +267,10 @@ completeForm.addEventListener('submit', async (e) => {
   const errEl = document.getElementById('completeError');
   errEl.textContent = '';
   try {
-    await apiFetch('/api/auth/bootstrap', {
-      method: 'POST',
-      body: {
-        name: f.get('name'),
-        tier: selectedTier(completeForm),
-        agencyName: f.get('agencyName') || null,
-      },
-    });
+    const body = inviteAgencyId
+      ? { name: f.get('name'), inviteAgencyId }
+      : { name: f.get('name'), tier: selectedTier(completeForm), agencyName: f.get('agencyName') || null };
+    await apiFetch('/api/auth/bootstrap', { method: 'POST', body });
     window.location.href = '/app.html';
   } catch (err) {
     errEl.textContent = err.message;

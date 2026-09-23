@@ -40,6 +40,10 @@ function trialEndsAt(producer) {
 // runs out and was never converted to a paid subscription. Deliberately NOT applied to
 // /api/me (needs to report trial status even when expired) or /api/billing (has to stay
 // reachable so an expired producer can still subscribe).
+//
+// Note: an agent invited into an agency still needs their own subscription — being under
+// an agencyId only determines whose dashboard their numbers roll up into, not billing.
+// Each producer (owner or agent) carries their own trial clock and subscriptionStatus.
 function requireActiveOrTrial(req, res, next) {
   const producer = req.producer;
   const stillTrialing = new Date() < trialEndsAt(producer);
