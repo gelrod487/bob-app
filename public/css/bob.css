@@ -211,11 +211,18 @@ footer.home-footer a{display:block; color:var(--ink-soft); text-decoration:none;
 .main-inner{max-width:960px; margin:0 auto; padding:30px 30px 70px;}
 @media(max-width:820px){
   .app-shell{flex-direction:column;}
-  .sidebar{width:100%; height:auto; position:static; flex-direction:row; padding:10px; align-items:center;}
+  /* The whole bar scrolls as one strip — .sidebar-nav's flex:1 (meant for the desktop
+     vertical layout, where flex-basis:0% just fills leftover height) was collapsing it to
+     zero width here, since .sidebar-footer's own auto-basis content claimed all the space
+     first and left the nav tabs nothing to grow into. flex:none + shrink:0 on each button
+     keeps every tab at its natural width instead. */
+  .sidebar{width:100%; height:auto; position:static; flex-direction:row; padding:10px; align-items:center; overflow-x:auto;}
   .sidebar .brand{padding:0; margin-right:4px; flex-shrink:0;}
   .sidebar .brand .brand-name{display:none;}
-  .sidebar-nav{flex-direction:row; overflow-x:auto;}
-  .sidebar-footer{flex-direction:row; border-top:none; border-left:1px solid var(--line); overflow-x:auto;}
+  .sidebar-nav{flex:none; flex-direction:row; flex-shrink:0;}
+  .sidebar-nav button{flex-shrink:0; white-space:nowrap;}
+  .sidebar-footer{flex:none; flex-direction:row; flex-shrink:0; border-top:none; border-left:1px solid var(--line); margin-left:6px; padding-left:10px;}
+  .sidebar-footer button{flex-shrink:0; white-space:nowrap;}
 }
 .page-eyebrow{font-size:.72rem; text-transform:uppercase; letter-spacing:.06em; color:var(--maroon); font-weight:700; margin-bottom:4px;}
 .page-header{display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:20px; flex-wrap:wrap;}
