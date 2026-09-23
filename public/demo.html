@@ -4,6 +4,13 @@
 <meta charset="UTF-8">
 <title>BOB — Sample Book</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#A63D40">
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="BOB">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
@@ -38,6 +45,7 @@
 </div>
 
 <script src="/js/mascot.js"></script>
+<script src="/js/registerSW.js"></script>
 <script>
 wireMascot('navMascot', ["Hi, I'm Bob!", "This is a sample book — try the real thing!", "Edits here stay in your browser."]);
 
