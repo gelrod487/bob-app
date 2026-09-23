@@ -20,12 +20,26 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
       const session = event.data.object;
       const { producerId, tier } = session.metadata || {};
       if (producerId) {
+        // A producer who signed up as Producer and later subscribes to Agency here
+        // (rather than choosing Agency at initial sign-up, where src/routes/auth.js
+        // creates one) won't have an Agency row yet — create one so the agency-wide
+        // dashboard actually has something to roll up into.
+        let agencyId;
+        if (tier === 'agency_owner') {
+          const producer = await prisma.producer.findUnique({ where: { id: producerId } });
+          agencyId = producer?.agencyId;
+          if (!agencyId) {
+            const agency = await prisma.agency.create({ data: { name: `${producer.name}'s Agency` } });
+            agencyId = agency.id;
+          }
+        }
         await prisma.producer.update({
           where: { id: producerId },
           data: {
             subscriptionStatus: 'active',
             subscriptionTier: tier || undefined,
             stripeSubscriptionId: session.subscription || undefined,
+            agencyId: agencyId || undefined,
           },
         });
       }
