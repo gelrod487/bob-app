@@ -29,6 +29,7 @@
       <button data-page="book"><span class="ic">📖</span>Book</button>
       <button data-page="costs"><span class="ic">🧾</span>Costs</button>
       <button data-page="profit"><span class="ic">📈</span>Profit</button>
+      <button data-page="goals"><span class="ic">🎯</span>Goals</button>
     </div>
     <div class="sidebar-footer">
       <button data-page="subscribe"><span class="ic">💳</span>Subscribe <span class="pill" id="sidebarStatusPill" style="margin-left:auto;"></span></button>
@@ -173,7 +174,7 @@ const say = wireMascot('navMascot', ["Hi, I'm Bob!","Bump your dials — I'll do
 
 /* ---- sidebar nav ---- */
 const mainInner = document.getElementById('mainInner');
-const PAGES = { desk: renderDesk, activity: renderActivity, book: () => renderBook('',''), costs: renderCosts, profit: renderProfit, subscribe: renderSubscribe, team: renderTeam, settings: renderSettings };
+const PAGES = { desk: renderDesk, activity: renderActivity, book: () => renderBook('',''), costs: renderCosts, profit: renderProfit, goals: renderGoals, subscribe: renderSubscribe, team: renderTeam, settings: renderSettings };
 let currentPage = 'desk';
 function renderCurrentPage(){ PAGES[currentPage](); }
 function go(page){
@@ -1282,20 +1283,17 @@ async function renderTeam(){
   wireCopyButton('copyInviteBtn', 'inviteLinkInput');
 }
 
-/* ================= SETTINGS ================= */
-async function renderSettings(){
-  mainInner.innerHTML = `<div class="page-header"><div><div class="page-eyebrow">Settings</div><h1>Account &amp; goals</h1></div></div><p class="helptext">Loading…</p>`;
-  const goal = await apiFetch(`/api/goals?month=${monthFirstISO()}`);
+/* ================= GOALS ================= */
+async function renderGoals(){
+  mainInner.innerHTML = `<div class="page-header"><div><div class="page-eyebrow">Goals</div><h1>This month's goals</h1></div></div><p class="helptext">Loading…</p>`;
+  const isAgency = me.subscriptionTier === 'agency_owner';
+  const [goal, teamGoal] = await Promise.all([
+    apiFetch(`/api/goals?month=${monthFirstISO()}`),
+    isAgency ? apiFetch(`/api/team-goals?month=${monthFirstISO()}`) : Promise.resolve(null),
+  ]);
 
   mainInner.innerHTML = `
-    <div class="page-header"><div><div class="page-eyebrow">Settings</div><h1>Account &amp; goals</h1></div></div>
-
-    <div class="panel">
-      <h2>Account</h2>
-      <p class="helptext">Name: <strong>${me.name}</strong></p>
-      <p class="helptext">Email: <strong>${me.email}</strong></p>
-      <p class="helptext">Plan: <strong>${me.subscriptionTier === 'agency_owner' ? 'Agency' : 'Producer'}</strong></p>
-    </div>
+    <div class="page-header"><div><div class="page-eyebrow">Goals</div><h1>This month's goals</h1></div></div>
 
     <div class="panel">
       <h2>This month's goals</h2>
@@ -1311,6 +1309,20 @@ async function renderSettings(){
         <div class="full helptext" id="goalsSaved"></div>
       </form>
     </div>
+
+    ${isAgency ? `
+    <div class="panel">
+      <h2>This month's Team goals</h2>
+      <p class="helptext" style="margin-top:-8px;">Targets for the whole agency, not just you.</p>
+      <form class="entry" id="teamGoalsForm">
+        <div><label>Team Issued Paid Total ($)</label><input type="number" step="0.01" name="issuedPaidTarget" value="${teamGoal.issuedPaidTarget}"></div>
+        <div><label>New Writers</label><input type="number" name="newWritersTarget" value="${teamGoal.newWritersTarget}"></div>
+        <div><label>Total Team Producer Headcount</label><input type="number" name="headcountTarget" value="${teamGoal.headcountTarget}"></div>
+        <div class="full"><button class="primary" type="submit">Save Team Goals</button></div>
+        <div class="full errortext" id="teamGoalsError"></div>
+        <div class="full helptext" id="teamGoalsSaved"></div>
+      </form>
+    </div>` : ''}
   `;
   document.getElementById('goalsForm').addEventListener('submit', async e => {
     e.preventDefault();
@@ -1327,6 +1339,40 @@ async function renderSettings(){
       say('Goals updated.');
     } catch (err) { errEl.textContent = err.message; }
   });
+  if (isAgency) {
+    document.getElementById('teamGoalsForm').addEventListener('submit', async e => {
+      e.preventDefault();
+      const errEl = document.getElementById('teamGoalsError');
+      errEl.textContent = '';
+      const f = new FormData(e.target);
+      try {
+        await apiFetch('/api/team-goals', { method:'PUT', body:{
+          month: monthFirstISO(),
+          issuedPaidTarget: Number(f.get('issuedPaidTarget')),
+          newWritersTarget: Number(f.get('newWritersTarget')),
+          headcountTarget: Number(f.get('headcountTarget')),
+        }});
+        document.getElementById('teamGoalsSaved').textContent = 'Saved!';
+        say('Team goals updated.');
+      } catch (err) { errEl.textContent = err.message; }
+    });
+  }
+}
+
+/* ================= SETTINGS ================= */
+async function renderSettings(){
+  mainInner.innerHTML = `<div class="page-header"><div><div class="page-eyebrow">Settings</div><h1>Account</h1></div></div><p class="helptext">Loading…</p>`;
+
+  mainInner.innerHTML = `
+    <div class="page-header"><div><div class="page-eyebrow">Settings</div><h1>Account</h1></div></div>
+
+    <div class="panel">
+      <h2>Account</h2>
+      <p class="helptext">Name: <strong>${me.name}</strong></p>
+      <p class="helptext">Email: <strong>${me.email}</strong></p>
+      <p class="helptext">Plan: <strong>${me.subscriptionTier === 'agency_owner' ? 'Agency' : 'Producer'}</strong></p>
+    </div>
+  `;
 }
 </script>
 </body>

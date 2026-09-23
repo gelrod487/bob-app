@@ -22,6 +22,7 @@ model Agency {
   ownerDraws    OwnerDraw[]
   // Overrides logged against this agency (commission_entry.owner_type = 'agency')
   commissionEntries CommissionEntry[] @relation("AgencyCommissionEntries")
+  teamGoals     TeamGoal[]
 
   @@map("agency")
 }
@@ -84,6 +85,24 @@ model Goal {
 
   @@unique([producerId, month])
   @@map("goal")
+}
+
+// One row per agency per month — the agency-owner-only "This month's Team goals" panel,
+// parallel to Goal but scoped to the whole team rather than one producer. Headcount and
+// New Writers are target counts the owner sets, same as e.g. Goal.salesTarget; nothing
+// here computes the "actual" side yet.
+model TeamGoal {
+  id               String   @id @default(uuid())
+  agencyId         String   @map("agency_id")
+  month            DateTime @db.Date // always the 1st of the month
+  issuedPaidTarget Decimal  @default(0) @db.Decimal(10, 2) @map("issued_paid_target")
+  newWritersTarget Int      @default(0) @map("new_writers_target")
+  headcountTarget  Int      @default(0) @map("headcount_target")
+
+  agency Agency @relation(fields: [agencyId], references: [id])
+
+  @@unique([agencyId, month])
+  @@map("team_goal")
 }
 
 model Client {
