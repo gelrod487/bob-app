@@ -7,12 +7,21 @@ const asyncHandler = require('./asyncHandler');
 async function requireAgencyOwner(req, res, next) {
   const producer = await prisma.producer.findUnique({ where: { id: req.producerId } });
   if (!producer) return res.status(401).json({ error: 'Unknown producer.' });
-  if (producer.subscriptionTier !== 'agency_owner' || !producer.agencyId) {
+  if (producer.subscriptionTier !== 'agency_owner') {
     return res.status(403).json({
       error: 'This action is only available on the Agency Owner plan.',
     });
   }
-  req.agencyId = producer.agencyId;
+  // Not producer.agencyId — that's this producer's own MEMBERSHIP (whose team their
+  // personal numbers count toward), which for a promoted downline is their upline's
+  // agency, not the one they themselves own. See the Agency model's doc comment.
+  const ownedAgency = await prisma.agency.findUnique({ where: { ownerId: producer.id } });
+  if (!ownedAgency) {
+    return res.status(403).json({
+      error: 'This action is only available on the Agency Owner plan.',
+    });
+  }
+  req.agencyId = ownedAgency.id;
   next();
 }
 

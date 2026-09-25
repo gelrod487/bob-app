@@ -12,12 +12,28 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+// A producer's `agencyId` (below) is their MEMBERSHIP — whose team roster their own
+// personal production counts toward. `ownerId` here is OWNERSHIP — which producer
+// manages this specific agency (invite link, Team page, owner draws). These are the same
+// producer for a from-scratch Agency Owner, but differ for a promoted downline: producer A
+// stays a member of their upline B's agency (their personal numbers keep rolling up to B)
+// while separately owning their own new agency that A's own downlines join.
+//
+// `parentAgencyId` chains a promoted downline's agency to whoever recruited them, capped
+// at one level deep for now (see agencyProfitability in src/lib/profitability.js) — B's
+// rollup includes A's directly-owned agency's producers, but not a third generation.
 model Agency {
-  id            String     @id @default(uuid())
-  name          String
-  createdAt     DateTime   @default(now()) @map("created_at")
+  id             String     @id @default(uuid())
+  name           String
+  ownerId        String?    @unique @map("owner_id")
+  parentAgencyId String?    @map("parent_agency_id")
+  createdAt      DateTime   @default(now()) @map("created_at")
 
-  producers     Producer[]
+  owner         Producer?  @relation("AgencyOwner", fields: [ownerId], references: [id])
+  parentAgency  Agency?    @relation("AgencySubAgencies", fields: [parentAgencyId], references: [id])
+  subAgencies   Agency[]   @relation("AgencySubAgencies")
+
+  producers     Producer[] @relation("AgencyMembers")
   expenses      Expense[]  @relation("AgencyExpenses")
   ownerDraws    OwnerDraw[]
   // Overrides logged against this agency (commission_entry.owner_type = 'agency')
@@ -29,7 +45,7 @@ model Agency {
 
 model Producer {
   id                String   @id @default(uuid())
-  agencyId          String?  @map("agency_id") // null = Individual tier, self-contained
+  agencyId          String?  @map("agency_id") // membership — see Agency's doc comment above
   name              String
   email             String   @unique
   supabaseUserId    String   @unique @map("supabase_user_id") // links to Supabase Auth's auth.users.id
@@ -39,7 +55,8 @@ model Producer {
   stripeSubscriptionId String? @unique @map("stripe_subscription_id")
   createdAt         DateTime @default(now()) @map("created_at")
 
-  agency            Agency?   @relation(fields: [agencyId], references: [id])
+  agency            Agency?   @relation("AgencyMembers", fields: [agencyId], references: [id])
+  ownedAgency       Agency?   @relation("AgencyOwner")
   clients           Client[]
   expenses          Expense[] @relation("ProducerExpenses")
   commissionEntries CommissionEntry[] @relation("ProducerCommissionEntries")

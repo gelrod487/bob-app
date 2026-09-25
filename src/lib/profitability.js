@@ -66,13 +66,24 @@ async function producerProfitability(producerId, { from, to } = {}) {
 /**
  * Net profit for an Agency Owner over a date range — rolls up every producer
  * under the agency, plus the agency's own override income and expenses.
+ *
+ * Also rolls up one level of sub-agencies: a producer who was a member of this agency
+ * and later became an Agency Owner themselves keeps their OWN personal numbers counted
+ * here (their `agencyId` never changes — see the doc comment on the Agency model), but
+ * their own downlines' numbers live under their own agency instead. Including that
+ * sub-agency here is what makes a grandparent owner's dashboard reflect their whole
+ * downstream org, not just their direct recruits. Capped at one level (no
+ * sub-sub-agencies) — see the conversation in the commit this landed in for why.
  */
 async function agencyProfitability(agencyId, { from, to } = {}) {
   const dateFilter = {};
   if (from) dateFilter.gte = new Date(from);
   if (to) dateFilter.lte = new Date(to);
 
-  const producers = await prisma.producer.findMany({ where: { agencyId }, select: { id: true } });
+  const subAgencies = await prisma.agency.findMany({ where: { parentAgencyId: agencyId }, select: { id: true } });
+  const agencyIds = [agencyId, ...subAgencies.map((a) => a.id)];
+
+  const producers = await prisma.producer.findMany({ where: { agencyId: { in: agencyIds } }, select: { id: true } });
   const producerIds = producers.map((p) => p.id);
 
   const producerCommissionWhere = {
@@ -85,14 +96,14 @@ async function agencyProfitability(agencyId, { from, to } = {}) {
   const chargebackWhere = { ...producerCommissionWhere, entryType: 'chargeback' };
   const overrideWhere = {
     ownerType: 'agency',
-    agencyId,
+    agencyId: { in: agencyIds },
     entryType: 'override',
     ...(from || to ? { entryDate: dateFilter } : {}),
   };
   const expenseWhere = {
     OR: [
       { ownerType: 'producer', producerId: { in: producerIds } },
-      { ownerType: 'agency', agencyId },
+      { ownerType: 'agency', agencyId: { in: agencyIds } },
     ],
     ...(from || to ? { expenseDate: dateFilter } : {}),
   };
@@ -104,10 +115,10 @@ async function agencyProfitability(agencyId, { from, to } = {}) {
     prisma.commissionEntry.aggregate({ where: overrideWhere, _sum: { amount: true } }),
     prisma.expense.aggregate({ where: expenseWhere, _sum: { amount: true } }),
     prisma.policy.count({
-      where: { status: 'active', client: { producer: { agencyId } } },
+      where: { status: 'active', client: { producer: { agencyId: { in: agencyIds } } } },
     }),
     prisma.policy.findMany({
-      where: { status: 'pending', client: { producer: { agencyId } } },
+      where: { status: 'pending', client: { producer: { agencyId: { in: agencyIds } } } },
       select: { monthlyPremium: true },
     }),
   ]);

@@ -14,9 +14,10 @@ router.post('/bootstrap', asyncHandler(async (req, res) => {
   const { name, tier, agencyName, inviteAgencyId } = req.body;
   if (!name) return res.status(400).json({ error: 'name is required.' });
 
-  // Signing up via an agency owner's invite link joins that agency as a regular producer —
-  // the owner's subscription covers them (see requireActiveOrTrial), so tier/agencyName
-  // from the form are ignored in favor of just riding along on the invite.
+  // Signing up via an agency owner's invite link joins that agency as a regular producer.
+  // They still get their own trial and still need their own subscription afterward (see
+  // requireActiveOrTrial) — the invite only decides whose team their numbers roll up
+  // into, so tier/agencyName from the form are ignored in favor of the invite.
   if (inviteAgencyId) {
     const agency = await prisma.agency.findUnique({ where: { id: inviteAgencyId } });
     if (!agency) return res.status(400).json({ error: 'This invite link is no longer valid.' });
@@ -38,21 +39,24 @@ router.post('/bootstrap', asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'tier must be "individual" or "agency_owner".' });
   }
 
+  // Agency.ownerId is a real FK to Producer, so the producer has to exist before the
+  // agency can reference it — create producer first, then agency, then link back.
   const producer = await prisma.$transaction(async (tx) => {
-    let agencyId = null;
-    if (tier === 'agency_owner') {
-      const agency = await tx.agency.create({ data: { name: agencyName || `${name}'s Agency` } });
-      agencyId = agency.id;
-    }
-    return tx.producer.create({
+    let created = await tx.producer.create({
       data: {
         name,
         email: req.supabaseUser.email,
         supabaseUserId: req.supabaseUser.id,
         subscriptionTier: tier,
-        agencyId,
       },
     });
+    if (tier === 'agency_owner') {
+      const agency = await tx.agency.create({
+        data: { name: agencyName || `${name}'s Agency`, ownerId: created.id },
+      });
+      created = await tx.producer.update({ where: { id: created.id }, data: { agencyId: agency.id } });
+    }
+    return created;
   });
 
   res.status(201).json(producer);

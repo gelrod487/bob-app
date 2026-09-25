@@ -14,12 +14,21 @@ router.get('/', asyncHandler(async (req, res) => {
   const producer = await prisma.producer.findUnique({ where: { id: req.producerId } });
   const endsAt = trialEndsAt(producer);
   const trialExpired = !['active', 'past_due'].includes(producer.subscriptionStatus) && new Date() >= endsAt;
+
+  // agencyId is MEMBERSHIP (whose team this producer's own personal numbers count
+  // toward); ownedAgencyId is OWNERSHIP (the agency this producer manages, if any) — see
+  // the Agency model's doc comment for why a promoted downline needs both, distinctly.
+  const ownedAgency = producer.subscriptionTier === 'agency_owner'
+    ? await prisma.agency.findUnique({ where: { ownerId: producer.id } })
+    : null;
+
   res.json({
     producer: {
       id: producer.id,
       name: producer.name,
       email: producer.email,
       agencyId: producer.agencyId,
+      ownedAgencyId: ownedAgency?.id || null,
       subscriptionTier: producer.subscriptionTier,
       subscriptionStatus: producer.subscriptionStatus,
       trialEndsAt: endsAt.toISOString(),

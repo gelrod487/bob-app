@@ -44,9 +44,14 @@ app.get('/api/dashboard', requireProducer, requireActiveOrTrial, asyncHandler(as
   const producer = await prisma.producer.findUnique({ where: { id: req.producerId } });
   if (!producer) return res.status(404).json({ error: 'Producer not found.' });
 
-  if (producer.subscriptionTier === 'agency_owner' && producer.agencyId) {
-    const stats = await agencyProfitability(producer.agencyId, req.query);
-    return res.json({ tier: 'agency_owner', ...stats });
+  if (producer.subscriptionTier === 'agency_owner') {
+    // Not producer.agencyId — see the Agency model's doc comment. A promoted downline's
+    // agencyId is their upline's agency (membership), not the one they themselves own.
+    const ownedAgency = await prisma.agency.findUnique({ where: { ownerId: producer.id } });
+    if (ownedAgency) {
+      const stats = await agencyProfitability(ownedAgency.id, req.query);
+      return res.json({ tier: 'agency_owner', ...stats });
+    }
   }
   const stats = await producerProfitability(producer.id, req.query);
   res.json({ tier: 'individual', ...stats });

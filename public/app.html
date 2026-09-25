@@ -1197,7 +1197,6 @@ async function renderProfit(){
       await apiFetch('/api/commission-entries', { method:'POST', body:{
         policyId: f.get('policyId'), ownerType, entryType,
         amount: Number(f.get('amount')), entryDate: f.get('date'),
-        agencyId: ownerType === 'agency' ? me.agencyId : undefined,
       }});
       say('Commission logged!');
       renderProfit();
@@ -1261,20 +1260,22 @@ async function renderTeam(){
       <h2>Invite a producer</h2>
       <p class="helptext" style="margin-top:-8px;">Share this link with an agent to have their book roll up into your agency dashboard. They still get their own 14-day trial and their own Producer ($29/mo) subscription afterward — this only decides whose agency they belong to, not billing.</p>
       <div style="display:flex; gap:8px; margin-top:12px;">
-        <input id="inviteLinkInput" readonly value="${window.location.origin}/login.html?invite=${me.agencyId}" style="flex:1;">
+        <input id="inviteLinkInput" readonly value="${window.location.origin}/login.html?invite=${me.ownedAgencyId}" style="flex:1;">
         <button class="ghost" type="button" id="copyInviteBtn">Copy link</button>
       </div>
     </div>
 
     <div class="panel">
       <h2>Roster</h2>
+      <p class="helptext" style="margin-top:-8px;">"Direct" reports straight to you. Anyone else has grown into their own Agency Owner with their own sub-team — their column shows whose team that is; their numbers still roll up into yours.</p>
       <table class="statement-table">
-        <thead><tr><th>Name</th><th>Email</th><th>Plan</th><th>Status</th><th>Joined</th></tr></thead>
+        <thead><tr><th>Name</th><th>Email</th><th>Plan</th><th>Status</th><th>Reports via</th><th>Joined</th></tr></thead>
         <tbody>${roster.map(p => `<tr>
           <td>${p.name}${p.id === me.id ? ' (you)' : ''}</td>
           <td>${p.email}</td>
           <td>${p.subscriptionTier === 'agency_owner' ? 'Agency Owner' : 'Producer'}</td>
           <td><span class="pill ${p.subscriptionStatus}">${p.subscriptionStatus}</span></td>
+          <td>${p.reportsVia ? p.reportsVia : 'Direct'}</td>
           <td>${fmtDate(p.createdAt)}</td>
         </tr>`).join('')}</tbody>
       </table>

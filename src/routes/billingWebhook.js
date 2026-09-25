@@ -22,16 +22,31 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
       if (producerId) {
         // A producer who signed up as Producer and later subscribes to Agency here
         // (rather than choosing Agency at initial sign-up, where src/routes/auth.js
-        // creates one) won't have an Agency row yet — create one so the agency-wide
-        // dashboard actually has something to roll up into.
-        let agencyId;
+        // does the equivalent) won't have an Agency row to own yet — create one.
+        //
+        // Always a NEW agency, never reusing producer.agencyId: that field is this
+        // producer's own MEMBERSHIP (whose team their personal numbers count toward),
+        // which for someone invited into an upline's agency must stay pointed at the
+        // upline — see the Agency model's doc comment. Their own agency chains to that
+        // upline via parentAgencyId, which is what makes the upline's dashboard roll up
+        // this producer's own downlines too (see agencyProfitability).
+        //
+        // Only a from-scratch producer (no existing agencyId — no upline) also gets
+        // agencyId set to their new agency, same as choosing Agency Owner at sign-up.
+        let membershipAgencyId;
         if (tier === 'agency_owner') {
           const producer = await prisma.producer.findUnique({ where: { id: producerId } });
-          agencyId = producer?.agencyId;
-          if (!agencyId) {
-            const agency = await prisma.agency.create({ data: { name: `${producer.name}'s Agency` } });
-            agencyId = agency.id;
+          let ownedAgency = await prisma.agency.findUnique({ where: { ownerId: producerId } });
+          if (!ownedAgency) {
+            ownedAgency = await prisma.agency.create({
+              data: {
+                name: `${producer.name}'s Agency`,
+                ownerId: producerId,
+                parentAgencyId: producer.agencyId || undefined,
+              },
+            });
           }
+          if (!producer.agencyId) membershipAgencyId = ownedAgency.id;
         }
         await prisma.producer.update({
           where: { id: producerId },
@@ -39,7 +54,7 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
             subscriptionStatus: 'active',
             subscriptionTier: tier || undefined,
             stripeSubscriptionId: session.subscription || undefined,
-            agencyId: agencyId || undefined,
+            agencyId: membershipAgencyId || undefined,
           },
         });
       }

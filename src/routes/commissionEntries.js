@@ -28,7 +28,7 @@ router.get('/', asyncHandler(async (req, res) => {
 
 // POST /api/commission-entries
 router.post('/', asyncHandler(async (req, res) => {
-  const { policyId, ownerType, entryType, amount, entryDate, notes, agencyId } = req.body;
+  const { policyId, ownerType, entryType, amount, entryDate, notes } = req.body;
 
   if (!policyId || !ownerType || !entryType || amount === undefined || !entryDate) {
     return res.status(400).json({
@@ -45,6 +45,17 @@ router.post('/', asyncHandler(async (req, res) => {
     return res.status(403).json({ error: err.message });
   }
 
+  // Derived from the authenticated producer's OWN owned agency — never trust a
+  // client-supplied agencyId here, that would let anyone log an override against any
+  // agency. (Also: producer.agencyId is membership, not ownership — see the Agency
+  // model's doc comment — so this couldn't just read req.producer.agencyId either.)
+  let agencyId = null;
+  if (ownerType === 'agency') {
+    const ownedAgency = await prisma.agency.findUnique({ where: { ownerId: req.producerId } });
+    if (!ownedAgency) return res.status(403).json({ error: 'Only an agency owner can log an override entry.' });
+    agencyId = ownedAgency.id;
+  }
+
   // Chargebacks are stored as negative amounts (bob-schema.md) — normalize here so
   // the caller doesn't have to remember to negate it themselves.
   const normalizedAmount = entryType === 'chargeback' ? -Math.abs(Number(amount)) : Number(amount);
@@ -54,7 +65,7 @@ router.post('/', asyncHandler(async (req, res) => {
       policyId,
       ownerType,
       producerId: ownerType === 'producer' ? req.producerId : null,
-      agencyId: ownerType === 'agency' ? agencyId : null,
+      agencyId,
       entryType,
       amount: normalizedAmount,
       entryDate: new Date(entryDate),

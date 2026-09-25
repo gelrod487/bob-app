@@ -29,7 +29,7 @@ router.get('/', asyncHandler(async (req, res) => {
 
 // POST /api/expenses
 router.post('/', asyncHandler(async (req, res) => {
-  const { ownerType, category, description, vendor, quantity, unitCost, amount, expenseDate, agencyId } = req.body;
+  const { ownerType, category, description, vendor, quantity, unitCost, amount, expenseDate } = req.body;
 
   if (!ownerType || !category || amount === undefined || !expenseDate) {
     return res.status(400).json({ error: 'ownerType, category, amount, and expenseDate are required.' });
@@ -44,11 +44,21 @@ router.post('/', asyncHandler(async (req, res) => {
     return res.status(403).json({ error: err.message });
   }
 
+  // Derived from the authenticated producer's OWN owned agency — see the same note in
+  // commissionEntries.js POST for why this can't trust a client-supplied agencyId or
+  // read req.producer.agencyId (that's membership, not ownership).
+  let agencyId = null;
+  if (ownerType === 'agency') {
+    const ownedAgency = await prisma.agency.findUnique({ where: { ownerId: req.producerId } });
+    if (!ownedAgency) return res.status(403).json({ error: 'Only an agency owner can log an agency-level cost.' });
+    agencyId = ownedAgency.id;
+  }
+
   const expense = await prisma.expense.create({
     data: {
       ownerType,
       producerId: ownerType === 'producer' ? req.producerId : null,
-      agencyId: ownerType === 'agency' ? agencyId : null,
+      agencyId,
       category,
       description: description || null,
       vendor: vendor || null,
