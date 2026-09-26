@@ -133,6 +133,8 @@ footer.hint{text-align:center; color:var(--ink-soft); font-size:.78rem; margin-t
 .payout-row.total{border-bottom:none; border-top:1px solid var(--line); margin-top:4px; padding-top:12px;}
 .payout-row.total strong{font-family:'Playfair Display',serif; font-size:1.05rem; color:var(--maroon);}
 
+h2.calc-section-title{margin:0 0 14px; font-size:1.05rem; font-weight:800; color:var(--maroon);}
+
 /* ---- Marketing homepage ---- */
 .home-nav{display:flex; align-items:center; justify-content:space-between; padding:18px 0; gap:16px; flex-wrap:wrap;}
 .home-nav-links{display:flex; gap:26px; align-items:center;}

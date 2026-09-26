@@ -1409,7 +1409,7 @@ async function renderCalculator(){
     </div>` : ''}
 
     <div class="panel">
-      <h2>Your numbers</h2>
+      <h2 class="calc-section-title">Your numbers</h2>
       <div class="detail-grid">
         <div>
           <label>Your Contract Level (${calcSchedule.imo})</label>
@@ -1425,7 +1425,7 @@ async function renderCalculator(){
 
     ${carriers.length ? `
     <div class="panel">
-      <div class="page-eyebrow">Carrier &amp; Product</div>
+      <h2 class="calc-section-title">Carrier &amp; Product</h2>
       <div class="carrier-pills" id="calcCarrierPicker">
         ${carriers.map((c,i) => `<div class="carrier-pill${i===0?' selected':''}" data-carrier="${c}">${c}</div>`).join('')}
       </div>
@@ -1433,26 +1433,27 @@ async function renderCalculator(){
     </div>
 
     <div class="panel" style="border:1.5px solid var(--maroon);">
-      <div class="page-eyebrow">Your Payout</div>
+      <h2 class="calc-section-title">Your Payout</h2>
       <div id="calcResult"></div>
     </div>
 
     <div class="panel">
-      <div class="page-eyebrow">How it's actually paid out (advance schedule)</div>
+      <h2 class="calc-section-title">How it's actually paid out (advance schedule)</h2>
       <div id="calcAdvance"></div>
     </div>
 
     <div class="panel">
-      <h2>Compare every product at your level</h2>
+      <h2 class="calc-section-title">Compare every product at your level</h2>
       <table class="statement-table">
         <thead><tr><th>Carrier</th><th>Product</th><th>Payout %</th><th>You earn</th></tr></thead>
         <tbody id="calcCompareBody"></tbody>
       </table>
     </div>` : ''}
 
+    ${calcSchedule.rates.length < 20 ? `
     <div class="panel">
-      <h2>Add or correct a rate</h2>
-      <p class="helptext" style="margin-top:-8px;">Shared with everyone at ${calcSchedule.imo} — this is how an IMO with no data yet gets built out.</p>
+      <h2 class="calc-section-title">Add or correct a rate</h2>
+      <p class="helptext" style="margin-top:-8px;">${calcSchedule.imo} is still being built out — add rates here to grow its calculator. Once entered, everyone else at ${calcSchedule.imo} will see the same rates too.</p>
       <form class="entry" id="addRateForm">
         <div><label>Carrier</label><input required name="carrierName" placeholder="e.g. Americo"></div>
         <div><label>Product</label><input required name="productName" placeholder="e.g. HMS 125"></div>
@@ -1461,7 +1462,11 @@ async function renderCalculator(){
         <div class="full"><button class="primary" type="submit">Save Rate</button></div>
         <div class="full errortext" id="addRateError"></div>
       </form>
-    </div>
+    </div>` : `
+    <div class="panel">
+      <h2 class="calc-section-title">Spot an error?</h2>
+      <p class="helptext" style="margin-top:-8px;">${calcSchedule.imo}'s rates come from your IMO's official comp guide. If a rate looks wrong, contact your IMO administrator to have it corrected.</p>
+    </div>`}
   `;
 
   function selectedProduct(){
@@ -1579,7 +1584,8 @@ async function renderCalculator(){
     recompute();
   }
 
-  document.getElementById('addRateForm').addEventListener('submit', async e => {
+  const addRateForm = document.getElementById('addRateForm');
+  if (addRateForm) addRateForm.addEventListener('submit', async e => {
     e.preventDefault();
     const errEl = document.getElementById('addRateError');
     errEl.textContent = '';
