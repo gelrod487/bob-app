@@ -1,6 +1,9 @@
 require('dotenv').config();
 const prisma = require('../src/lib/db');
-const { IMO_NAME, LEVELS, PRODUCTS } = require('./seed-data/ffl-comp-guide-2026-v7');
+// Pass a seed-data module path as the first CLI arg to load a different batch, e.g.:
+//   node prisma/seed-imo-rates.js ./seed-data/ffl-srs-guide-2024
+const dataModule = process.argv[2] || './seed-data/ffl-comp-guide-2026-v7';
+const { IMO_NAME, LEVELS, PRODUCTS } = require(dataModule);
 
 async function main() {
   const rows = [];
