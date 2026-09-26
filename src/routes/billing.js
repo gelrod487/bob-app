@@ -7,16 +7,17 @@ const router = express.Router();
 
 const PRICE_BY_TIER = {
   individual: process.env.STRIPE_PRICE_ID_INDIVIDUAL,
+  producer_plus: process.env.STRIPE_PRICE_ID_PRODUCER_PLUS,
   agency_owner: process.env.STRIPE_PRICE_ID_AGENCY,
 };
 
-// POST /api/billing/checkout-session — body: { tier: 'individual' | 'agency_owner' }
+// POST /api/billing/checkout-session — body: { tier: 'individual' | 'producer_plus' | 'agency_owner' }
 // Creates (or reuses) a Stripe customer for this producer, then a Checkout Session for
 // the requested plan. Returns { url } for the frontend to redirect the browser to.
 router.post('/checkout-session', asyncHandler(async (req, res) => {
   const { tier } = req.body;
   const priceId = PRICE_BY_TIER[tier];
-  if (!priceId) return res.status(400).json({ error: 'tier must be "individual" or "agency_owner".' });
+  if (!priceId) return res.status(400).json({ error: 'tier must be "individual", "producer_plus", or "agency_owner".' });
 
   const producer = await prisma.producer.findUnique({ where: { id: req.producerId } });
 

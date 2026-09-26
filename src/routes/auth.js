@@ -35,8 +35,8 @@ router.post('/bootstrap', asyncHandler(async (req, res) => {
   }
 
   if (!tier) return res.status(400).json({ error: 'name and tier are required.' });
-  if (!['individual', 'agency_owner'].includes(tier)) {
-    return res.status(400).json({ error: 'tier must be "individual" or "agency_owner".' });
+  if (!['individual', 'producer_plus', 'agency_owner'].includes(tier)) {
+    return res.status(400).json({ error: 'tier must be "individual", "producer_plus", or "agency_owner".' });
   }
 
   // Agency.ownerId is a real FK to Producer, so the producer has to exist before the

@@ -49,7 +49,15 @@ model Producer {
   name              String
   email             String   @unique
   supabaseUserId    String   @unique @map("supabase_user_id") // links to Supabase Auth's auth.users.id
-  subscriptionTier  String   @default("individual") @map("subscription_tier") // 'individual' | 'agency_owner'
+  // IMO/upline name (e.g. "Family First Life"), free text — selects which shared
+  // ImoCommissionRate table the commission calculator reads from (see that model's
+  // doc comment). Not a real foreign key: most IMOs won't exist in that table yet.
+  imo               String?
+  // This producer's own current contract level (e.g. 115 for a 115% contract) — lets
+  // the commission calculator default to their real rate instead of an arbitrary
+  // starting slider value every time they open it.
+  contractLevel     Int?     @map("contract_level")
+  subscriptionTier  String   @default("individual") @map("subscription_tier") // 'individual' | 'producer_plus' | 'agency_owner'
   subscriptionStatus String  @default("inactive") @map("subscription_status") // 'inactive' | 'active' | 'past_due' | 'canceled'
   stripeCustomerId     String? @unique @map("stripe_customer_id")
   stripeSubscriptionId String? @unique @map("stripe_subscription_id")
@@ -120,6 +128,27 @@ model TeamGoal {
 
   @@unique([agencyId, month])
   @@map("team_goal")
+}
+
+// The commission calculator's data (Producer Plus / Agency Owner feature): a payout %
+// for a given carrier + product at a given contract level. Deliberately keyed by IMO
+// NAME as shared/reference data, not owned by one producer — every producer at the same
+// IMO uses the same negotiated carrier rates, so whoever populates it first (BOB, for
+// Family First Life, seeded from their real comp guide) makes it work for everyone else
+// at that IMO with zero setup. An IMO with no rows yet just means nobody's added it —
+// a Plus/Agency Owner producer whose imo has no data can add rows via the calculator's
+// "Add rate" form, which is what "growth outside FFL" without BOB needing anyone else's
+// proprietary comp data actually looks like in practice.
+model ImoCommissionRate {
+  id            String  @id @default(uuid())
+  imoName       String  @map("imo_name")
+  carrierName   String  @map("carrier_name")
+  productName   String  @map("product_name")
+  contractLevel Int     @map("contract_level") // e.g. 115 for a 115% contract
+  payoutRate    Decimal @db.Decimal(6, 3) @map("payout_rate") // e.g. 115.000 for 115%
+
+  @@unique([imoName, carrierName, productName, contractLevel])
+  @@map("imo_commission_rate")
 }
 
 model Client {

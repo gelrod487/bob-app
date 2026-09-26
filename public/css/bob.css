@@ -105,8 +105,8 @@ footer.hint{text-align:center; color:var(--ink-soft); font-size:.78rem; margin-t
 .auth-tab.active{color:var(--maroon); border-bottom-color:var(--maroon);}
 .auth-form{display:flex; flex-direction:column; gap:14px;}
 .auth-form.section-hidden{display:none;}
-.tier-options{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
-.tier-option{border:1.5px solid var(--line); border-radius:12px; padding:12px; cursor:pointer; text-align:center; font-weight:700; font-size:.85rem; background:var(--cream);}
+.tier-options{display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;}
+.tier-option{border:1.5px solid var(--line); border-radius:12px; padding:12px 6px; cursor:pointer; text-align:center; font-weight:700; font-size:.8rem; background:var(--cream);}
 .tier-option.selected{border-color:var(--maroon); background:var(--panel-alt); color:var(--maroon);}
 
 /* ---- Marketing homepage ---- */

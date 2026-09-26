@@ -29,12 +29,31 @@ router.get('/', asyncHandler(async (req, res) => {
       email: producer.email,
       agencyId: producer.agencyId,
       ownedAgencyId: ownedAgency?.id || null,
+      imo: producer.imo,
+      contractLevel: producer.contractLevel,
       subscriptionTier: producer.subscriptionTier,
       subscriptionStatus: producer.subscriptionStatus,
       trialEndsAt: endsAt.toISOString(),
       trialExpired,
     },
   });
+}));
+
+// PUT /api/me — lets a producer edit their own profile. Deliberately narrow: just the
+// fields Settings actually exposes (imo, contractLevel) — name/email changes would need
+// to touch Supabase auth too, out of scope for now.
+router.put('/', asyncHandler(async (req, res) => {
+  if (!req.producerId) return res.status(409).json({ error: 'Finish setting up your account first.' });
+
+  const { imo, contractLevel } = req.body;
+  const updated = await prisma.producer.update({
+    where: { id: req.producerId },
+    data: {
+      imo: imo !== undefined ? (imo || null) : undefined,
+      contractLevel: contractLevel !== undefined ? (contractLevel === null ? null : Number(contractLevel)) : undefined,
+    },
+  });
+  res.json({ imo: updated.imo, contractLevel: updated.contractLevel });
 }));
 
 module.exports = router;

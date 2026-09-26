@@ -30,6 +30,7 @@
       <button data-page="costs"><span class="ic">🧾</span>Costs</button>
       <button data-page="profit"><span class="ic">📈</span>Profit</button>
       <button data-page="goals"><span class="ic">🎯</span>Goals</button>
+      <button data-page="calculator" id="calculatorNavBtn" style="display:none;"><span class="ic">🧮</span>Calculator</button>
     </div>
     <div class="sidebar-footer">
       <button data-page="subscribe"><span class="ic">💳</span>Subscribe <span class="pill" id="sidebarStatusPill" style="margin-left:auto;"></span></button>
@@ -76,6 +77,10 @@ const STATUS_TAG = {
   cancelled: { cls: 'lapsed', label: 'Cancelled' },
   lapsed: { cls: 'lapsed', label: 'Lapsed' },
 };
+const PLAN_LABEL = { individual: 'Producer', producer_plus: 'Producer Plus', agency_owner: 'Agency' };
+// Producer Plus AND Agency Owner both get the commission calculator — Agency Owner
+// includes every Producer Plus feature on top of the team dashboard.
+function hasCalculatorAccess(tier) { return tier === 'producer_plus' || tier === 'agency_owner'; }
 
 function fmt(n){ return '$'+Number(n||0).toLocaleString(undefined,{maximumFractionDigits:0}); }
 function wireCopyButton(btnId, inputId){
@@ -174,7 +179,7 @@ const say = wireMascot('navMascot', ["Hi, I'm Bob!","Bump your dials — I'll do
 
 /* ---- sidebar nav ---- */
 const mainInner = document.getElementById('mainInner');
-const PAGES = { desk: renderDesk, activity: renderActivity, book: () => renderBook('',''), costs: renderCosts, profit: renderProfit, goals: renderGoals, subscribe: renderSubscribe, team: renderTeam, settings: renderSettings };
+const PAGES = { desk: renderDesk, activity: renderActivity, book: () => renderBook('',''), costs: renderCosts, profit: renderProfit, goals: renderGoals, subscribe: renderSubscribe, team: renderTeam, calculator: renderCalculator, settings: renderSettings };
 let currentPage = 'desk';
 function renderCurrentPage(){ PAGES[currentPage](); }
 function go(page){
@@ -201,6 +206,7 @@ document.getElementById('logoutBtn').onclick = async () => { await supabaseClien
   statusPill.textContent = me.subscriptionStatus;
   statusPill.className = 'pill ' + me.subscriptionStatus;
   if (me.subscriptionTier === 'agency_owner') document.getElementById('teamNavBtn').style.display = '';
+  if (hasCalculatorAccess(me.subscriptionTier)) document.getElementById('calculatorNavBtn').style.display = '';
 
   setTimeout(()=>say("Hi, I'm Bob!"), 900);
   go(me.trialExpired ? 'subscribe' : 'desk');
@@ -1218,17 +1224,20 @@ async function renderSubscribe(){
     </div>
     ${me.trialExpired ? `<div class="panel" style="border-color:var(--maroon); margin-bottom:16px;"><p class="helptext" style="color:var(--maroon); font-weight:600;">Your 14-day free trial has ended. Subscribe below to keep using your book.</p></div>` : ''}
     <div class="panel">
-      <p class="helptext">Current plan: <strong>${me.subscriptionTier === 'agency_owner' ? 'Agency' : 'Producer'}</strong> · Status: <span class="pill ${me.subscriptionStatus}">${me.subscriptionStatus}</span></p>
+      <p class="helptext">Current plan: <strong>${PLAN_LABEL[me.subscriptionTier] || 'Producer'}</strong> · Status: <span class="pill ${me.subscriptionStatus}">${me.subscriptionStatus}</span></p>
       <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:16px;">
         <button class="primary" id="subscribeIndividualBtn">Subscribe — Producer ($29/mo)</button>
+        <button class="primary" id="subscribeProducerPlusBtn">Subscribe — Producer Plus ($39/mo)</button>
         <button class="primary" id="subscribeAgencyBtn">Subscribe — Agency ($79/mo)</button>
         <button class="ghost" id="manageBillingBtn" style="${me.subscriptionStatus==='active'?'':'display:none;'}">Manage Billing</button>
       </div>
+      <p class="helptext" style="margin-top:10px;">Producer Plus adds the commission calculator. Agency Owner includes everything in Producer Plus, plus your team dashboard.</p>
       <div class="errortext" id="billingError"></div>
     </div>
   `;
   if (canGoBack) document.getElementById('backToDeskBtn').onclick = () => go('desk');
   document.getElementById('subscribeIndividualBtn').onclick = () => startCheckout('individual');
+  document.getElementById('subscribeProducerPlusBtn').onclick = () => startCheckout('producer_plus');
   document.getElementById('subscribeAgencyBtn').onclick = () => startCheckout('agency_owner');
   document.getElementById('manageBillingBtn').onclick = async () => {
     const errEl = document.getElementById('billingError');
@@ -1360,6 +1369,150 @@ async function renderGoals(){
   }
 }
 
+/* ================= CALCULATOR (Producer Plus / Agency Owner) ================= */
+let calcSchedule = { imo: null, rates: [] };
+async function renderCalculator(){
+  mainInner.innerHTML = `<div class="page-header"><div><div class="page-eyebrow">Calculator</div><h1>Commission calculator</h1></div></div><p class="helptext">Loading…</p>`;
+  calcSchedule = await apiFetch('/api/commission-schedule');
+
+  if (!calcSchedule.imo) {
+    mainInner.innerHTML = `
+      <div class="page-header"><div><div class="page-eyebrow">Calculator</div><h1>Commission calculator</h1></div></div>
+      <div class="panel">
+        <h2>Set your IMO first</h2>
+        <p class="helptext">The calculator reads its carrier/product rates from whichever IMO you're with. Go to <strong>Settings</strong> and enter your IMO name, then come back here.</p>
+        <button class="primary" type="button" onclick="go('settings')">Go to Settings</button>
+      </div>
+    `;
+    return;
+  }
+
+  const carrierProducts = [...new Map(calcSchedule.rates.map(r => [r.carrierName + '|' + r.productName, { carrier: r.carrierName, product: r.productName }])).values()]
+    .sort((a,b) => a.carrier.localeCompare(b.carrier) || a.product.localeCompare(b.product));
+
+  mainInner.innerHTML = `
+    <div class="page-header"><div><div class="page-eyebrow">Calculator</div><h1>Commission calculator</h1></div></div>
+    <p class="helptext" style="margin-top:-10px;">Rates for <strong>${calcSchedule.imo}</strong> — shared across everyone at your IMO. ${calcSchedule.rates.length} rates loaded.</p>
+
+    ${calcSchedule.rates.length === 0 ? `
+    <div class="panel" style="border-color:var(--maroon);">
+      <p class="helptext" style="color:var(--maroon); font-weight:600;">No rates yet for "${calcSchedule.imo}". Add your first one below — everyone else at your IMO will see it too.</p>
+    </div>` : ''}
+
+    <div class="panel">
+      <h2>Your numbers</h2>
+      <div class="detail-grid">
+        <div>
+          <label>Your Contract Level (${calcSchedule.imo})</label>
+          <input type="range" id="calcLevel" min="50" max="150" step="5" value="${me.contractLevel || 100}" style="width:100%;">
+          <p class="helptext" style="margin:2px 0 0;">Level: <strong id="calcLevelValue">${me.contractLevel || 100}%</strong></p>
+        </div>
+        <div>
+          <label>Annual Premium ($)</label>
+          <input type="number" id="calcPremium" value="1200" min="0" step="50">
+        </div>
+      </div>
+    </div>
+
+    ${carrierProducts.length ? `
+    <div class="panel">
+      <h2>Carrier &amp; Product</h2>
+      <div class="tier-options" id="calcProductPicker" style="grid-template-columns:repeat(auto-fill, minmax(160px,1fr));">
+        ${carrierProducts.map((cp,i) => `<div class="tier-option${i===0?' selected':''}" data-carrier="${cp.carrier}" data-product="${cp.product}">${cp.carrier} — ${cp.product}</div>`).join('')}
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Your payout</h2>
+      <div id="calcResult"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Compare every product at your level</h2>
+      <table class="statement-table">
+        <thead><tr><th>Carrier</th><th>Product</th><th>Payout %</th><th>You earn</th></tr></thead>
+        <tbody id="calcCompareBody"></tbody>
+      </table>
+    </div>` : ''}
+
+    <div class="panel">
+      <h2>Add or correct a rate</h2>
+      <p class="helptext" style="margin-top:-8px;">Shared with everyone at ${calcSchedule.imo} — this is how an IMO with no data yet gets built out.</p>
+      <form class="entry" id="addRateForm">
+        <div><label>Carrier</label><input required name="carrierName" placeholder="e.g. Americo"></div>
+        <div><label>Product</label><input required name="productName" placeholder="e.g. HMS 125"></div>
+        <div><label>Contract Level</label><input required type="number" name="contractLevel" placeholder="115"></div>
+        <div><label>Payout Rate (%)</label><input required type="number" step="0.01" name="payoutRate" placeholder="115"></div>
+        <div class="full"><button class="primary" type="submit">Save Rate</button></div>
+        <div class="full errortext" id="addRateError"></div>
+      </form>
+    </div>
+  `;
+
+  function selectedProduct(){
+    const el = document.querySelector('#calcProductPicker .tier-option.selected');
+    return el ? { carrier: el.dataset.carrier, product: el.dataset.product } : null;
+  }
+
+  function recompute(){
+    const level = Number(document.getElementById('calcLevel').value);
+    const premium = Number(document.getElementById('calcPremium').value) || 0;
+    document.getElementById('calcLevelValue').textContent = level + '%';
+
+    const sel = selectedProduct();
+    const resultEl = document.getElementById('calcResult');
+    if (sel) {
+      const match = calcSchedule.rates.find(r => r.carrierName===sel.carrier && r.productName===sel.product && r.contractLevel===level);
+      if (match) {
+        const commission = premium * Number(match.payoutRate) / 100;
+        const advanceNow = commission * 0.75;
+        const heldBack = commission * 0.25;
+        resultEl.innerHTML = `
+          <p class="helptext">${sel.carrier} — ${sel.product}, at a ${level}% contract on a ${fmt(premium)} annual premium</p>
+          <div class="headline-num">${fmt(commission)}</div>
+          <p class="helptext">Total first-year commission (${match.payoutRate}% payout)</p>
+          <p class="helptext" style="margin-top:10px;">Rough estimate only — actual advance schedules vary by carrier: many pay roughly 75% up front (${fmt(advanceNow)}) with the rest (${fmt(heldBack)}) held back over the policy's later months.</p>
+        `;
+      } else {
+        resultEl.innerHTML = `<p class="helptext">${sel.carrier} — ${sel.product} isn't offered at a ${level}% contract level (no rate on file).</p>`;
+      }
+    }
+
+    const compareBody = document.getElementById('calcCompareBody');
+    if (compareBody) {
+      const atLevel = calcSchedule.rates.filter(r => r.contractLevel === level).sort((a,b) => Number(b.payoutRate) - Number(a.payoutRate));
+      compareBody.innerHTML = atLevel.map(r => `<tr><td>${r.carrierName}</td><td>${r.productName}</td><td>${r.payoutRate}%</td><td>${fmt(premium * Number(r.payoutRate) / 100)}</td></tr>`).join('')
+        || '<tr><td colspan="4" class="helptext">No products on file at this contract level.</td></tr>';
+    }
+  }
+
+  document.getElementById('calcLevel').addEventListener('input', recompute);
+  document.getElementById('calcPremium').addEventListener('input', recompute);
+  document.querySelectorAll('#calcProductPicker .tier-option').forEach(opt => {
+    opt.onclick = () => {
+      document.querySelectorAll('#calcProductPicker .tier-option').forEach(o => o.classList.remove('selected'));
+      opt.classList.add('selected');
+      recompute();
+    };
+  });
+  if (carrierProducts.length) recompute();
+
+  document.getElementById('addRateForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const errEl = document.getElementById('addRateError');
+    errEl.textContent = '';
+    const f = new FormData(e.target);
+    try {
+      await apiFetch('/api/commission-schedule', { method:'POST', body:{
+        carrierName: f.get('carrierName'), productName: f.get('productName'),
+        contractLevel: Number(f.get('contractLevel')), payoutRate: Number(f.get('payoutRate')),
+      }});
+      say('Rate saved!');
+      renderCalculator();
+    } catch (err) { errEl.textContent = err.message; }
+  });
+}
+
 /* ================= SETTINGS ================= */
 async function renderSettings(){
   mainInner.innerHTML = `<div class="page-header"><div><div class="page-eyebrow">Settings</div><h1>Account</h1></div></div><p class="helptext">Loading…</p>`;
@@ -1371,9 +1524,37 @@ async function renderSettings(){
       <h2>Account</h2>
       <p class="helptext">Name: <strong>${me.name}</strong></p>
       <p class="helptext">Email: <strong>${me.email}</strong></p>
-      <p class="helptext">Plan: <strong>${me.subscriptionTier === 'agency_owner' ? 'Agency' : 'Producer'}</strong></p>
+      <p class="helptext">Plan: <strong>${PLAN_LABEL[me.subscriptionTier] || 'Producer'}</strong></p>
+    </div>
+
+    <div class="panel">
+      <h2>IMO &amp; contract level</h2>
+      <p class="helptext" style="margin-top:-8px;">Powers the commission calculator (Producer Plus / Agency Owner) — the calculator reads rates from whichever IMO you enter here.</p>
+      <form class="entry" id="imoForm">
+        <div><label>IMO / Upline</label><input name="imo" placeholder="e.g. Family First Life" value="${me.imo || ''}"></div>
+        <div><label>Your Contract Level (%)</label><input type="number" name="contractLevel" placeholder="e.g. 115" value="${me.contractLevel ?? ''}"></div>
+        <div class="full"><button class="primary" type="submit">Save</button></div>
+        <div class="full errortext" id="imoError"></div>
+        <div class="full helptext" id="imoSaved"></div>
+      </form>
     </div>
   `;
+  document.getElementById('imoForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const errEl = document.getElementById('imoError');
+    errEl.textContent = '';
+    const f = new FormData(e.target);
+    try {
+      const updated = await apiFetch('/api/me', { method:'PUT', body:{
+        imo: f.get('imo') || null,
+        contractLevel: f.get('contractLevel') ? Number(f.get('contractLevel')) : null,
+      }});
+      me.imo = updated.imo;
+      me.contractLevel = updated.contractLevel;
+      document.getElementById('imoSaved').textContent = 'Saved!';
+      say('Settings updated.');
+    } catch (err) { errEl.textContent = err.message; }
+  });
 }
 </script>
 </body>
