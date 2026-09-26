@@ -1397,8 +1397,7 @@ async function renderCalculator(){
     return;
   }
 
-  const carrierProducts = [...new Map(calcSchedule.rates.map(r => [r.carrierName + '|' + r.productName, { carrier: r.carrierName, product: r.productName }])).values()]
-    .sort((a,b) => a.carrier.localeCompare(b.carrier) || a.product.localeCompare(b.product));
+  const carriers = [...new Set(calcSchedule.rates.map(r => r.carrierName))].sort((a,b) => a.localeCompare(b));
 
   mainInner.innerHTML = `
     <div class="page-header"><div><div class="page-eyebrow">Calculator</div><h1>Commission calculator</h1></div></div>
@@ -1424,15 +1423,16 @@ async function renderCalculator(){
       </div>
     </div>
 
-    ${carrierProducts.length ? `
+    ${carriers.length ? `
     <div class="panel">
-      <h2>Carrier &amp; Product</h2>
-      <div class="tier-options" id="calcProductPicker" style="grid-template-columns:repeat(auto-fill, minmax(160px,1fr));">
-        ${carrierProducts.map((cp,i) => `<div class="tier-option${i===0?' selected':''}" data-carrier="${cp.carrier}" data-product="${cp.product}">${cp.carrier} — ${cp.product}</div>`).join('')}
+      <div class="page-eyebrow">Step 2 — Carrier &amp; Product</div>
+      <div class="carrier-pills" id="calcCarrierPicker">
+        ${carriers.map((c,i) => `<div class="carrier-pill${i===0?' selected':''}" data-carrier="${c}">${c}</div>`).join('')}
       </div>
+      <div class="product-cards" id="calcProductPicker" style="margin-top:14px;"></div>
     </div>
 
-    <div class="panel">
+    <div class="panel" style="border:1.5px solid var(--maroon);">
       <div class="page-eyebrow">Step 3 — Your Payout</div>
       <div id="calcResult"></div>
     </div>
@@ -1465,14 +1465,45 @@ async function renderCalculator(){
   `;
 
   function selectedProduct(){
-    const el = document.querySelector('#calcProductPicker .tier-option.selected');
+    const el = document.querySelector('#calcProductPicker .product-card.selected');
     return el ? { carrier: el.dataset.carrier, product: el.dataset.product } : null;
+  }
+
+  function renderProductCards(carrier){
+    const level = Number(document.getElementById('calcLevel').value);
+    const products = [...new Set(calcSchedule.rates.filter(r => r.carrierName === carrier).map(r => r.productName))].sort((a,b) => a.localeCompare(b));
+    const pickerEl = document.getElementById('calcProductPicker');
+    pickerEl.innerHTML = products.map((p,i) => {
+      const rate = calcSchedule.rates.find(r => r.carrierName === carrier && r.productName === p && r.contractLevel === level);
+      const typeLabel = productTypeLabel(p);
+      return `
+        <div class="product-card${i===0?' selected':''}" data-carrier="${carrier}" data-product="${p}">
+          <div class="product-name">${p}</div>
+          <div class="product-rate">${rate ? Number(rate.payoutRate) + '%' : '—'}</div>
+          ${typeLabel ? `<span class="product-type-badge">${typeLabel}</span>` : ''}
+        </div>`;
+    }).join('');
+    pickerEl.querySelectorAll('.product-card').forEach(card => {
+      card.onclick = () => {
+        pickerEl.querySelectorAll('.product-card').forEach(c => c.classList.remove('selected'));
+        card.classList.add('selected');
+        recompute();
+      };
+    });
+  }
+
+  function refreshProductCardRates(level){
+    document.querySelectorAll('#calcProductPicker .product-card').forEach(card => {
+      const rate = calcSchedule.rates.find(r => r.carrierName === card.dataset.carrier && r.productName === card.dataset.product && r.contractLevel === level);
+      card.querySelector('.product-rate').textContent = rate ? Number(rate.payoutRate) + '%' : '—';
+    });
   }
 
   function recompute(){
     const level = Number(document.getElementById('calcLevel').value);
     const premium = Number(document.getElementById('calcPremium').value) || 0;
     document.getElementById('calcLevelValue').textContent = level + '%';
+    refreshProductCardRates(level);
 
     const sel = selectedProduct();
     const resultEl = document.getElementById('calcResult');
@@ -1486,17 +1517,19 @@ async function renderCalculator(){
         const monthly = heldBack / 3;
         const typeLabel = productTypeLabel(sel.product);
         resultEl.innerHTML = `
-          <p class="helptext" style="text-transform:uppercase; letter-spacing:.04em; font-weight:700; color:var(--maroon); margin-bottom:2px;">${sel.carrier} — ${sel.product}</p>
-          <div class="headline-num">${fmt(commission)}</div>
-          <p class="helptext" style="margin-top:2px;">At a ${level}% FFL contract on a ${fmt(premium)} annual premium${typeLabel ? ` (${typeLabel})` : ''}</p>
-          <table class="statement-table" style="margin-top:14px;">
-            <tbody>
-              <tr><td>Annual Premium</td><td>${fmt(premium)}</td></tr>
-              <tr><td>Your FFL Contract</td><td>${level}%</td></tr>
-              <tr><td>Carrier Payout Rate</td><td>${match.payoutRate}%</td></tr>
-              <tr class="statement-total"><td>Total First-Year Commission</td><td>${fmt(commission)}</td></tr>
-            </tbody>
-          </table>
+          <div class="payout-grid">
+            <div class="payout-left">
+              <p class="payout-label">${sel.carrier} — ${sel.product}</p>
+              <div class="payout-amount">${fmt(commission)}</div>
+              <p class="payout-sub">At a ${level}% FFL contract on a ${fmt(premium)} annual premium${typeLabel ? ` (${typeLabel})` : ''}</p>
+            </div>
+            <div class="payout-right">
+              <div class="payout-row"><span>Annual Premium</span><strong>${fmt(premium)}</strong></div>
+              <div class="payout-row"><span>Your FFL Contract</span><strong>${level}%</strong></div>
+              <div class="payout-row"><span>Carrier Payout Rate</span><strong>${match.payoutRate}%</strong></div>
+              <div class="payout-row total"><span>Total First-Year Commission</span><strong>${fmt(commission)}</strong></div>
+            </div>
+          </div>
         `;
         if (advanceEl) advanceEl.innerHTML = `
           <p class="helptext">The carrier advances <strong>75%</strong> of the first-year commission up front — that's 9 of the 12 months, paid to you net as soon as the policy is issued and paid. The remaining <strong>25%</strong> (the last 3 months) isn't advanced — the carrier pays it out as it's earned, in months 10, 11, and 12 of the policy.</p>
@@ -1533,14 +1566,18 @@ async function renderCalculator(){
 
   document.getElementById('calcLevel').addEventListener('input', recompute);
   document.getElementById('calcPremium').addEventListener('input', recompute);
-  document.querySelectorAll('#calcProductPicker .tier-option').forEach(opt => {
-    opt.onclick = () => {
-      document.querySelectorAll('#calcProductPicker .tier-option').forEach(o => o.classList.remove('selected'));
-      opt.classList.add('selected');
-      recompute();
-    };
-  });
-  if (carrierProducts.length) recompute();
+  if (carriers.length) {
+    renderProductCards(carriers[0]);
+    document.querySelectorAll('#calcCarrierPicker .carrier-pill').forEach(pill => {
+      pill.onclick = () => {
+        document.querySelectorAll('#calcCarrierPicker .carrier-pill').forEach(p => p.classList.remove('selected'));
+        pill.classList.add('selected');
+        renderProductCards(pill.dataset.carrier);
+        recompute();
+      };
+    });
+    recompute();
+  }
 
   document.getElementById('addRateForm').addEventListener('submit', async e => {
     e.preventDefault();
