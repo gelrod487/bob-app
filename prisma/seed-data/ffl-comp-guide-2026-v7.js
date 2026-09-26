@@ -1,12 +1,14 @@
 // Transcribed from Family First Life's "2026 Comp Guide v7" (revised 08/26/2026),
 // pages 1-6, by visual review of the rendered PDF pages (the source document uses
-// graphic tables, not extractable text). Spot-checked against a high-resolution
-// re-render for one value that looked like an outlier (American Amicable XUL at
-// contract level 70 reads 76%, breaking the otherwise-monotonic pattern around it —
-// confirmed present in the source at 400dpi, so transcribed as-is rather than
-// "corrected"). Given the volume (~50 columns x 17 rows), treat this as a strong
-// first pass — worth spot-checking against the PDF, and any correction can be made
-// directly in the app once the "edit rate" UI exists, without needing a new seed run.
+// graphic tables, not extractable text). Given the volume (~50 columns x 17 rows),
+// treat this as a strong first pass — worth spot-checking against the PDF; any further
+// correction can be made directly in the app's "Add or correct a rate" form, without
+// needing a new seed run.
+//
+// Corrected 2026-09-26 per Gustin: American Amicable XUL at contract level 100 is 65%,
+// not the 76% this file originally had (the PDF's own table reads 76% there, breaking
+// the otherwise-monotonic pattern — confirmed by re-rendering the source at 400dpi — but
+// that's evidently a typo in FFL's own guide, not a transcription error on this end).
 //
 // LEVELS are the FFL Contract percentages this guide is keyed by, high to low.
 // Each product's `rates` array lines up 1:1 with LEVELS; null means "not offered at
@@ -31,7 +33,7 @@ const PRODUCTS = [
   { carrier: 'American Amicable', product: 'OBA', rates: [100, 100, 95, 90, 85, 80, 75, 70, 65, 60, 55, 50, 45, 40, 35, 30, 30] },
   { carrier: 'American Amicable', product: 'Term Made Simple', rates: [130, 130, 125, 120, 115, 110, 105, 100, 95, 90, 85, 80, 75, 70, 65, 60, 55] },
   { carrier: 'American Amicable', product: 'Family Protector', rates: [130, 130, 125, 120, 115, 110, 105, 100, 95, 90, 85, 80, 75, 70, 65, 60, 55] },
-  { carrier: 'American Amicable', product: 'XUL', rates: [105, 105, 100, 95, 90, 85, 80, 75, 70, 76, 60, 55, 50, 45, 45, 45, 45] },
+  { carrier: 'American Amicable', product: 'XUL', rates: [105, 105, 100, 95, 90, 85, 80, 75, 70, 65, 60, 55, 50, 45, 45, 45, 45] },
   { carrier: 'Corebridge', product: 'GIWL', rates: [null, 80.0, 77.5, 75.0, 72.5, 70.0, 67.5, 65.0, 62.5, 60.0, 57.5, 57.5, 55.0, 55.0, 55.0, 55.0, 55.0] },
   { carrier: 'Corebridge', product: 'SIWL', rates: [null, 132, 127, 122, 117, 112, 107, 102, 97, 92, 87, 82, 77, 72, 67, 62, 57] },
 
