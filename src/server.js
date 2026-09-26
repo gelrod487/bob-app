@@ -23,6 +23,7 @@ app.use('/api', requireAuth);
 
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/me', require('./routes/me'));
+app.use('/api/imos', requireProducer, requireActiveOrTrial, require('./routes/imos'));
 app.use('/api/clients', requireProducer, requireActiveOrTrial, require('./routes/clients'));
 app.use('/api/policies', requireProducer, requireActiveOrTrial, require('./routes/policies'));
 app.use('/api/commission-entries', requireProducer, requireActiveOrTrial, require('./routes/commissionEntries'));

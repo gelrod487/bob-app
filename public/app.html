@@ -1516,6 +1516,7 @@ async function renderCalculator(){
 /* ================= SETTINGS ================= */
 async function renderSettings(){
   mainInner.innerHTML = `<div class="page-header"><div><div class="page-eyebrow">Settings</div><h1>Account</h1></div></div><p class="helptext">Loading…</p>`;
+  const { imos } = await apiFetch('/api/imos');
 
   mainInner.innerHTML = `
     <div class="page-header"><div><div class="page-eyebrow">Settings</div><h1>Account</h1></div></div>
@@ -1531,7 +1532,12 @@ async function renderSettings(){
       <h2>IMO &amp; contract level</h2>
       <p class="helptext" style="margin-top:-8px;">Powers the commission calculator (Producer Plus / Agency Owner) — the calculator reads rates from whichever IMO you enter here.</p>
       <form class="entry" id="imoForm">
-        <div><label>IMO / Upline</label><input name="imo" placeholder="e.g. Family First Life" value="${me.imo || ''}"></div>
+        <div>
+          <label>IMO / Upline</label>
+          <input name="imo" list="imoOptions" placeholder="e.g. Family First Life" value="${me.imo || ''}" autocomplete="off">
+          <datalist id="imoOptions">${imos.map(name => `<option value="${name}">`).join('')}</datalist>
+          <p class="helptext" style="margin:2px 0 0;">Start typing to see IMOs already on BOB — pick one so you share the same commission data. Not listed? Just type your IMO's name.</p>
+        </div>
         <div><label>Your Contract Level (%)</label><input type="number" name="contractLevel" placeholder="e.g. 115" value="${me.contractLevel ?? ''}"></div>
         <div class="full"><button class="primary" type="submit">Save</button></div>
         <div class="full errortext" id="imoError"></div>

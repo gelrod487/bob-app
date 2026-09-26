@@ -45,7 +45,21 @@ router.get('/', asyncHandler(async (req, res) => {
 router.put('/', asyncHandler(async (req, res) => {
   if (!req.producerId) return res.status(409).json({ error: 'Finish setting up your account first.' });
 
-  const { imo, contractLevel } = req.body;
+  let { imo, contractLevel } = req.body;
+  // The Settings page offers an autocomplete of known IMO names, but nothing stops
+  // someone from ignoring it and typing their own variant — normalize case-insensitively
+  // against whatever's already on file (a producer's imo, or an existing rate row) so
+  // "family first life" and "Family First Life" resolve to the SAME shared commission
+  // schedule instead of silently forking into two. First-seen spelling wins.
+  if (imo) {
+    const trimmed = imo.trim();
+    const [existingProducer, existingRate] = await Promise.all([
+      prisma.producer.findFirst({ where: { imo: { equals: trimmed, mode: 'insensitive' } }, select: { imo: true } }),
+      prisma.imoCommissionRate.findFirst({ where: { imoName: { equals: trimmed, mode: 'insensitive' } }, select: { imoName: true } }),
+    ]);
+    imo = existingProducer?.imo || existingRate?.imoName || trimmed;
+  }
+
   const updated = await prisma.producer.update({
     where: { id: req.producerId },
     data: {
