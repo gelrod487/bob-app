@@ -175,8 +175,9 @@ footer.hint{text-align:center; color:var(--ink-soft); font-size:.78rem; margin-t
 .faq-item ol li{margin-bottom:4px;}
 .faq-item ol strong{color:var(--ink);}
 
-.pricing-grid{display:grid; grid-template-columns:1fr 1fr; gap:22px; max-width:760px; margin:0 auto;}
-@media(max-width:700px){.pricing-grid{grid-template-columns:1fr;}}
+.pricing-grid{display:grid; grid-template-columns:1fr 1fr 1fr; gap:22px; max-width:1080px; margin:0 auto;}
+@media(max-width:940px){.pricing-grid{grid-template-columns:1fr 1fr;}}
+@media(max-width:600px){.pricing-grid{grid-template-columns:1fr;}}
 .price-card{background:var(--panel); border-radius:var(--radius); padding:30px 26px; box-shadow:var(--shadow); border:1.5px solid var(--line);}
 .price-card.featured{border-color:var(--maroon);}
 .price-card .price-eyebrow{font-size:.82rem; color:var(--ink-soft); margin-bottom:4px;}

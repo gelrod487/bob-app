@@ -129,7 +129,7 @@ wireTierPicker(completeForm, document.getElementById('completeAgencyNameField'))
 
 /* ---- arriving from a pricing link (e.g. /login.html?tier=agency_owner) ---- */
 const requestedTier = new URLSearchParams(window.location.search).get('tier');
-if (requestedTier === 'individual' || requestedTier === 'agency_owner') {
+if (['individual', 'producer_plus', 'agency_owner'].includes(requestedTier)) {
   document.querySelector('.auth-tab[data-mode="signup"]').click();
   const option = signupForm.querySelector(`.tier-option[data-tier="${requestedTier}"]`);
   if (option) option.click();
