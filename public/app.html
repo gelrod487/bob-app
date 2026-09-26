@@ -1425,7 +1425,7 @@ async function renderCalculator(){
 
     ${carriers.length ? `
     <div class="panel">
-      <div class="page-eyebrow">Step 2 — Carrier &amp; Product</div>
+      <div class="page-eyebrow">Carrier &amp; Product</div>
       <div class="carrier-pills" id="calcCarrierPicker">
         ${carriers.map((c,i) => `<div class="carrier-pill${i===0?' selected':''}" data-carrier="${c}">${c}</div>`).join('')}
       </div>
@@ -1433,12 +1433,12 @@ async function renderCalculator(){
     </div>
 
     <div class="panel" style="border:1.5px solid var(--maroon);">
-      <div class="page-eyebrow">Step 3 — Your Payout</div>
+      <div class="page-eyebrow">Your Payout</div>
       <div id="calcResult"></div>
     </div>
 
     <div class="panel">
-      <div class="page-eyebrow">Step 3B — How it's actually paid out (advance schedule)</div>
+      <div class="page-eyebrow">How it's actually paid out (advance schedule)</div>
       <div id="calcAdvance"></div>
     </div>
 
