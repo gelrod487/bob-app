@@ -1371,6 +1371,16 @@ async function renderGoals(){
 
 /* ================= CALCULATOR (Producer Plus / Agency Owner) ================= */
 let calcSchedule = { imo: null, rates: [] };
+function productTypeLabel(productName){
+  const name = productName.toLowerCase();
+  if (name.includes('iul')) return 'IUL';
+  if (name.includes('gul')) return 'GUL';
+  if (name.includes('whole life') || name.includes('ibc')) return 'Whole Life';
+  if (name.includes('term')) return 'Term';
+  if (name.includes('ul')) return 'UL';
+  return '';
+}
+
 async function renderCalculator(){
   mainInner.innerHTML = `<div class="page-header"><div><div class="page-eyebrow">Calculator</div><h1>Commission calculator</h1></div></div><p class="helptext">Loading…</p>`;
   calcSchedule = await apiFetch('/api/commission-schedule');
@@ -1423,8 +1433,13 @@ async function renderCalculator(){
     </div>
 
     <div class="panel">
-      <h2>Your payout</h2>
+      <div class="page-eyebrow">Step 3 — Your Payout</div>
       <div id="calcResult"></div>
+    </div>
+
+    <div class="panel">
+      <div class="page-eyebrow">Step 3B — How it's actually paid out (advance schedule)</div>
+      <div id="calcAdvance"></div>
     </div>
 
     <div class="panel">
@@ -1463,18 +1478,48 @@ async function renderCalculator(){
     const resultEl = document.getElementById('calcResult');
     if (sel) {
       const match = calcSchedule.rates.find(r => r.carrierName===sel.carrier && r.productName===sel.product && r.contractLevel===level);
+      const advanceEl = document.getElementById('calcAdvance');
       if (match) {
         const commission = premium * Number(match.payoutRate) / 100;
         const advanceNow = commission * 0.75;
         const heldBack = commission * 0.25;
+        const monthly = heldBack / 3;
+        const typeLabel = productTypeLabel(sel.product);
         resultEl.innerHTML = `
-          <p class="helptext">${sel.carrier} — ${sel.product}, at a ${level}% contract on a ${fmt(premium)} annual premium</p>
+          <p class="helptext" style="text-transform:uppercase; letter-spacing:.04em; font-weight:700; color:var(--maroon); margin-bottom:2px;">${sel.carrier} — ${sel.product}</p>
           <div class="headline-num">${fmt(commission)}</div>
-          <p class="helptext">Total first-year commission (${match.payoutRate}% payout)</p>
-          <p class="helptext" style="margin-top:10px;">Rough estimate only — actual advance schedules vary by carrier: many pay roughly 75% up front (${fmt(advanceNow)}) with the rest (${fmt(heldBack)}) held back over the policy's later months.</p>
+          <p class="helptext" style="margin-top:2px;">At a ${level}% FFL contract on a ${fmt(premium)} annual premium${typeLabel ? ` (${typeLabel})` : ''}</p>
+          <table class="statement-table" style="margin-top:14px;">
+            <tbody>
+              <tr><td>Annual Premium</td><td>${fmt(premium)}</td></tr>
+              <tr><td>Your FFL Contract</td><td>${level}%</td></tr>
+              <tr><td>Carrier Payout Rate</td><td>${match.payoutRate}%</td></tr>
+              <tr class="statement-total"><td>Total First-Year Commission</td><td>${fmt(commission)}</td></tr>
+            </tbody>
+          </table>
+        `;
+        if (advanceEl) advanceEl.innerHTML = `
+          <p class="helptext">The carrier advances <strong>75%</strong> of the first-year commission up front — that's 9 of the 12 months, paid to you net as soon as the policy is issued and paid. The remaining <strong>25%</strong> (the last 3 months) isn't advanced — the carrier pays it out as it's earned, in months 10, 11, and 12 of the policy.</p>
+          <table class="statement-table" style="margin-top:10px;">
+            <tbody>
+              <tr><td>Net Advance Paid Now (75%)</td><td>${fmt(advanceNow)}</td></tr>
+              <tr><td>Held-Back Balance (25%, months 10–12)</td><td>${fmt(heldBack)}</td></tr>
+            </tbody>
+          </table>
+          <table class="statement-table" style="margin-top:14px;">
+            <thead><tr><th>Policy Month</th><th>Paid To You</th></tr></thead>
+            <tbody>
+              <tr><td>1 – 9 (advanced now)</td><td>${fmt(advanceNow)}</td></tr>
+              <tr><td>Month 10</td><td>${fmt(monthly)}</td></tr>
+              <tr><td>Month 11</td><td>${fmt(monthly)}</td></tr>
+              <tr><td>Month 12</td><td>${fmt(monthly)}</td></tr>
+            </tbody>
+          </table>
+          <p class="helptext" style="margin-top:10px;">Rough estimate only — actual advance schedules vary by carrier.</p>
         `;
       } else {
         resultEl.innerHTML = `<p class="helptext">${sel.carrier} — ${sel.product} isn't offered at a ${level}% contract level (no rate on file).</p>`;
+        if (advanceEl) advanceEl.innerHTML = `<p class="helptext">Pick a product with a rate at this contract level to see its advance schedule.</p>`;
       }
     }
 

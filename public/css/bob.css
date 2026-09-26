@@ -131,7 +131,7 @@ footer.hint{text-align:center; color:var(--ink-soft); font-size:.78rem; margin-t
 
 .sample-card{background:var(--panel); border-radius:var(--radius); padding:22px; box-shadow:var(--shadow); border:1px solid var(--line);}
 .sample-card .kicker{font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); font-weight:700;}
-.sample-card .headline-num{font-family:'Playfair Display',serif; font-size:1.9rem; font-weight:800; margin:4px 0 14px;}
+.headline-num{font-family:'Playfair Display',serif; font-size:1.9rem; font-weight:800; margin:4px 0 14px;}
 .sample-grid{display:grid; grid-template-columns:1fr 1fr; gap:0; border-top:1px solid var(--line); border-bottom:1px solid var(--line); margin-bottom:14px;}
 .sample-grid > div{padding:12px 0; border-right:1px solid var(--line);}
 .sample-grid > div:nth-child(2n){border-right:none; padding-left:16px;}
