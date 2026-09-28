@@ -32,6 +32,7 @@ router.get('/', asyncHandler(async (req, res) => {
       ownedAgencyId: ownedAgency?.id || null,
       imo: producer.imo,
       contractLevel: producer.contractLevel,
+      annuityTier: producer.annuityTier,
       subscriptionTier: producer.subscriptionTier,
       subscriptionStatus: producer.subscriptionStatus,
       trialEndsAt: endsAt.toISOString(),
@@ -40,13 +41,18 @@ router.get('/', asyncHandler(async (req, res) => {
   });
 }));
 
+const VALID_ANNUITY_TIERS = ['green', 'yellow', 'blue', 'silver', 'gold', 'platinum', 'black', 'royal', 'red'];
+
 // PUT /api/me — lets a producer edit their own profile. Deliberately narrow: just the
-// fields Settings actually exposes (imo, contractLevel) — name/email changes would need
-// to touch Supabase auth too, out of scope for now.
+// fields Settings actually exposes (imo, contractLevel, annuityTier) — name/email changes
+// would need to touch Supabase auth too, out of scope for now.
 router.put('/', asyncHandler(async (req, res) => {
   if (!req.producerId) return res.status(409).json({ error: 'Finish setting up your account first.' });
 
-  let { imo, contractLevel, imoOverride } = req.body;
+  let { imo, contractLevel, annuityTier, imoOverride } = req.body;
+  if (annuityTier && !VALID_ANNUITY_TIERS.includes(annuityTier)) {
+    return res.status(400).json({ error: `annuityTier must be one of: ${VALID_ANNUITY_TIERS.join(', ')}` });
+  }
   // The Settings page offers an autocomplete of known IMO names, but nothing stops
   // someone from ignoring it and typing their own variant — normalize case-insensitively
   // against whatever's already on file (a producer's imo, or an existing rate row) so
@@ -84,9 +90,10 @@ router.put('/', asyncHandler(async (req, res) => {
     data: {
       imo: imo !== undefined ? (imo || null) : undefined,
       contractLevel: contractLevel !== undefined ? (contractLevel === null ? null : Number(contractLevel)) : undefined,
+      annuityTier: annuityTier !== undefined ? (annuityTier || null) : undefined,
     },
   });
-  res.json({ imo: updated.imo, contractLevel: updated.contractLevel });
+  res.json({ imo: updated.imo, contractLevel: updated.contractLevel, annuityTier: updated.annuityTier });
 }));
 
 module.exports = router;

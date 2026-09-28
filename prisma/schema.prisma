@@ -57,6 +57,11 @@ model Producer {
   // the commission calculator default to their real rate instead of an arbitrary
   // starting slider value every time they open it.
   contractLevel     Int?     @map("contract_level")
+  // Same idea as contractLevel, but for the Annuities side of the calculator — a named
+  // production tier ('green'|'yellow'|'blue'|'silver'|'gold'|'platinum'|'black'|'royal'|
+  // 'red') instead of a percentage. See AnnuityCommissionRate's doc comment for why
+  // these are separate.
+  annuityTier       String?  @map("annuity_tier")
   subscriptionTier  String   @default("individual") @map("subscription_tier") // 'individual' | 'producer_plus' | 'agency_owner'
   subscriptionStatus String  @default("inactive") @map("subscription_status") // 'inactive' | 'active' | 'past_due' | 'canceled'
   stripeCustomerId     String? @unique @map("stripe_customer_id")
@@ -165,6 +170,27 @@ model ImoCommissionRate {
 
   @@unique([imoName, carrierName, productName, contractLevel])
   @@map("imo_commission_rate")
+}
+
+// Annuity commissions use a completely different axis than everything else in
+// ImoCommissionRate: a named PRODUCTION TIER (green/yellow/blue/silver/gold/platinum/
+// black/royal/red) based on the producer's own lifetime annuity production, not a 65-145%
+// contract level — and critically, each carrier pays a DIFFERENT rate at the same tier
+// (confirmed against FFL's own SRS Annuity Comp Guide). Mixing this into
+// ImoCommissionRate.contractLevel would make that field's meaning ambiguous (a percentage
+// for Life/Term, an arbitrary ordinal for Annuities) and corrupt any cross-product
+// comparison built on it — hence a separate table, shared by IMO name exactly like
+// ImoCommissionRate, keyed by tier instead of contract level.
+model AnnuityCommissionRate {
+  id          String  @id @default(uuid())
+  imoName     String  @map("imo_name")
+  carrierName String  @map("carrier_name")
+  productName String  @map("product_name")
+  tier        String // 'green' | 'yellow' | 'blue' | 'silver' | 'gold' | 'platinum' | 'black' | 'royal' | 'red'
+  payoutRate  Decimal @db.Decimal(6, 3) @map("payout_rate") // e.g. 7.250 for 7.25%
+
+  @@unique([imoName, carrierName, productName, tier])
+  @@map("annuity_commission_rate")
 }
 
 model Client {

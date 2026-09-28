@@ -1409,6 +1409,7 @@ async function renderGoals(){
 
 /* ================= CALCULATOR (Producer Plus / Agency Owner) ================= */
 let calcSchedule = { imo: null, rates: [] };
+let annuitySchedule = { imo: null, rates: [] };
 function productTypeLabel(productName){
   const name = productName.toLowerCase();
   if (name.includes('iul')) return 'IUL';
@@ -1419,9 +1420,15 @@ function productTypeLabel(productName){
   return '';
 }
 
+let calcMode = 'life';
 async function renderCalculator(){
   mainInner.innerHTML = `<div class="page-header"><div><div class="page-eyebrow">Calculator</div><h1>Commission calculator</h1></div></div><p class="helptext">Loading…</p>`;
-  calcSchedule = await apiFetch('/api/commission-schedule');
+  const [life, annuity] = await Promise.all([
+    apiFetch('/api/commission-schedule'),
+    apiFetch('/api/annuity-commission-schedule'),
+  ]);
+  calcSchedule = life;
+  annuitySchedule = annuity;
 
   if (!calcSchedule.imo) {
     mainInner.innerHTML = `
@@ -1435,11 +1442,27 @@ async function renderCalculator(){
     return;
   }
 
-  const carriers = [...new Set(calcSchedule.rates.map(r => r.carrierName))].sort((a,b) => a.localeCompare(b));
-
   mainInner.innerHTML = `
     <div class="page-header"><div><div class="page-eyebrow">Calculator</div><h1>Commission calculator</h1></div></div>
-    <p class="helptext" style="margin-top:-10px;">Rates for <strong>${calcSchedule.imo}</strong> — shared across everyone at your IMO. ${calcSchedule.rates.length} rates loaded.</p>
+    <div class="auth-tabs">
+      <button class="auth-tab${calcMode==='life'?' active':''}" type="button" id="calcModeLifeBtn">Life &amp; Term</button>
+      <button class="auth-tab${calcMode==='annuity'?' active':''}" type="button" id="calcModeAnnuityBtn">Annuities</button>
+    </div>
+    <div id="calcModeBody"></div>
+  `;
+  document.getElementById('calcModeLifeBtn').onclick = () => { calcMode = 'life'; renderCalculator(); };
+  document.getElementById('calcModeAnnuityBtn').onclick = () => { calcMode = 'annuity'; renderCalculator(); };
+
+  if (calcMode === 'annuity') renderAnnuityCalculatorBody();
+  else renderLifeCalculatorBody();
+}
+
+function renderLifeCalculatorBody(){
+  const bodyEl = document.getElementById('calcModeBody');
+  const carriers = [...new Set(calcSchedule.rates.map(r => r.carrierName))].sort((a,b) => a.localeCompare(b));
+
+  bodyEl.innerHTML = `
+    <p class="helptext" style="margin-top:10px;">Rates for <strong>${calcSchedule.imo}</strong> — shared across everyone at your IMO. ${calcSchedule.rates.length} rates loaded.</p>
 
     ${calcSchedule.rates.length === 0 ? `
     <div class="panel" style="border-color:var(--maroon);">
@@ -1639,6 +1662,192 @@ async function renderCalculator(){
   });
 }
 
+function renderAnnuityCalculatorBody(){
+  const bodyEl = document.getElementById('calcModeBody');
+  const carriers = [...new Set(annuitySchedule.rates.map(r => r.carrierName))].sort((a,b) => a.localeCompare(b));
+  const defaultTier = me.annuityTier || 'green';
+
+  bodyEl.innerHTML = `
+    <p class="helptext" style="margin-top:10px;">Annuity rates for <strong>${annuitySchedule.imo}</strong> — shared across everyone at your IMO. ${annuitySchedule.rates.length} rates loaded. Unlike Life &amp; Term, each carrier pays a different rate at the same tier, and your tier is based on your own lifetime annuity production, not a contract %.</p>
+
+    ${annuitySchedule.rates.length === 0 ? `
+    <div class="panel" style="border-color:var(--maroon);">
+      <p class="helptext" style="color:var(--maroon); font-weight:600;">No annuity rates yet for "${annuitySchedule.imo}". Add your first one below — everyone else at your IMO will see it too.</p>
+    </div>` : ''}
+
+    <div class="panel">
+      <h2 class="calc-section-title">Your numbers</h2>
+      <div class="detail-grid">
+        <div>
+          <label>Your Annuity Tier</label>
+          <div class="carrier-pills" id="calcTierPicker">
+            ${ANNUITY_TIER_OPTIONS.map(([value,label]) => `<div class="carrier-pill${value===defaultTier?' selected':''}" data-tier="${value}">${label}</div>`).join('')}
+          </div>
+          <p class="helptext" style="margin:8px 0 0;">Set your default tier in Settings.</p>
+        </div>
+        <div>
+          <label>Premium ($)</label>
+          <input type="number" id="calcAnnuityPremium" value="100000" min="0" step="1000">
+        </div>
+      </div>
+    </div>
+
+    ${carriers.length ? `
+    <div class="panel">
+      <h2 class="calc-section-title">Carrier &amp; Product</h2>
+      <div class="carrier-pills" id="calcAnnuityCarrierPicker">
+        ${carriers.map((c,i) => `<div class="carrier-pill${i===0?' selected':''}" data-carrier="${c}">${c}</div>`).join('')}
+      </div>
+      <div class="product-cards" id="calcAnnuityProductPicker" style="margin-top:14px;"></div>
+    </div>
+
+    <div class="panel" style="border:1.5px solid var(--maroon);">
+      <h2 class="calc-section-title">Your Payout</h2>
+      <div id="calcAnnuityResult"></div>
+    </div>
+
+    <div class="panel">
+      <h2 class="calc-section-title">Compare every product at your tier</h2>
+      <table class="statement-table">
+        <thead><tr><th>Carrier</th><th>Product</th><th>Payout %</th><th>You earn</th></tr></thead>
+        <tbody id="calcAnnuityCompareBody"></tbody>
+      </table>
+    </div>` : ''}
+
+    ${annuitySchedule.rates.length < 20 ? `
+    <div class="panel">
+      <h2 class="calc-section-title">Add or correct a rate</h2>
+      <p class="helptext" style="margin-top:-8px;">${annuitySchedule.imo} is still being built out — add rates here to grow its calculator. Once entered, everyone else at ${annuitySchedule.imo} will see the same rates too.</p>
+      <form class="entry" id="addAnnuityRateForm">
+        <div><label>Carrier</label><input required name="carrierName" placeholder="e.g. Athene"></div>
+        <div><label>Product</label><input required name="productName" placeholder="e.g. Performance Elite 10"></div>
+        <div><label>Tier</label><select required name="tier">${ANNUITY_TIER_OPTIONS.map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select></div>
+        <div><label>Payout Rate (%)</label><input required type="number" step="0.01" name="payoutRate" placeholder="7.25"></div>
+        <div class="full"><button class="primary" type="submit">Save Rate</button></div>
+        <div class="full errortext" id="addAnnuityRateError"></div>
+      </form>
+    </div>` : `
+    <div class="panel">
+      <h2 class="calc-section-title">Spot an error?</h2>
+      <p class="helptext" style="margin-top:-8px;">${annuitySchedule.imo}'s annuity rates come from your IMO's official comp guide. If a rate looks wrong, contact your IMO administrator to have it corrected.</p>
+    </div>`}
+  `;
+
+  function selectedTier(){
+    const el = document.querySelector('#calcTierPicker .carrier-pill.selected');
+    return el ? el.dataset.tier : defaultTier;
+  }
+  function tierLabel(tier){
+    return (ANNUITY_TIER_OPTIONS.find(([v]) => v === tier) || [tier,tier])[1];
+  }
+  function selectedProduct(){
+    const el = document.querySelector('#calcAnnuityProductPicker .product-card.selected');
+    return el ? { carrier: el.dataset.carrier, product: el.dataset.product } : null;
+  }
+  function renderProductCards(carrier){
+    const tier = selectedTier();
+    const products = [...new Set(annuitySchedule.rates.filter(r => r.carrierName === carrier).map(r => r.productName))].sort((a,b) => a.localeCompare(b));
+    const pickerEl = document.getElementById('calcAnnuityProductPicker');
+    pickerEl.innerHTML = products.map((p,i) => {
+      const rate = annuitySchedule.rates.find(r => r.carrierName === carrier && r.productName === p && r.tier === tier);
+      return `
+        <div class="product-card${i===0?' selected':''}" data-carrier="${carrier}" data-product="${p}">
+          <div class="product-name">${p}</div>
+          <div class="product-rate">${rate ? Number(rate.payoutRate) + '%' : '—'}</div>
+        </div>`;
+    }).join('');
+    pickerEl.querySelectorAll('.product-card').forEach(card => {
+      card.onclick = () => {
+        pickerEl.querySelectorAll('.product-card').forEach(c => c.classList.remove('selected'));
+        card.classList.add('selected');
+        recompute();
+      };
+    });
+  }
+  function refreshProductCardRates(tier){
+    document.querySelectorAll('#calcAnnuityProductPicker .product-card').forEach(card => {
+      const rate = annuitySchedule.rates.find(r => r.carrierName === card.dataset.carrier && r.productName === card.dataset.product && r.tier === tier);
+      card.querySelector('.product-rate').textContent = rate ? Number(rate.payoutRate) + '%' : '—';
+    });
+  }
+  function recompute(){
+    const tier = selectedTier();
+    const premium = Number(document.getElementById('calcAnnuityPremium').value) || 0;
+    refreshProductCardRates(tier);
+
+    const sel = selectedProduct();
+    const resultEl = document.getElementById('calcAnnuityResult');
+    if (sel) {
+      const match = annuitySchedule.rates.find(r => r.carrierName===sel.carrier && r.productName===sel.product && r.tier===tier);
+      if (match) {
+        const commission = premium * Number(match.payoutRate) / 100;
+        resultEl.innerHTML = `
+          <div class="payout-grid">
+            <div class="payout-left">
+              <p class="payout-label">${sel.carrier} — ${sel.product}</p>
+              <div class="payout-amount">${fmt(commission)}</div>
+              <p class="payout-sub">At the ${tierLabel(tier)} tier on a ${fmt(premium)} premium</p>
+            </div>
+            <div class="payout-right">
+              <div class="payout-row"><span>Premium</span><strong>${fmt(premium)}</strong></div>
+              <div class="payout-row"><span>Your Tier</span><strong>${tierLabel(tier)}</strong></div>
+              <div class="payout-row"><span>Carrier Payout Rate</span><strong>${match.payoutRate}%</strong></div>
+              <div class="payout-row total"><span>Total Commission</span><strong>${fmt(commission)}</strong></div>
+            </div>
+          </div>
+        `;
+      } else {
+        resultEl.innerHTML = `<p class="helptext">${sel.carrier} — ${sel.product} isn't offered at the ${tierLabel(tier)} tier (no rate on file).</p>`;
+      }
+    }
+
+    const compareBody = document.getElementById('calcAnnuityCompareBody');
+    if (compareBody) {
+      const atTier = annuitySchedule.rates.filter(r => r.tier === tier).sort((a,b) => Number(b.payoutRate) - Number(a.payoutRate));
+      compareBody.innerHTML = atTier.map(r => `<tr><td>${r.carrierName}</td><td>${r.productName}</td><td>${r.payoutRate}%</td><td>${fmt(premium * Number(r.payoutRate) / 100)}</td></tr>`).join('')
+        || '<tr><td colspan="4" class="helptext">No products on file at this tier.</td></tr>';
+    }
+  }
+
+  document.getElementById('calcAnnuityPremium').addEventListener('input', recompute);
+  if (carriers.length) {
+    document.querySelectorAll('#calcTierPicker .carrier-pill').forEach(pill => {
+      pill.onclick = () => {
+        document.querySelectorAll('#calcTierPicker .carrier-pill').forEach(p => p.classList.remove('selected'));
+        pill.classList.add('selected');
+        renderProductCards(document.querySelector('#calcAnnuityCarrierPicker .carrier-pill.selected').dataset.carrier);
+        recompute();
+      };
+    });
+    renderProductCards(carriers[0]);
+    document.querySelectorAll('#calcAnnuityCarrierPicker .carrier-pill').forEach(pill => {
+      pill.onclick = () => {
+        document.querySelectorAll('#calcAnnuityCarrierPicker .carrier-pill').forEach(p => p.classList.remove('selected'));
+        pill.classList.add('selected');
+        renderProductCards(pill.dataset.carrier);
+        recompute();
+      };
+    });
+    recompute();
+  }
+
+  const addAnnuityRateForm = document.getElementById('addAnnuityRateForm');
+  if (addAnnuityRateForm) addAnnuityRateForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    const errEl = document.getElementById('addAnnuityRateError');
+    errEl.textContent = '';
+    const f = new FormData(e.target);
+    try {
+      await apiFetch('/api/annuity-commission-schedule', { method:'POST', body:{
+        carrierName: f.get('carrierName'), productName: f.get('productName'),
+        tier: f.get('tier'), payoutRate: Number(f.get('payoutRate')),
+      }});
+      say('Rate saved!');
+      renderCalculator();
+    } catch (err) { errEl.textContent = err.message; }
+  });
+}
+
 /* ================= SETTINGS ================= */
 const SUGGESTION_STATUS_LABEL = { open: 'Open', planned: 'Planned', done: 'Done', declined: 'Declined' };
 const SUGGESTION_STATUS_PILL = { open: '', planned: 'past_due', done: 'active', declined: 'canceled' };
@@ -1679,6 +1888,10 @@ async function renderFeedback(){
     } catch (err) { errEl.textContent = err.message; }
   });
 }
+const ANNUITY_TIER_OPTIONS = [
+  ['green', 'Green (New Agent)'], ['yellow', 'Yellow ($100K)'], ['blue', 'Blue ($500K)'], ['silver', 'Silver ($1M)'],
+  ['gold', 'Gold ($2M)'], ['platinum', 'Platinum ($5M)'], ['black', 'Black ($10M)'], ['royal', 'Royal ($120M)'], ['red', 'Red ($175M)'],
+];
 async function renderSettings(){
   mainInner.innerHTML = `<div class="page-header"><div><div class="page-eyebrow">Settings</div><h1>Account</h1></div></div><p class="helptext">Loading…</p>`;
   const { imos } = await apiFetch('/api/imos');
@@ -1704,6 +1917,14 @@ async function renderSettings(){
           <p class="helptext" style="margin:2px 0 0;">Start typing to see IMOs already on BOB — pick one so you share the same commission data. Not listed? Just type your IMO's name.</p>
         </div>
         <div><label>Your Contract Level (%)</label><input type="number" name="contractLevel" placeholder="e.g. 115" value="${me.contractLevel ?? ''}"></div>
+        <div>
+          <label>Your Annuity Tier</label>
+          <select name="annuityTier">
+            <option value="">Not set</option>
+            ${ANNUITY_TIER_OPTIONS.map(([value,label]) => `<option value="${value}" ${me.annuityTier===value?'selected':''}>${label}</option>`).join('')}
+          </select>
+          <p class="helptext" style="margin:2px 0 0;">Annuity comp is based on your own lifetime production tier, not a contract % — set it here for the calculator's Annuities tab.</p>
+        </div>
         <div class="full"><button class="primary" type="submit">Save</button></div>
         <div class="full errortext" id="imoError"></div>
         <div class="full helptext" id="imoSaved"></div>
@@ -1716,9 +1937,10 @@ async function renderSettings(){
     errEl.textContent = '';
     const f = new FormData(e.target);
     const contractLevel = f.get('contractLevel') ? Number(f.get('contractLevel')) : null;
+    const annuityTier = f.get('annuityTier') || null;
 
     async function saveImo(imo, imoOverride){
-      const updated = await apiFetch('/api/me', { method:'PUT', body:{ imo, contractLevel, imoOverride } });
+      const updated = await apiFetch('/api/me', { method:'PUT', body:{ imo, contractLevel, annuityTier, imoOverride } });
       if (updated.requiresConfirmation) {
         const useSuggestion = confirm(
           `"${updated.imoPending}" doesn't match any IMO we already know about, but it's close to "${updated.suggestion}".\n\n` +
@@ -1733,6 +1955,7 @@ async function renderSettings(){
       const updated = await saveImo(f.get('imo') || null, false);
       me.imo = updated.imo;
       me.contractLevel = updated.contractLevel;
+      me.annuityTier = updated.annuityTier;
       document.getElementById('imoSaved').textContent = 'Saved!';
       say('Settings updated.');
     } catch (err) { errEl.textContent = err.message; }
