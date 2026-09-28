@@ -1654,7 +1654,9 @@ function renderLifeCalculatorBody(){
         <div class="carrier-pill" data-type="IUL">IUL Only</div>
         <div class="carrier-pill" data-type="Term">Term Only</div>
         <div class="carrier-pill" data-type="Whole Life">Whole Life Only</div>
+        <div class="carrier-pill" data-type="Annuity">Annuity Only</div>
       </div>
+      <p class="helptext" style="margin:-6px 0 12px;">Annuity rows use your saved Annuity Tier (set in Settings — defaults to Green if none saved) and the amount above as a lump-sum premium, not an annual one.</p>
       <table class="statement-table">
         <thead><tr><th>#</th><th>Carrier</th><th>Product</th><th>Type</th><th>Payout %</th><th>You earn</th></tr></thead>
         <tbody id="calcCompareBody"></tbody>
@@ -1774,13 +1776,19 @@ function renderLifeCalculatorBody(){
 
     const compareBody = document.getElementById('calcCompareBody');
     if (compareBody) {
-      let atLevel = calcSchedule.rates.filter(r => r.contractLevel === level);
-      if (compareTypeFilter !== 'all') atLevel = atLevel.filter(r => productTypeLabel(r.productName) === compareTypeFilter);
-      atLevel = atLevel.sort((a,b) => Number(b.payoutRate) - Number(a.payoutRate));
-      compareBody.innerHTML = atLevel.map((r,i) => {
-        const typeLabel = productTypeLabel(r.productName);
-        return `<tr><td>${i+1}</td><td>${r.carrierName}</td><td>${r.productName}</td><td>${typeLabel ? `<span class="product-type-badge">${typeLabel}</span>` : '—'}</td><td>${r.payoutRate}%</td><td>${fmt(premium * Number(r.payoutRate) / 100)}</td></tr>`;
-      }).join('') || '<tr><td colspan="6" class="helptext">No products on file at this contract level.</td></tr>';
+      const lifeRows = calcSchedule.rates
+        .filter(r => r.contractLevel === level)
+        .map(r => ({ carrierName: r.carrierName, productName: r.productName, payoutRate: r.payoutRate, type: productTypeLabel(r.productName) }));
+      const annuityTier = me.annuityTier || 'green';
+      const annuityRows = annuitySchedule.rates
+        .filter(r => r.tier === annuityTier)
+        .map(r => ({ carrierName: r.carrierName, productName: r.productName, payoutRate: r.payoutRate, type: 'Annuity' }));
+      let combined = [...lifeRows, ...annuityRows];
+      if (compareTypeFilter !== 'all') combined = combined.filter(r => r.type === compareTypeFilter);
+      combined = combined.sort((a,b) => Number(b.payoutRate) - Number(a.payoutRate));
+      compareBody.innerHTML = combined.map((r,i) => {
+        return `<tr><td>${i+1}</td><td>${r.carrierName}</td><td>${r.productName}</td><td>${r.type ? `<span class="product-type-badge">${r.type}</span>` : '—'}</td><td>${r.payoutRate}%</td><td>${fmt(premium * Number(r.payoutRate) / 100)}</td></tr>`;
+      }).join('') || '<tr><td colspan="6" class="helptext">No products match this filter.</td></tr>';
     }
   }
 
