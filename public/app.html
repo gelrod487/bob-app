@@ -812,7 +812,12 @@ async function renderBook(filterText, statusFilter){
 
   const filtered = policies.filter(p => {
     const submitted = (p.dateSubmitted || p.issueDate).slice(0,10);
-    const inRange = submitted >= range.from && submitted <= range.to;
+    // A name/carrier search means "find this specific case," not "browse this range" —
+    // scoping it to the date filter too made an existing client silently invisible
+    // (e.g. searching a name whose case was submitted outside the selected range, with
+    // no indication why nothing came up). Only apply the date range when browsing
+    // without a search term.
+    const inRange = filterText || submitted >= range.from && submitted <= range.to;
     const name = (p.client?.name || '').toLowerCase();
     const matchesText = !filterText || name.includes(filterText) || p.carrier.toLowerCase().includes(filterText);
     const matchesStatus = !statusFilter || p.status === statusFilter;
@@ -858,7 +863,7 @@ async function renderBook(filterText, statusFilter){
         <option value="lapsed" ${statusFilter==='lapsed'?'selected':''}>Lapsed</option>
       </select>
     </div>
-    <div>${filtered.map(bookCaseCard).join('') || '<p class="helptext">No cases match in this range.</p>'}</div>
+    <div>${filtered.map(bookCaseCard).join('') || `<p class="helptext">${filterText ? 'No cases match that search.' : 'No cases match in this range.'}</p>`}</div>
   `;
 
   wireDateFilter('book', () => renderBook(filterText, statusFilter));
