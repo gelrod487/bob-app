@@ -5,7 +5,14 @@ const asyncHandler = require('../middleware/asyncHandler');
 
 const router = express.Router();
 
-const VALID_ENTRY_TYPES = ['advance', 'additional', 'chargeback', 'override', 'other'];
+// 'installment' is a SECOND (or third, etc.) payment of the same first-year commission on
+// one case — large cases often get FYC split across multiple payouts. It counts toward
+// gross/FYC exactly like 'advance' everywhere that matters (see profitability.js,
+// policies.js's chargeback payout total, and app.html's paidSoFar) — it's a distinct value
+// purely so it reads clearly in the ledger instead of a second 'advance' row looking like
+// a duplicate, or getting mislabeled 'additional' (a true year-2+ renewal, a different
+// thing entirely).
+const VALID_ENTRY_TYPES = ['advance', 'installment', 'additional', 'chargeback', 'override', 'other'];
 
 // GET /api/commission-entries?policyId=...&from=YYYY-MM-DD&to=YYYY-MM-DD
 router.get('/', asyncHandler(async (req, res) => {

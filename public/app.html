@@ -463,7 +463,7 @@ async function openClientDetail(policyId){
   if (!p) return;
   const tag = STATUS_TAG[p.status] || STATUS_TAG.pending;
   const contact = p.client?.contactInfo || {};
-  const paidSoFar = (p.commissionEntries||[]).filter(e=>['advance','additional','override'].includes(e.entryType)).reduce((s,e)=>s+Number(e.amount),0);
+  const paidSoFar = (p.commissionEntries||[]).filter(e=>['advance','installment','additional','override'].includes(e.entryType)).reduce((s,e)=>s+Number(e.amount),0);
   const cb = policyChargeback(p);
 
   openModal(`
@@ -514,13 +514,14 @@ async function openClientDetail(policyId){
 
     <div class="panel" style="margin-top:18px;">
       <h2 style="font-size:1rem; margin-bottom:10px;">Commission entries</h2>
-      <p class="helptext" style="margin:-6px 0 10px;">Log what's actually paid on this case right here — no need to go to the Profit tab separately.</p>
+      <p class="helptext" style="margin:-6px 0 10px;">Log what's actually paid on this case right here — no need to go to the Profit tab separately. Large cases paid out in more than one payment? Log each later payment as <strong>Installment</strong> (not Renewal) — it still counts toward this case's total Issue Paid FYC.</p>
       <table><thead><tr><th>Type</th><th>Amount</th><th>Date</th></tr></thead>
         <tbody>${[...(p.commissionEntries||[])].sort((a,b)=>new Date(b.entryDate)-new Date(a.entryDate)).map(e=>`<tr class="row-clickable" data-entry-id="${e.id}"><td>${COMM_TYPE_MAP_REV[e.entryType]||e.entryType}</td><td>${fmt(e.amount)}</td><td>${fmtDate(e.entryDate)}</td></tr>`).join('') || '<tr><td colspan="3" class="helptext">No commission logged yet.</td></tr>'}</tbody>
       </table>
       <form class="entry" id="logPolicyCommForm" style="margin-top:12px;">
         <div><label>Type</label><select name="type">
           <option value="Initial">Initial</option>
+          <option value="Installment">Installment</option>
           <option value="Renewal">Renewal</option>
           ${me.subscriptionTier==='agency_owner'?`<option value="Override">Override</option>`:''}
           <option value="Chargeback">Chargeback</option>
@@ -603,6 +604,7 @@ function openEditPolicyCommissionModal(entry, policyId){
       <div class="detail-grid">
         <div><label>Type</label><select name="type">
           <option value="Initial" ${COMM_TYPE_MAP_REV[entry.entryType]==='Initial'?'selected':''}>Initial</option>
+          <option value="Installment" ${COMM_TYPE_MAP_REV[entry.entryType]==='Installment'?'selected':''}>Installment</option>
           <option value="Renewal" ${COMM_TYPE_MAP_REV[entry.entryType]==='Renewal'?'selected':''}>Renewal</option>
           ${me.subscriptionTier==='agency_owner'?`<option value="Override" ${COMM_TYPE_MAP_REV[entry.entryType]==='Override'?'selected':''}>Override</option>`:''}
           <option value="Chargeback" ${COMM_TYPE_MAP_REV[entry.entryType]==='Chargeback'?'selected':''}>Chargeback</option>
@@ -1132,8 +1134,8 @@ function openAddCostModal(){
 }
 
 /* ================= PROFIT ================= */
-const COMM_TYPE_MAP = { Initial:'advance', Renewal:'additional', Override:'override', Chargeback:'chargeback' };
-const COMM_TYPE_MAP_REV = { advance:'Initial', additional:'Renewal', override:'Override', chargeback:'Chargeback', other:'Renewal' };
+const COMM_TYPE_MAP = { Initial:'advance', Installment:'installment', Renewal:'additional', Override:'override', Chargeback:'chargeback' };
+const COMM_TYPE_MAP_REV = { advance:'Initial', installment:'Installment', additional:'Renewal', override:'Override', chargeback:'Chargeback', other:'Renewal' };
 let trendMonths = 6;
 let commissionEntriesCache = [];
 function openEditCommissionModal(id){
@@ -1147,6 +1149,7 @@ function openEditCommissionModal(id){
       <div class="detail-grid">
         <div><label>Type</label><select name="type">
           <option value="Initial" ${COMM_TYPE_MAP_REV[c.entryType]==='Initial'?'selected':''}>Initial</option>
+          <option value="Installment" ${COMM_TYPE_MAP_REV[c.entryType]==='Installment'?'selected':''}>Installment</option>
           <option value="Renewal" ${COMM_TYPE_MAP_REV[c.entryType]==='Renewal'?'selected':''}>Renewal</option>
           ${isAgency?`<option value="Override" ${COMM_TYPE_MAP_REV[c.entryType]==='Override'?'selected':''}>Override</option>`:''}
           <option value="Chargeback" ${COMM_TYPE_MAP_REV[c.entryType]==='Chargeback'?'selected':''}>Chargeback</option>
@@ -1201,7 +1204,7 @@ async function monthlyStatsReal(count){
     const dials = rows.reduce((s,a)=>s+a.dials,0);
     const sales = rows.reduce((s,a)=>s+a.sales,0);
     const monthCommissions = commissions.filter(c => monthKey(c.entryDate) === m.key);
-    const gross = monthCommissions.filter(c=>['advance','additional','other'].includes(c.entryType)).reduce((s,c)=>s+Number(c.amount),0);
+    const gross = monthCommissions.filter(c=>['advance','installment','additional','other'].includes(c.entryType)).reduce((s,c)=>s+Number(c.amount),0);
     const cb = Math.abs(monthCommissions.filter(c=>c.entryType==='chargeback').reduce((s,c)=>s+Number(c.amount),0));
     const cost = expenses.filter(e => monthKey(e.expenseDate) === m.key).reduce((s,e)=>s+Number(e.amount),0);
     return { label: m.label, dials, sales, gross, cb, cost, net: gross - cb - cost };
@@ -1305,7 +1308,7 @@ async function renderProfit(){
       <h2>Log Commission</h2>
       <form class="entry" id="commForm">
         <div class="full"><label>Case</label><select required name="policyId" id="commPolicySelect">${policies.map(p=>`<option value="${p.id}">${(p.client?.name||'—')} — ${p.carrier} — ${p.productType}</option>`).join('') || '<option value="">No cases yet</option>'}</select></div>
-        <div><label>Type</label><select name="type"><option value="Initial">Initial</option><option value="Renewal">Renewal</option>${isAgency?'<option value="Override">Override</option>':''}<option value="Chargeback">Chargeback</option></select></div>
+        <div><label>Type</label><select name="type"><option value="Initial">Initial</option><option value="Installment">Installment</option><option value="Renewal">Renewal</option>${isAgency?'<option value="Override">Override</option>':''}<option value="Chargeback">Chargeback</option></select></div>
         <div><label>Amount ($)</label><input required type="number" step="0.01" name="amount" placeholder="850"></div>
         <div><label>Date</label><input required type="date" name="date"></div>
         <div class="full"><button class="primary" type="submit">Log Commission</button></div>

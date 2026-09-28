@@ -20,10 +20,10 @@ async function producerProfitability(producerId, { from, to } = {}) {
   const commissionWhere = {
     ownerType: 'producer',
     producerId,
-    entryType: { in: ['advance', 'additional', 'chargeback', 'other'] },
+    entryType: { in: ['advance', 'installment', 'additional', 'chargeback', 'other'] },
     ...(from || to ? { entryDate: dateFilter } : {}),
   };
-  const grossCommissionWhere = { ...commissionWhere, entryType: { in: ['advance', 'additional', 'other'] } };
+  const grossCommissionWhere = { ...commissionWhere, entryType: { in: ['advance', 'installment', 'additional', 'other'] } };
   const chargebackWhere = { ...commissionWhere, entryType: 'chargeback' };
   const expenseWhereBase = { ownerType: 'producer', producerId };
 
@@ -85,10 +85,10 @@ async function agencyProfitability(agencyId, { from, to } = {}) {
   const producerCommissionWhere = {
     ownerType: 'producer',
     producerId: { in: producerIds },
-    entryType: { in: ['advance', 'additional', 'chargeback', 'other'] },
+    entryType: { in: ['advance', 'installment', 'additional', 'chargeback', 'other'] },
     ...(from || to ? { entryDate: dateFilter } : {}),
   };
-  const grossCommissionWhere = { ...producerCommissionWhere, entryType: { in: ['advance', 'additional', 'other'] } };
+  const grossCommissionWhere = { ...producerCommissionWhere, entryType: { in: ['advance', 'installment', 'additional', 'other'] } };
   const chargebackWhere = { ...producerCommissionWhere, entryType: 'chargeback' };
   const overrideWhere = {
     ownerType: 'agency',

@@ -128,7 +128,9 @@ router.put('/:id', asyncHandler(async (req, res) => {
 }));
 
 // POST /api/policies/:id/chargeback — charges back the full commission paid on this case
-// (sum of every advance/additional/override entry logged against it) and marks it lapsed.
+// (sum of every advance/installment/additional/override entry logged against it, so a
+// large case paid out across several installments still gets reversed in full) and marks
+// it lapsed.
 router.post('/:id/chargeback', asyncHandler(async (req, res) => {
   const policy = await prisma.policy.findFirst({
     where: { id: req.params.id, client: { producerId: req.producerId } },
@@ -140,7 +142,7 @@ router.post('/:id/chargeback', asyncHandler(async (req, res) => {
   }
 
   const grossPaid = policy.commissionEntries
-    .filter((e) => ['advance', 'additional', 'override'].includes(e.entryType))
+    .filter((e) => ['advance', 'installment', 'additional', 'override'].includes(e.entryType))
     .reduce((sum, e) => sum + Number(e.amount), 0);
 
   const [entry, updatedPolicy] = await prisma.$transaction([
