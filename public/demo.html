@@ -33,8 +33,11 @@
       <button data-page="book"><span class="ic">📖</span>Book</button>
       <button data-page="costs"><span class="ic">🧾</span>Costs</button>
       <button data-page="profit"><span class="ic">📈</span>Profit</button>
+      <button data-page="goals"><span class="ic">🎯</span>Goals</button>
+      <button data-page="calculator"><span class="ic">🧮</span>Commission Calculator</button>
     </div>
     <div class="sidebar-footer">
+      <button data-page="feedback"><span class="ic">💡</span>Feedback</button>
       <a class="ghost" href="/" style="text-align:center;">← Back home</a>
     </div>
   </div>
@@ -69,7 +72,7 @@ function uid(prefix){ return prefix+'_'+Math.random().toString(36).slice(2,9); }
    local to this browser, seeded once with ~14 months of sample
    history so every report/filter has something real to show.
    ============================================================ */
-const STORE_KEY = 'bob_demo_store_v4';
+const STORE_KEY = 'bob_demo_store_v5';
 const COST_CATEGORIES = [
   { key:'Lead flow',      color:'#7A3B4A' },
   { key:'Marketing',      color:'#A63D40' },
@@ -141,14 +144,19 @@ function seedStore(){
   const costs = [];
   for (let m = 10; m >= 0; m--) {
     COST_CATEGORIES.forEach((cat, ci) => {
+      if (cat.key === 'CRM/Tools') return; // CRM/Tools is the recurring example added below instead
       if (Math.random() < 0.12) return; // not every category every month
       const base = { 'Lead flow':320,'Marketing':110,'E&O insurance':45,'Licenses':35,'CRM/Tools':85,'Office':55,'Travel':65,'Staff':60,'Insurance':50,'Other':30 }[cat.key] || 40;
       const amount = Math.round(base * (0.7 + Math.random()*0.7));
-      costs.push({ id: uid('e'), date: monthsAgoISO(m, 5 + ci*2), amount, category: cat.key, description: '' });
+      costs.push({ id: uid('e'), date: monthsAgoISO(m, 5 + ci*2), amount, category: cat.key, description: '', isRecurring: false, recurringEndDate: null });
     });
   }
+  // One recurring example so the "recurring vs one-time" feature is visible out of the box.
+  costs.push({ id: uid('e'), date: monthsAgoISO(10, 3), amount: 79, category: 'CRM/Tools', description: 'CRM subscription', isRecurring: true, recurringEndDate: null });
 
-  return { clients, activity, costs };
+  const goals = { dialsTarget: 4000, appointmentsTarget: 160, sitsTarget: 120, salesTarget: 20, fycTarget: 15000 };
+
+  return { clients, activity, costs, goals, suggestions: [], calcContractLevel: 100 };
 }
 function loadStore(){
   try {
@@ -165,7 +173,41 @@ let store = loadStore();
 function annualPremium(c){ return c.monthlyPremium * 12; }
 function clientsSubmittedInRange(from,to){ return store.clients.filter(c => c.dateSubmitted >= from && c.dateSubmitted <= to); }
 function activityInRange(from,to){ return store.activity.filter(a => a.date >= from && a.date <= to); }
-function costsInRange(from,to){ return store.costs.filter(c => c.date >= from && c.date <= to); }
+// A recurring cost is a TEMPLATE (isRecurring:true), expanded here into one virtual
+// instance per calendar month it applies to — mirrors the real app's src/lib/recurring.js
+// so the demo behaves exactly like production: set it once, it shows up every month
+// after, until stopped or deleted, with no re-entry.
+function lastDayOfMonth(year, monthIndex){ return new Date(year, monthIndex+1, 0).getDate(); }
+function expandRecurringCost(template, from, to){
+  const anchor = new Date(template.date+'T00:00:00');
+  const anchorDay = anchor.getDate();
+  const today = new Date();
+  const rangeStart = from ? new Date(from+'T00:00:00') : anchor;
+  const rangeEnd = to ? new Date(to+'T00:00:00') : today;
+  const seriesEnd = (template.recurringEndDate && new Date(template.recurringEndDate+'T00:00:00') < rangeEnd)
+    ? new Date(template.recurringEndDate+'T00:00:00') : rangeEnd;
+
+  let cursor = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+  const windowStart = new Date(rangeStart.getFullYear(), rangeStart.getMonth(), 1);
+  if (cursor < windowStart) cursor = windowStart;
+  const windowEnd = new Date(seriesEnd.getFullYear(), seriesEnd.getMonth(), 1);
+
+  const instances = [];
+  while (cursor <= windowEnd) {
+    const year = cursor.getFullYear(), monthIndex = cursor.getMonth();
+    const day = Math.min(anchorDay, lastDayOfMonth(year, monthIndex));
+    const monthKey = `${year}-${String(monthIndex+1).padStart(2,'0')}`;
+    instances.push({ ...template, id: `${template.id}::${monthKey}`, date: toISO(new Date(year, monthIndex, day)) });
+    cursor = new Date(year, monthIndex+1, 1);
+  }
+  return instances;
+}
+function parseCostId(id){ const [realId, monthKey] = id.split('::'); return { realId, monthKey: monthKey||null }; }
+function costsInRange(from,to){
+  const oneTime = store.costs.filter(c => !c.isRecurring && c.date >= from && c.date <= to);
+  const recurring = store.costs.filter(c => c.isRecurring).flatMap(t => expandRecurringCost(t, from, to));
+  return [...oneTime, ...recurring];
+}
 function sumActivity(rows){ return rows.reduce((s,r)=>({dials:s.dials+r.dials, appointments:s.appointments+r.appointments, presentations:s.presentations+r.presentations, sales:s.sales+r.sales}), {dials:0,appointments:0,presentations:0,sales:0}); }
 function grossFYCInRange(from,to){ return store.clients.filter(c => (c.status==='issued'||c.status==='lapsed') && c.issueDate>=from && c.issueDate<=to).reduce((s,c)=>s+c.issuePaidFYC,0); }
 function placedInRange(from,to){ return store.clients.filter(c => (c.status==='issued'||c.status==='lapsed') && c.issueDate>=from && c.issueDate<=to); }
@@ -287,7 +329,10 @@ function renderDesk(){
   const monthTo = todayISO();
   const monthActivity = sumActivity(activityInRange(monthFrom, monthTo));
   const monthFYC = grossFYCInRange(monthFrom, monthTo);
-  const GOALS = { dials:[monthActivity.dials,4000], appointments:[monthActivity.appointments,160], sits:[monthActivity.presentations,120], sales:[monthActivity.sales,20], fyc:[monthFYC,15000] };
+  const GOALS = {
+    dials:[monthActivity.dials, store.goals.dialsTarget], appointments:[monthActivity.appointments, store.goals.appointmentsTarget],
+    sits:[monthActivity.presentations, store.goals.sitsTarget], sales:[monthActivity.sales, store.goals.salesTarget], fyc:[monthFYC, store.goals.fycTarget],
+  };
 
   const recent = [...store.clients].sort((a,b)=>new Date(b.dateSubmitted)-new Date(a.dateSubmitted)).slice(0,5);
   const costLines = COST_CATEGORIES.map(c => ({ cat:c.key, color:c.color, total: costsInRange(range.from,range.to).filter(e=>e.category===c.key).reduce((s,e)=>s+e.amount,0) })).filter(c=>c.total>0);
@@ -333,7 +378,7 @@ function renderDesk(){
         ${goalCell('Sales', GOALS.sales)}
         ${goalCell('FYC', GOALS.fyc, true)}
       </div>
-      <p class="helptext" style="margin-top:10px;">This month vs. a sample goal — unaffected by the date filter above.</p>
+      <p class="helptext" style="margin-top:10px;">This month vs. your goals (set on the Goals tab) — unaffected by the date filter above.</p>
     </div>
 
     <div class="panel">
@@ -774,9 +819,11 @@ function renderBook(filterText, statusFilter){
 }
 
 /* ================= COSTS ================= */
+let costsCache = [];
 function renderCosts(){
   const range = computeDateRange(dateFilterState.costs.key, dateFilterState.costs.from, dateFilterState.costs.to);
   const rangeCosts = costsInRange(range.from, range.to);
+  costsCache = rangeCosts;
   const costLines = COST_CATEGORIES.map(c => ({ cat:c.key, color:c.color, total: rangeCosts.filter(e=>e.category===c.key).reduce((s,e)=>s+e.amount,0) })).filter(c=>c.total>0);
 
   mainInner.innerHTML = `
@@ -788,7 +835,7 @@ function renderCosts(){
       <h2>All cost lines</h2>
       <p class="helptext" style="margin:-8px 0 14px;">Click a row to edit or delete it.</p>
       <table><thead><tr><th>Category</th><th>Description</th><th>Amount</th><th>Date</th></tr></thead>
-      <tbody>${[...rangeCosts].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(e=>`<tr class="row-clickable" onclick="openEditCostModal('${e.id}')"><td>${e.category}</td><td>${e.description||''}</td><td>${fmt(e.amount)}</td><td>${fmtDateShort(e.date)}</td></tr>`).join('') || '<tr><td colspan="4" class="helptext">No costs logged in this range.</td></tr>'}</tbody></table>
+      <tbody>${[...rangeCosts].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(e=>`<tr class="row-clickable" onclick="openEditCostModal('${e.id}')"><td>${e.category}${e.isRecurring?' <span class="pill" style="margin-left:4px;" title="Recurring monthly">🔁</span>':''}</td><td>${e.description||''}</td><td>${fmt(e.amount)}</td><td>${fmtDateShort(e.date)}</td></tr>`).join('') || '<tr><td colspan="4" class="helptext">No costs logged in this range.</td></tr>'}</tbody></table>
     </div>
   `;
   wireDateFilter('costs', renderCosts);
@@ -796,20 +843,32 @@ function renderCosts(){
   if (costLines.length) renderDonut('donutCanvas', costLines);
 }
 function openEditCostModal(id){
-  const e = store.costs.find(x => x.id === id);
+  const cached = costsCache.find(x => x.id === id); // the specific month clicked (for display)
+  if (!cached) return;
+  const { realId } = parseCostId(id);
+  const e = store.costs.find(x => x.id === realId); // the real template row we actually mutate
   if (!e) return;
+  const monthLabel = new Date(cached.date+'T00:00:00').toLocaleString(undefined, { month:'long', year:'numeric' });
   openModal(`
     <div class="modal-head"><h2>Edit cost</h2><button class="modal-close" onclick="closeModal()">×</button></div>
+    ${e.isRecurring ? `<p class="helptext" style="margin-top:-4px;">🔁 Recurring monthly — changes here apply to every month of this series, past and future. This is the ${monthLabel} instance.</p>` : ''}
     <form id="editCostForm">
       <div class="detail-grid">
         <div><label>Category</label><select name="category">${COST_CATEGORIES.map(c=>`<option value="${c.key}" ${c.key===e.category?'selected':''}>${c.key}</option>`).join('')}</select></div>
         <div><label>Amount ($)</label><input required type="number" step="0.01" name="amount" value="${e.amount}"></div>
-        <div class="full" style="grid-column:1/-1;"><label>Date</label><input required type="date" name="date" value="${e.date}"></div>
+        <div class="full" style="grid-column:1/-1;"><label>Frequency</label><select name="frequency" ${e.isRecurring ? 'disabled' : ''}>
+          <option value="onetime" ${!e.isRecurring?'selected':''}>One-time charge</option>
+          <option value="recurring" ${e.isRecurring?'selected':''}>Recurring monthly charge</option>
+        </select>
+        ${e.isRecurring ? `<p class="helptext" style="margin:4px 0 0;">To stop or remove this recurring series, use the buttons below instead.</p>` : ''}
+        </div>
+        <div class="full" style="grid-column:1/-1;"><label>Date</label><input required type="date" name="date" value="${cached.date}"></div>
         <div class="full" style="grid-column:1/-1;"><label>Description</label><input name="description" value="${e.description||''}" placeholder="Optional"></div>
       </div>
       <div class="modal-actions">
         <button class="primary" type="submit">Save</button>
-        <button class="danger" type="button" id="deleteCostBtn">Delete</button>
+        ${e.isRecurring ? `<button class="ghost" type="button" id="stopRecurringBtn">Stop recurring after ${monthLabel}</button>` : ''}
+        <button class="danger" type="button" id="deleteCostBtn">${e.isRecurring ? 'Delete entire series' : 'Delete'}</button>
         <button class="ghost" type="button" onclick="closeModal()">Cancel</button>
       </div>
     </form>
@@ -819,14 +878,27 @@ function openEditCostModal(id){
     const f = new FormData(ev.target);
     e.category = f.get('category'); e.amount = Number(f.get('amount'));
     e.date = f.get('date'); e.description = f.get('description') || '';
+    if (f.get('frequency') && !e.isRecurring) e.isRecurring = f.get('frequency') === 'recurring';
     saveStore();
     closeModal();
     say("Cost updated.");
     renderCurrentPage();
   });
+  const stopBtn = document.getElementById('stopRecurringBtn');
+  if (stopBtn) stopBtn.onclick = () => {
+    if (!confirm(`Stop this recurring cost after ${monthLabel}? Past months (including this one) keep showing it; ${monthLabel} is the last month it'll be included.`)) return;
+    e.recurringEndDate = cached.date;
+    saveStore();
+    closeModal();
+    say("Recurring cost stopped going forward.");
+    renderCurrentPage();
+  };
   document.getElementById('deleteCostBtn').onclick = () => {
-    if (!confirm("Delete this cost line?")) return;
-    store.costs = store.costs.filter(x => x.id !== id);
+    const msg = e.isRecurring
+      ? 'Delete this ENTIRE recurring series? This removes it from every month, including past ones — not just going forward.'
+      : 'Delete this cost line?';
+    if (!confirm(msg)) return;
+    store.costs = store.costs.filter(x => x.id !== realId);
     saveStore();
     closeModal();
     say("Cost deleted.");
@@ -840,20 +912,65 @@ function openAddCostModal(){
       <div class="detail-grid">
         <div><label>Category</label><select name="category">${COST_CATEGORIES.map(c=>`<option value="${c.key}">${c.key}</option>`).join('')}</select></div>
         <div><label>Amount ($)</label><input required type="number" step="0.01" name="amount" placeholder="150"></div>
-        <div class="full" style="grid-column:1/-1;"><label>Date</label><input required type="date" name="date" value="${todayISO()}"></div>
+        <div class="full" style="grid-column:1/-1;"><label>Frequency</label><select name="frequency">
+          <option value="onetime">One-time charge</option>
+          <option value="recurring">Recurring monthly charge</option>
+        </select></div>
+        <div class="full" style="grid-column:1/-1;"><label id="addCostDateLabel">Date</label><input required type="date" name="date" value="${todayISO()}"></div>
         <div class="full" style="grid-column:1/-1;"><label>Description</label><input name="description" placeholder="Optional"></div>
       </div>
+      <p class="helptext full" id="recurringNote" style="display:none; grid-column:1/-1; margin:-4px 0 0;">This amount will automatically be included in every month's costs from this date forward, until you stop it — no need to re-enter it each month.</p>
       <div class="modal-actions"><button class="primary" type="submit">Add Cost</button><button class="ghost" type="button" onclick="closeModal()">Cancel</button></div>
     </form>
   `);
+  const freqSelect = document.querySelector('#addCostForm [name="frequency"]');
+  freqSelect.addEventListener('change', () => {
+    const recurring = freqSelect.value === 'recurring';
+    document.getElementById('recurringNote').style.display = recurring ? '' : 'none';
+    document.getElementById('addCostDateLabel').textContent = recurring ? 'Starting date' : 'Date';
+  });
   document.getElementById('addCostForm').addEventListener('submit', (e) => {
     e.preventDefault();
     const f = new FormData(e.target);
-    store.costs.unshift({ id: uid('e'), date: f.get('date'), amount: Number(f.get('amount')), category: f.get('category'), description: f.get('description')||'' });
+    store.costs.unshift({
+      id: uid('e'), date: f.get('date'), amount: Number(f.get('amount')), category: f.get('category'),
+      description: f.get('description')||'', isRecurring: f.get('frequency') === 'recurring', recurringEndDate: null,
+    });
     saveStore();
     closeModal();
     say("Cost logged.");
     renderCurrentPage();
+  });
+}
+
+/* ================= GOALS ================= */
+function renderGoals(){
+  mainInner.innerHTML = `
+    <div class="page-header"><div><div class="page-eyebrow">Goals</div><h1>This month's goals</h1></div></div>
+    <div class="panel">
+      <h2>This month's personal goals</h2>
+      <p class="helptext" style="margin-top:-8px;">Drives the "This month vs. goals" bars on the Desk.</p>
+      <form class="entry" id="goalsForm">
+        <div><label>Dials target</label><input type="number" name="dialsTarget" value="${store.goals.dialsTarget}"></div>
+        <div><label>Appointments target</label><input type="number" name="appointmentsTarget" value="${store.goals.appointmentsTarget}"></div>
+        <div><label>Sits (presentations) target</label><input type="number" name="sitsTarget" value="${store.goals.sitsTarget}"></div>
+        <div><label>Sales target</label><input type="number" name="salesTarget" value="${store.goals.salesTarget}"></div>
+        <div><label>FYC target ($)</label><input type="number" step="0.01" name="fycTarget" value="${store.goals.fycTarget}"></div>
+        <div class="full"><button class="primary" type="submit">Save Goals</button></div>
+        <div class="full helptext" id="goalsSaved"></div>
+      </form>
+    </div>
+  `;
+  document.getElementById('goalsForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    store.goals = {
+      dialsTarget: Number(f.get('dialsTarget'))||0, appointmentsTarget: Number(f.get('appointmentsTarget'))||0,
+      sitsTarget: Number(f.get('sitsTarget'))||0, salesTarget: Number(f.get('salesTarget'))||0, fycTarget: Number(f.get('fycTarget'))||0,
+    };
+    saveStore();
+    document.getElementById('goalsSaved').textContent = 'Saved!';
+    say('Goals updated.');
   });
 }
 
@@ -958,19 +1075,243 @@ function renderProfit(){
   renderNetChart(stats.map(m=>m.net), stats.map(m=>m.label));
 }
 
+/* ================= COMMISSION CALCULATOR ================= */
+// Generic, fictional sample data — NOT Gustin's real FFL comp guide. The real app reads
+// live rates from whichever IMO the producer sets in Settings; this demo just needs
+// something representative to show the feature working.
+const SAMPLE_IMO_NAME = 'Sample IMO';
+const SAMPLE_LEVELS = [145, 120, 100, 80, 65];
+const SAMPLE_PRODUCTS = [
+  { carrier: 'Acme Life', product: 'Instant IUL', rates: [125, 105, 90, 75, 60] },
+  { carrier: 'Acme Life', product: 'Term 20', rates: [110, 95, 80, 65, 50] },
+  { carrier: 'Northstar Assurance', product: 'Whole Life Secure', rates: [100, 90, 80, 65, 50] },
+  { carrier: 'Northstar Assurance', product: 'Final Expense Plus', rates: [130, 110, 95, 80, 60] },
+  { carrier: 'Pinnacle Mutual', product: 'Flex UL', rates: [115, 100, 85, 70, 55] },
+  { carrier: 'Pinnacle Mutual', product: 'Living Benefit IUL', rates: [120, 105, 90, 75, 60] },
+];
+const SAMPLE_RATES = SAMPLE_PRODUCTS.flatMap(({ carrier, product, rates }) =>
+  SAMPLE_LEVELS.map((level, i) => ({ carrierName: carrier, productName: product, contractLevel: level, payoutRate: rates[i] }))
+);
+function productTypeLabel(productName){
+  const name = productName.toLowerCase();
+  if (name.includes('iul')) return 'IUL';
+  if (name.includes('gul')) return 'GUL';
+  if (name.includes('whole life')) return 'Whole Life';
+  if (name.includes('term')) return 'Term';
+  if (name.includes('ul')) return 'UL';
+  return '';
+}
+function renderCalculator(){
+  const carriers = [...new Set(SAMPLE_RATES.map(r => r.carrierName))].sort((a,b) => a.localeCompare(b));
+
+  mainInner.innerHTML = `
+    <div class="page-header"><div><div class="page-eyebrow">Calculator</div><h1>Commission calculator</h1></div></div>
+    <p class="helptext" style="margin-top:-10px;">Rates for <strong>${SAMPLE_IMO_NAME}</strong> — sample data for this tour. ${SAMPLE_RATES.length} rates loaded. In the real app, this reads live from your actual IMO's comp guide, shared with everyone at your IMO.</p>
+
+    <div class="panel">
+      <h2 class="calc-section-title">Your numbers</h2>
+      <div class="detail-grid">
+        <div>
+          <label>Your Contract Level</label>
+          <input type="range" id="calcLevel" min="50" max="150" step="5" value="${store.calcContractLevel}" style="width:100%;">
+          <p class="helptext" style="margin:2px 0 0;">Level: <strong id="calcLevelValue">${store.calcContractLevel}%</strong></p>
+        </div>
+        <div>
+          <label>Annual Premium ($)</label>
+          <input type="number" id="calcPremium" value="1200" min="0" step="50">
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2 class="calc-section-title">Carrier &amp; Product</h2>
+      <div class="carrier-pills" id="calcCarrierPicker">
+        ${carriers.map((c,i) => `<div class="carrier-pill${i===0?' selected':''}" data-carrier="${c}">${c}</div>`).join('')}
+      </div>
+      <div class="product-cards" id="calcProductPicker" style="margin-top:14px;"></div>
+    </div>
+
+    <div class="panel" style="border:1.5px solid var(--maroon);">
+      <h2 class="calc-section-title">Your Payout</h2>
+      <div id="calcResult"></div>
+    </div>
+
+    <div class="panel">
+      <h2 class="calc-section-title">How it's actually paid out (advance schedule)</h2>
+      <div id="calcAdvance"></div>
+    </div>
+
+    <div class="panel">
+      <h2 class="calc-section-title">Compare every product at your level</h2>
+      <table class="statement-table">
+        <thead><tr><th>Carrier</th><th>Product</th><th>Payout %</th><th>You earn</th></tr></thead>
+        <tbody id="calcCompareBody"></tbody>
+      </table>
+    </div>
+
+    <div class="panel">
+      <h2 class="calc-section-title">Where does this data come from?</h2>
+      <p class="helptext" style="margin-top:-8px;">In the real app, your IMO's rates are loaded once and shared with everyone at your IMO — no manual entry needed once it's set up, and it stays in sync as your contract level changes.</p>
+    </div>
+  `;
+
+  function selectedProduct(){
+    const el = document.querySelector('#calcProductPicker .product-card.selected');
+    return el ? { carrier: el.dataset.carrier, product: el.dataset.product } : null;
+  }
+  function renderProductCards(carrier){
+    const level = Number(document.getElementById('calcLevel').value);
+    const products = [...new Set(SAMPLE_RATES.filter(r => r.carrierName === carrier).map(r => r.productName))].sort((a,b) => a.localeCompare(b));
+    const pickerEl = document.getElementById('calcProductPicker');
+    pickerEl.innerHTML = products.map((p,i) => {
+      const rate = SAMPLE_RATES.find(r => r.carrierName === carrier && r.productName === p && r.contractLevel === level);
+      const typeLabel = productTypeLabel(p);
+      return `
+        <div class="product-card${i===0?' selected':''}" data-carrier="${carrier}" data-product="${p}">
+          <div class="product-name">${p}</div>
+          <div class="product-rate">${rate ? Number(rate.payoutRate) + '%' : '—'}</div>
+          ${typeLabel ? `<span class="product-type-badge">${typeLabel}</span>` : ''}
+        </div>`;
+    }).join('');
+    pickerEl.querySelectorAll('.product-card').forEach(card => {
+      card.onclick = () => {
+        pickerEl.querySelectorAll('.product-card').forEach(c => c.classList.remove('selected'));
+        card.classList.add('selected');
+        recompute();
+      };
+    });
+  }
+  function refreshProductCardRates(level){
+    document.querySelectorAll('#calcProductPicker .product-card').forEach(card => {
+      const rate = SAMPLE_RATES.find(r => r.carrierName === card.dataset.carrier && r.productName === card.dataset.product && r.contractLevel === level);
+      card.querySelector('.product-rate').textContent = rate ? Number(rate.payoutRate) + '%' : '—';
+    });
+  }
+  function recompute(){
+    const level = Number(document.getElementById('calcLevel').value);
+    const premium = Number(document.getElementById('calcPremium').value) || 0;
+    document.getElementById('calcLevelValue').textContent = level + '%';
+    store.calcContractLevel = level;
+    saveStore();
+    refreshProductCardRates(level);
+
+    const sel = selectedProduct();
+    const resultEl = document.getElementById('calcResult');
+    const advanceEl = document.getElementById('calcAdvance');
+    if (sel) {
+      const match = SAMPLE_RATES.find(r => r.carrierName===sel.carrier && r.productName===sel.product && r.contractLevel===level);
+      if (match) {
+        const commission = premium * Number(match.payoutRate) / 100;
+        const advanceNow = commission * 0.75;
+        const heldBack = commission * 0.25;
+        const monthly = heldBack / 3;
+        const typeLabel = productTypeLabel(sel.product);
+        resultEl.innerHTML = `
+          <div class="payout-grid">
+            <div class="payout-left">
+              <p class="payout-label">${sel.carrier} — ${sel.product}</p>
+              <div class="payout-amount">${fmt(commission)}</div>
+              <p class="payout-sub">At a ${level}% contract on a ${fmt(premium)} annual premium${typeLabel ? ` (${typeLabel})` : ''}</p>
+            </div>
+            <div class="payout-right">
+              <div class="payout-row"><span>Annual Premium</span><strong>${fmt(premium)}</strong></div>
+              <div class="payout-row"><span>Your Contract</span><strong>${level}%</strong></div>
+              <div class="payout-row"><span>Carrier Payout Rate</span><strong>${match.payoutRate}%</strong></div>
+              <div class="payout-row total"><span>Total First-Year Commission</span><strong>${fmt(commission)}</strong></div>
+            </div>
+          </div>
+        `;
+        advanceEl.innerHTML = `
+          <p class="helptext">The carrier advances <strong>75%</strong> of the first-year commission up front — that's 9 of the 12 months, paid to you net as soon as the policy is issued and paid. The remaining <strong>25%</strong> (the last 3 months) isn't advanced — the carrier pays it out as it's earned, in months 10, 11, and 12 of the policy.</p>
+          <table class="statement-table" style="margin-top:10px;">
+            <tbody>
+              <tr><td>Net Advance Paid Now (75%)</td><td>${fmt(advanceNow)}</td></tr>
+              <tr><td>Held-Back Balance (25%, months 10–12)</td><td>${fmt(heldBack)}</td></tr>
+            </tbody>
+          </table>
+          <table class="statement-table" style="margin-top:14px;">
+            <thead><tr><th>Policy Month</th><th>Paid To You</th></tr></thead>
+            <tbody>
+              <tr><td>1 – 9 (advanced now)</td><td>${fmt(advanceNow)}</td></tr>
+              <tr><td>Month 10</td><td>${fmt(monthly)}</td></tr>
+              <tr><td>Month 11</td><td>${fmt(monthly)}</td></tr>
+              <tr><td>Month 12</td><td>${fmt(monthly)}</td></tr>
+            </tbody>
+          </table>
+          <p class="helptext" style="margin-top:10px;">Rough estimate only — actual advance schedules vary by carrier.</p>
+        `;
+      } else {
+        resultEl.innerHTML = `<p class="helptext">${sel.carrier} — ${sel.product} isn't offered at a ${level}% contract level (no rate on file).</p>`;
+        advanceEl.innerHTML = `<p class="helptext">Pick a product with a rate at this contract level to see its advance schedule.</p>`;
+      }
+    }
+
+    const compareBody = document.getElementById('calcCompareBody');
+    const atLevel = SAMPLE_RATES.filter(r => r.contractLevel === level).sort((a,b) => Number(b.payoutRate) - Number(a.payoutRate));
+    compareBody.innerHTML = atLevel.map(r => `<tr><td>${r.carrierName}</td><td>${r.productName}</td><td>${r.payoutRate}%</td><td>${fmt(premium * Number(r.payoutRate) / 100)}</td></tr>`).join('')
+      || '<tr><td colspan="4" class="helptext">No products on file at this contract level.</td></tr>';
+  }
+
+  document.getElementById('calcLevel').addEventListener('input', recompute);
+  document.getElementById('calcPremium').addEventListener('input', recompute);
+  renderProductCards(carriers[0]);
+  document.querySelectorAll('#calcCarrierPicker .carrier-pill').forEach(pill => {
+    pill.onclick = () => {
+      document.querySelectorAll('#calcCarrierPicker .carrier-pill').forEach(p => p.classList.remove('selected'));
+      pill.classList.add('selected');
+      renderProductCards(pill.dataset.carrier);
+      recompute();
+    };
+  });
+  recompute();
+}
+
+/* ================= FEEDBACK ================= */
+function renderFeedback(){
+  mainInner.innerHTML = `
+    <div class="page-header"><div><div class="page-eyebrow">Feedback</div><h1>Have a suggestion? Want to request a feature? Need to report a bug?</h1></div></div>
+    <p class="helptext" style="margin-top:-10px;">Send instant feedback directly to our developer team so we can continue to improve your experience.</p>
+    <p class="helptext" style="margin-top:-6px;"><em>Tour mode — your message stays in this browser and isn't actually sent anywhere. Start a trial to reach us for real.</em></p>
+
+    <div class="panel">
+      <h2>Send a suggestion</h2>
+      <form class="entry" id="suggestionForm">
+        <div class="full" style="grid-column:1/-1;"><label>What's on your mind?</label><textarea required name="message" rows="4" placeholder="e.g. It would help if the Book tab let me filter by carrier..." style="width:100%; font:inherit; padding:10px; border:1.5px solid var(--line); border-radius:10px; background:var(--cream);"></textarea></div>
+        <div class="full"><button class="primary" type="submit">Send</button></div>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h2>Your submissions (this browser only)</h2>
+      ${store.suggestions.length ? `
+      <table><thead><tr><th>Sent</th><th>Message</th></tr></thead>
+      <tbody>${store.suggestions.map(s => `<tr><td>${fmtDate(s.date)}</td><td>${s.message}</td></tr>`).join('')}</tbody></table>
+      ` : '<p class="helptext">Nothing submitted yet.</p>'}
+    </div>
+  `;
+  document.getElementById('suggestionForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    store.suggestions.unshift({ id: uid('s'), message: f.get('message'), date: todayISO() });
+    saveStore();
+    say('Thanks — sent!');
+    renderFeedback();
+  });
+}
+
 /* ---- Bob's speech bubble, wired once per page mount ---- */
 let say = () => {};
 
 /* ---- nav ---- */
-const PAGES = { desk: renderDesk, activity: renderActivity, book: () => renderBook('',''), costs: renderCosts, profit: renderProfit };
+const PAGES = { desk: renderDesk, activity: renderActivity, book: () => renderBook('',''), costs: renderCosts, profit: renderProfit, goals: renderGoals, calculator: renderCalculator, feedback: renderFeedback };
 let currentPage = 'desk';
 function renderCurrentPage(){ PAGES[currentPage](); }
 function go(page){
   currentPage = page;
-  document.querySelectorAll('#sidebarNav button').forEach(b => b.classList.toggle('active', b.dataset.page === page));
+  document.querySelectorAll('#sidebarNav button, .sidebar-footer button[data-page]').forEach(b => b.classList.toggle('active', b.dataset.page === page));
   PAGES[page]();
 }
-document.querySelectorAll('#sidebarNav button').forEach(b => b.onclick = () => go(b.dataset.page));
+document.querySelectorAll('#sidebarNav button, .sidebar-footer button[data-page]').forEach(b => b.onclick = () => go(b.dataset.page));
 
 document.getElementById('resetDemoBtn').onclick = () => {
   if (!confirm('Reset the sample book back to its original demo data? This clears everything you added in this browser.')) return;
