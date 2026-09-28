@@ -102,7 +102,7 @@ router.put('/:id', asyncHandler(async (req, res) => {
   });
   if (!expense) return res.status(404).json({ error: 'Cost not found.' });
 
-  const { category, description, amount, expenseDate, stopRecurringAsOf } = req.body;
+  const { category, description, amount, expenseDate, stopRecurringAsOf, isRecurring } = req.body;
   if (category !== undefined && !VALID_CATEGORIES.includes(category)) {
     return res.status(400).json({ error: `category must be one of: ${VALID_CATEGORIES.join(', ')}` });
   }
@@ -114,6 +114,12 @@ router.put('/:id', asyncHandler(async (req, res) => {
       description: description !== undefined ? (description || null) : expense.description,
       amount: amount ?? expense.amount,
       expenseDate: expenseDate ? new Date(expenseDate) : expense.expenseDate,
+      // One-time -> recurring is a safe upgrade (starts recurring from expenseDate
+      // forward). Recurring -> one-time is deliberately NOT supported here: the single
+      // template row backs every past month too, so flipping it off would silently wipe
+      // out that history. Use stopRecurringAsOf (ends it going forward) or DELETE
+      // (removes the whole series) instead.
+      isRecurring: (isRecurring !== undefined && !expense.isRecurring) ? !!isRecurring : expense.isRecurring,
       // Stops the series as of a given month — set instead of touched by default, so a
       // plain field edit (amount/category/etc.) never accidentally cancels the series.
       recurringEndDate: stopRecurringAsOf !== undefined

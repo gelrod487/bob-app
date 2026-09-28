@@ -932,6 +932,12 @@ function openEditCostModal(id){
       <div class="detail-grid">
         <div><label>Category</label><select name="category">${COST_CATEGORIES.map(c=>`<option value="${c.key}" ${c.key===e.category?'selected':''}>${c.key}</option>`).join('')}</select></div>
         <div><label>Amount ($)</label><input required type="number" step="0.01" name="amount" value="${e.amount}"></div>
+        <div class="full" style="grid-column:1/-1;"><label>Frequency</label><select name="frequency" ${e.isRecurring ? 'disabled' : ''}>
+          <option value="onetime" ${!e.isRecurring?'selected':''}>One-time charge</option>
+          <option value="recurring" ${e.isRecurring?'selected':''}>Recurring monthly charge</option>
+        </select>
+        ${e.isRecurring ? `<p class="helptext" style="margin:4px 0 0;">To stop or remove this recurring series, use the buttons below instead.</p>` : ''}
+        </div>
         <div class="full" style="grid-column:1/-1;"><label>Date</label><input required type="date" name="date" value="${e.expenseDate.slice(0,10)}"></div>
         <div class="full" style="grid-column:1/-1;"><label>Description</label><input name="description" value="${e.description||''}" placeholder="Optional"></div>
       </div>
@@ -952,6 +958,10 @@ function openEditCostModal(id){
       await apiFetch(`/api/expenses/${id}`, { method:'PUT', body:{
         category: f.get('category'), description: f.get('description') || null,
         amount: Number(f.get('amount')), expenseDate: f.get('date'),
+        // A disabled <select> (already-recurring cost) submits no value at all — omitting
+        // isRecurring here leaves it untouched, which is correct: see the server-side
+        // note on why recurring -> one-time isn't allowed through this field.
+        ...(f.get('frequency') ? { isRecurring: f.get('frequency') === 'recurring' } : {}),
       }});
       closeModal();
       say('Cost updated.');
