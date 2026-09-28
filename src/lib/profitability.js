@@ -1,4 +1,5 @@
 const prisma = require('./db');
+const { sumExpensesInRange } = require('./recurring');
 
 // These two functions are the direct implementation of the "Profitability formulas"
 // section of bob-schema.md. Keep them as the single source of truth for the math —
@@ -24,17 +25,13 @@ async function producerProfitability(producerId, { from, to } = {}) {
   };
   const grossCommissionWhere = { ...commissionWhere, entryType: { in: ['advance', 'additional', 'other'] } };
   const chargebackWhere = { ...commissionWhere, entryType: 'chargeback' };
-  const expenseWhere = {
-    ownerType: 'producer',
-    producerId,
-    ...(from || to ? { expenseDate: dateFilter } : {}),
-  };
+  const expenseWhereBase = { ownerType: 'producer', producerId };
 
-  const [commissionAgg, grossAgg, chargebackAgg, expenseAgg, activePolicyCount, pendingPolicies] = await Promise.all([
+  const [commissionAgg, grossAgg, chargebackAgg, totalExpenses, activePolicyCount, pendingPolicies] = await Promise.all([
     prisma.commissionEntry.aggregate({ where: commissionWhere, _sum: { amount: true } }),
     prisma.commissionEntry.aggregate({ where: grossCommissionWhere, _sum: { amount: true } }),
     prisma.commissionEntry.aggregate({ where: chargebackWhere, _sum: { amount: true } }),
-    prisma.expense.aggregate({ where: expenseWhere, _sum: { amount: true } }),
+    sumExpensesInRange(prisma, expenseWhereBase, from, to),
     prisma.policy.count({
       where: { status: 'active', client: { producerId } },
     }),
@@ -47,7 +44,6 @@ async function producerProfitability(producerId, { from, to } = {}) {
   const totalCommission = Number(commissionAgg._sum.amount || 0);
   const grossCommission = Number(grossAgg._sum.amount || 0);
   const chargebacks = Math.abs(Number(chargebackAgg._sum.amount || 0));
-  const totalExpenses = Number(expenseAgg._sum.amount || 0);
   const pendingPremium = pendingPolicies.reduce((s, p) => s + Number(p.monthlyPremium) * 12, 0);
 
   return {
@@ -100,20 +96,19 @@ async function agencyProfitability(agencyId, { from, to } = {}) {
     entryType: 'override',
     ...(from || to ? { entryDate: dateFilter } : {}),
   };
-  const expenseWhere = {
+  const expenseWhereBase = {
     OR: [
       { ownerType: 'producer', producerId: { in: producerIds } },
       { ownerType: 'agency', agencyId: { in: agencyIds } },
     ],
-    ...(from || to ? { expenseDate: dateFilter } : {}),
   };
 
-  const [producerCommissionAgg, grossAgg, chargebackAgg, overrideAgg, expenseAgg, activePolicyCount, pendingPolicies] = await Promise.all([
+  const [producerCommissionAgg, grossAgg, chargebackAgg, overrideAgg, totalExpenses, activePolicyCount, pendingPolicies] = await Promise.all([
     prisma.commissionEntry.aggregate({ where: producerCommissionWhere, _sum: { amount: true } }),
     prisma.commissionEntry.aggregate({ where: grossCommissionWhere, _sum: { amount: true } }),
     prisma.commissionEntry.aggregate({ where: chargebackWhere, _sum: { amount: true } }),
     prisma.commissionEntry.aggregate({ where: overrideWhere, _sum: { amount: true } }),
-    prisma.expense.aggregate({ where: expenseWhere, _sum: { amount: true } }),
+    sumExpensesInRange(prisma, expenseWhereBase, from, to),
     prisma.policy.count({
       where: { status: 'active', client: { producer: { agencyId: { in: agencyIds } } } },
     }),
@@ -127,7 +122,6 @@ async function agencyProfitability(agencyId, { from, to } = {}) {
   const grossCommission = Number(grossAgg._sum.amount || 0);
   const chargebacks = Math.abs(Number(chargebackAgg._sum.amount || 0));
   const totalOverrides = Number(overrideAgg._sum.amount || 0);
-  const totalExpenses = Number(expenseAgg._sum.amount || 0);
   const pendingPremium = pendingPolicies.reduce((s, p) => s + Number(p.monthlyPremium) * 12, 0);
 
   return {

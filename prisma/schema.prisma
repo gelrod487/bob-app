@@ -234,6 +234,13 @@ model Expense {
   unitCost     Decimal? @map("unit_cost") @db.Decimal(10, 2) // lead_cost only, e.g. cost/lead
   amount       Decimal  @db.Decimal(10, 2)
   expenseDate  DateTime @map("expense_date") @db.Date
+  // A recurring row is a TEMPLATE, not a literal cost line — GET /api/expenses expands it
+  // into one virtual instance per calendar month (see src/lib/recurring.js) so the user
+  // never has to re-enter it. expenseDate is the anchor month (and day-of-month); nothing
+  // is stored per future month. recurringEndDate null = still active; set = the last
+  // month it still applies (the user "stopped" it), so past months stay accurate.
+  isRecurring      Boolean   @default(false) @map("is_recurring")
+  recurringEndDate DateTime? @map("recurring_end_date") @db.Date
 
   producer Producer? @relation("ProducerExpenses", fields: [producerId], references: [id])
   agency   Agency?   @relation("AgencyExpenses", fields: [agencyId], references: [id])
