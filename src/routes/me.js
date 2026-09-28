@@ -2,6 +2,7 @@ const express = require('express');
 const prisma = require('../lib/db');
 const asyncHandler = require('../middleware/asyncHandler');
 const { trialEndsAt } = require('../middleware/auth');
+const { getKnownImoNames, findTypoMatch } = require('../lib/knownImos');
 
 const router = express.Router();
 
@@ -45,7 +46,7 @@ router.get('/', asyncHandler(async (req, res) => {
 router.put('/', asyncHandler(async (req, res) => {
   if (!req.producerId) return res.status(409).json({ error: 'Finish setting up your account first.' });
 
-  let { imo, contractLevel } = req.body;
+  let { imo, contractLevel, imoOverride } = req.body;
   // The Settings page offers an autocomplete of known IMO names, but nothing stops
   // someone from ignoring it and typing their own variant — normalize case-insensitively
   // against whatever's already on file (a producer's imo, or an existing rate row) so
@@ -57,7 +58,25 @@ router.put('/', asyncHandler(async (req, res) => {
       prisma.producer.findFirst({ where: { imo: { equals: trimmed, mode: 'insensitive' } }, select: { imo: true } }),
       prisma.imoCommissionRate.findFirst({ where: { imoName: { equals: trimmed, mode: 'insensitive' } }, select: { imoName: true } }),
     ]);
-    imo = existingProducer?.imo || existingRate?.imoName || trimmed;
+    const exactMatch = existingProducer?.imo || existingRate?.imoName;
+
+    if (exactMatch) {
+      imo = exactMatch;
+    } else if (!imoOverride) {
+      // No exact (case-insensitive) match — this is either a genuinely new IMO or a
+      // typo of an existing one ("Famly First Life"). Check for a close-but-not-exact
+      // match before treating it as new; if found, don't save yet — ask the client to
+      // confirm first (it'll either resubmit with the suggestion or with imoOverride:
+      // true to force the as-typed spelling as a new IMO).
+      const knownNames = await getKnownImoNames();
+      const suggestion = findTypoMatch(trimmed, knownNames);
+      if (suggestion) {
+        return res.json({ requiresConfirmation: true, suggestion, imoPending: trimmed });
+      }
+      imo = trimmed;
+    } else {
+      imo = trimmed;
+    }
   }
 
   const updated = await prisma.producer.update({

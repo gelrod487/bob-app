@@ -1638,11 +1638,22 @@ async function renderSettings(){
     const errEl = document.getElementById('imoError');
     errEl.textContent = '';
     const f = new FormData(e.target);
+    const contractLevel = f.get('contractLevel') ? Number(f.get('contractLevel')) : null;
+
+    async function saveImo(imo, imoOverride){
+      const updated = await apiFetch('/api/me', { method:'PUT', body:{ imo, contractLevel, imoOverride } });
+      if (updated.requiresConfirmation) {
+        const useSuggestion = confirm(
+          `"${updated.imoPending}" doesn't match any IMO we already know about, but it's close to "${updated.suggestion}".\n\n` +
+          `Click OK to use "${updated.suggestion}" (recommended — shares that IMO's calculator data), or Cancel to keep "${updated.imoPending}" as a new, separate IMO.`
+        );
+        return saveImo(useSuggestion ? updated.suggestion : updated.imoPending, !useSuggestion);
+      }
+      return updated;
+    }
+
     try {
-      const updated = await apiFetch('/api/me', { method:'PUT', body:{
-        imo: f.get('imo') || null,
-        contractLevel: f.get('contractLevel') ? Number(f.get('contractLevel')) : null,
-      }});
+      const updated = await saveImo(f.get('imo') || null, false);
       me.imo = updated.imo;
       me.contractLevel = updated.contractLevel;
       document.getElementById('imoSaved').textContent = 'Saved!';
