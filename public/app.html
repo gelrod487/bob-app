@@ -1550,7 +1550,7 @@ async function renderCalculator(){
   mainInner.innerHTML = `
     <div class="page-header"><div><div class="page-eyebrow">Calculator</div><h1>Commission calculator</h1></div></div>
     <div class="auth-tabs">
-      <button class="auth-tab${calcMode==='life'?' active':''}" type="button" id="calcModeLifeBtn">Life &amp; Term</button>
+      <button class="auth-tab${calcMode==='life'?' active':''}" type="button" id="calcModeLifeBtn">Life</button>
       <button class="auth-tab${calcMode==='annuity'?' active':''}" type="button" id="calcModeAnnuityBtn">Annuities</button>
     </div>
     <div id="calcModeBody"></div>
@@ -1565,6 +1565,7 @@ async function renderCalculator(){
 function renderLifeCalculatorBody(){
   const bodyEl = document.getElementById('calcModeBody');
   const carriers = [...new Set(calcSchedule.rates.map(r => r.carrierName))].sort((a,b) => a.localeCompare(b));
+  let compareTypeFilter = 'all';
 
   bodyEl.innerHTML = `
     <p class="helptext" style="margin-top:10px;">Rates for <strong>${calcSchedule.imo}</strong> — shared across everyone at your IMO. ${calcSchedule.rates.length} rates loaded.</p>
@@ -1610,8 +1611,14 @@ function renderLifeCalculatorBody(){
 
     <div class="panel">
       <h2 class="calc-section-title">Compare every product at your level</h2>
+      <div class="carrier-pills" id="calcCompareFilter" style="margin-bottom:14px;">
+        <div class="carrier-pill selected" data-type="all">All Products</div>
+        <div class="carrier-pill" data-type="IUL">IUL Only</div>
+        <div class="carrier-pill" data-type="Term">Term Only</div>
+        <div class="carrier-pill" data-type="Whole Life">Whole Life Only</div>
+      </div>
       <table class="statement-table">
-        <thead><tr><th>Carrier</th><th>Product</th><th>Payout %</th><th>You earn</th></tr></thead>
+        <thead><tr><th>#</th><th>Carrier</th><th>Product</th><th>Type</th><th>Payout %</th><th>You earn</th></tr></thead>
         <tbody id="calcCompareBody"></tbody>
       </table>
     </div>` : ''}
@@ -1729,14 +1736,26 @@ function renderLifeCalculatorBody(){
 
     const compareBody = document.getElementById('calcCompareBody');
     if (compareBody) {
-      const atLevel = calcSchedule.rates.filter(r => r.contractLevel === level).sort((a,b) => Number(b.payoutRate) - Number(a.payoutRate));
-      compareBody.innerHTML = atLevel.map(r => `<tr><td>${r.carrierName}</td><td>${r.productName}</td><td>${r.payoutRate}%</td><td>${fmt(premium * Number(r.payoutRate) / 100)}</td></tr>`).join('')
-        || '<tr><td colspan="4" class="helptext">No products on file at this contract level.</td></tr>';
+      let atLevel = calcSchedule.rates.filter(r => r.contractLevel === level);
+      if (compareTypeFilter !== 'all') atLevel = atLevel.filter(r => productTypeLabel(r.productName) === compareTypeFilter);
+      atLevel = atLevel.sort((a,b) => Number(b.payoutRate) - Number(a.payoutRate));
+      compareBody.innerHTML = atLevel.map((r,i) => {
+        const typeLabel = productTypeLabel(r.productName);
+        return `<tr><td>${i+1}</td><td>${r.carrierName}</td><td>${r.productName}</td><td>${typeLabel ? `<span class="product-type-badge">${typeLabel}</span>` : '—'}</td><td>${r.payoutRate}%</td><td>${fmt(premium * Number(r.payoutRate) / 100)}</td></tr>`;
+      }).join('') || '<tr><td colspan="6" class="helptext">No products on file at this contract level.</td></tr>';
     }
   }
 
   document.getElementById('calcLevel').addEventListener('input', recompute);
   document.getElementById('calcPremium').addEventListener('input', recompute);
+  document.querySelectorAll('#calcCompareFilter .carrier-pill').forEach(pill => {
+    pill.onclick = () => {
+      document.querySelectorAll('#calcCompareFilter .carrier-pill').forEach(p => p.classList.remove('selected'));
+      pill.classList.add('selected');
+      compareTypeFilter = pill.dataset.type;
+      recompute();
+    };
+  });
   if (carriers.length) {
     renderProductCards(carriers[0]);
     document.querySelectorAll('#calcCarrierPicker .carrier-pill').forEach(pill => {
@@ -1773,7 +1792,7 @@ function renderAnnuityCalculatorBody(){
   const defaultTier = me.annuityTier || 'green';
 
   bodyEl.innerHTML = `
-    <p class="helptext" style="margin-top:10px;">Annuity rates for <strong>${annuitySchedule.imo}</strong> — shared across everyone at your IMO. ${annuitySchedule.rates.length} rates loaded. Unlike Life &amp; Term, each carrier pays a different rate at the same tier, and your tier is based on your own lifetime annuity production, not a contract %.</p>
+    <p class="helptext" style="margin-top:10px;">Annuity rates for <strong>${annuitySchedule.imo}</strong> — shared across everyone at your IMO. ${annuitySchedule.rates.length} rates loaded. Unlike Life, each carrier pays a different rate at the same tier, and your tier is based on your own lifetime annuity production, not a contract %.</p>
 
     ${annuitySchedule.rates.length === 0 ? `
     <div class="panel" style="border-color:var(--maroon);">
