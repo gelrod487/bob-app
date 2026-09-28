@@ -95,6 +95,9 @@ function wireCopyButton(btnId, inputId){
 }
 function fmtMoney2(n){ return '$'+Number(n||0).toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2}); }
 function fmtDate(dateStr){ return new Date(dateStr).toLocaleDateString(undefined,{timeZone:'UTC', month:'short', day:'numeric'}); }
+// Only for a FROM–TO range label: fmtDate alone makes "All time" (2000-01-01 -> today)
+// look identical to "Year to date" (Jan 1 this year -> today) since neither shows a year.
+function fmtDateRangeLabel(dateStr){ return new Date(dateStr).toLocaleDateString(undefined,{timeZone:'UTC', month:'short', day:'numeric', year:'numeric'}); }
 function pct(a,b){ return b ? ((a/b)*100).toFixed(1)+'%' : '0%'; }
 function toISO(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 function todayISO(){ return toISO(new Date()); }
@@ -104,7 +107,7 @@ function policyChargeback(p){ return (p.commissionEntries||[]).filter(e=>e.entry
 /* ---- shared date-range report filter (Desk, Activity, Costs, Profit) ---- */
 const DATE_RANGE_PRESETS = [
   ['today','Today'], ['yesterday','Yesterday'], ['this_week','This week'], ['this_month','This month'],
-  ['last_month','Last month'], ['this_quarter','This quarter'], ['ytd','Year to date'], ['custom','Custom'],
+  ['last_month','Last month'], ['this_quarter','This quarter'], ['ytd','Year to date'], ['all_time','All time'], ['custom','Custom'],
 ];
 const dateFilterState = {
   desk: { key: 'this_month', from: '', to: '' },
@@ -123,6 +126,9 @@ function computeDateRange(key, customFrom, customTo){
     case 'last_month': return { from: toISO(new Date(y,m-1,1)), to: toISO(new Date(y,m,0)) };
     case 'this_quarter': { const q = Math.floor(m/3); return { from: toISO(new Date(y,q*3,1)), to: toISO(now) }; }
     case 'ytd': return { from: toISO(new Date(y,0,1)), to: toISO(now) };
+    // A safely-early sentinel date rather than querying for an actual earliest record —
+    // no real client predates this, and it keeps the range computation synchronous.
+    case 'all_time': return { from: '2000-01-01', to: toISO(now) };
     case 'custom': return { from: customFrom || toISO(new Date(y,m,1)), to: customTo || toISO(now) };
     case 'this_month': default: return { from: toISO(new Date(y,m,1)), to: toISO(now) };
   }
@@ -141,7 +147,7 @@ function dateFilterHTML(pageKey){
       <input type="date" class="date-filter-to" value="${range.to}">
       <button type="button" class="ghost date-filter-apply">Apply</button>
     </span>
-    <span class="date-filter-range helptext">${fmtDate(range.from)} – ${fmtDate(range.to)}</span>
+    <span class="date-filter-range helptext">${fmtDateRangeLabel(range.from)} – ${fmtDateRangeLabel(range.to)}</span>
   </div>`;
 }
 function wireDateFilter(pageKey, onChange){
@@ -271,7 +277,7 @@ async function renderDesk(){
 
     <div class="panel">
       <h2>Production funnel</h2>
-      <p class="helptext" style="margin:-8px 0 14px;">${funnel.dials} dials · ${funnel.appointments} set · ${funnel.presentations} sits · ${funnel.sales} sales (${fmtDate(range.from)}–${fmtDate(range.to)})</p>
+      <p class="helptext" style="margin:-8px 0 14px;">${funnel.dials} dials · ${funnel.appointments} set · ${funnel.presentations} sits · ${funnel.sales} sales (${fmtDateRangeLabel(range.from)}–${fmtDateRangeLabel(range.to)})</p>
       ${funnelRow('Dials', funnel.dials, funnel.dials, null)}
       ${funnelRow('Appointments set', funnel.appointments, funnel.dials, pct(funnel.appointments,funnel.dials))}
       ${funnelRow('Presentations', funnel.presentations, funnel.dials, pct(funnel.presentations,funnel.appointments))}
@@ -1238,7 +1244,7 @@ async function renderProfit(){
 
     <div class="panel">
       <h2>Statement</h2>
-      <p class="helptext" style="margin:-8px 0 14px;">${fmtDate(range.from)} – ${fmtDate(range.to)}</p>
+      <p class="helptext" style="margin:-8px 0 14px;">${fmtDateRangeLabel(range.from)} – ${fmtDateRangeLabel(range.to)}</p>
       <table class="statement-table">
         <tbody>
           <tr><td>Gross First-Year Commission</td><td>${fmt(dash.grossCommission)}</td></tr>
@@ -1266,7 +1272,7 @@ async function renderProfit(){
 
     <div class="panel">
       <h2>Unit economics</h2>
-      <p class="helptext" style="margin:-8px 0 14px;">${fmtDate(range.from)} – ${fmtDate(range.to)}</p>
+      <p class="helptext" style="margin:-8px 0 14px;">${fmtDateRangeLabel(range.from)} – ${fmtDateRangeLabel(range.to)}</p>
       <div class="metrics-grid">
         <div class="metric-cell"><div class="mlabel">Cost per Sale</div><div class="mvalue">${fmt(costPerSale)}</div></div>
         <div class="metric-cell"><div class="mlabel">Commission per Dial</div><div class="mvalue">${fmtMoney2(commissionPerDial)}</div></div>

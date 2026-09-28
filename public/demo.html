@@ -64,6 +64,8 @@ function fmt(n){ return '$'+Number(n||0).toLocaleString(undefined,{maximumFracti
 function fmtMoney2(n){ return '$'+Number(n||0).toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2}); }
 function fmtDate(iso){ if(!iso) return '—'; return new Date(iso+'T00:00:00').toLocaleDateString(undefined,{month:'short', day:'numeric', year:'numeric'}); }
 function fmtDateShort(iso){ if(!iso) return '—'; return new Date(iso+'T00:00:00').toLocaleDateString(undefined,{month:'short', day:'numeric'}); }
+// Only for a FROM–TO range label — see the matching note in app.html.
+function fmtDateRangeLabel(iso){ if(!iso) return '—'; return new Date(iso+'T00:00:00').toLocaleDateString(undefined,{month:'short', day:'numeric', year:'numeric'}); }
 function pct(a,b){ return b ? ((a/b)*100).toFixed(1)+'%' : '0%'; }
 function uid(prefix){ return prefix+'_'+Math.random().toString(36).slice(2,9); }
 
@@ -229,7 +231,7 @@ function statement(from,to){
    ============================================================ */
 const DATE_RANGE_PRESETS = [
   ['today','Today'], ['yesterday','Yesterday'], ['this_week','This week'], ['this_month','This month'],
-  ['last_month','Last month'], ['this_quarter','This quarter'], ['ytd','Year to date'], ['custom','Custom'],
+  ['last_month','Last month'], ['this_quarter','This quarter'], ['ytd','Year to date'], ['all_time','All time'], ['custom','Custom'],
 ];
 const dateFilterState = {
   desk: { key: 'this_month', from: '', to: '' },
@@ -248,6 +250,7 @@ function computeDateRange(key, customFrom, customTo){
     case 'last_month': return { from: toISO(new Date(y,m-1,1)), to: toISO(new Date(y,m,0)) };
     case 'this_quarter': { const q = Math.floor(m/3); return { from: toISO(new Date(y,q*3,1)), to: toISO(now) }; }
     case 'ytd': return { from: toISO(new Date(y,0,1)), to: toISO(now) };
+    case 'all_time': return { from: '2000-01-01', to: toISO(now) };
     case 'custom': return { from: customFrom || toISO(new Date(y,m,1)), to: customTo || toISO(now) };
     case 'this_month': default: return { from: toISO(new Date(y,m,1)), to: toISO(now) };
   }
@@ -266,7 +269,7 @@ function dateFilterHTML(pageKey){
       <input type="date" class="date-filter-to" value="${range.to}">
       <button type="button" class="ghost date-filter-apply">Apply</button>
     </span>
-    <span class="date-filter-range helptext">${fmtDateShort(range.from)} – ${fmtDateShort(range.to)}</span>
+    <span class="date-filter-range helptext">${fmtDateRangeLabel(range.from)} – ${fmtDateRangeLabel(range.to)}</span>
   </div>`;
 }
 function wireDateFilter(pageKey, onChange){
@@ -364,7 +367,7 @@ function renderDesk(){
 
     <div class="panel">
       <h2>Production funnel</h2>
-      <p class="helptext" style="margin:-8px 0 14px;">${funnel.dials} dials · ${funnel.appointments} set · ${funnel.presentations} sits · ${funnel.sales} sales (${fmtDateShort(range.from)}–${fmtDateShort(range.to)})</p>
+      <p class="helptext" style="margin:-8px 0 14px;">${funnel.dials} dials · ${funnel.appointments} set · ${funnel.presentations} sits · ${funnel.sales} sales (${fmtDateRangeLabel(range.from)}–${fmtDateRangeLabel(range.to)})</p>
       ${funnelRow('Dials', funnel.dials, funnel.dials, null)}
       ${funnelRow('Appointments set', funnel.appointments, funnel.dials, pct(funnel.appointments,funnel.dials))}
       ${funnelRow('Presentations', funnel.presentations, funnel.dials, pct(funnel.presentations,funnel.appointments))}
@@ -1009,7 +1012,7 @@ function renderProfit(){
 
     <div class="panel">
       <h2>Statement</h2>
-      <p class="helptext" style="margin:-8px 0 14px;">${fmtDateShort(range.from)} – ${fmtDateShort(range.to)}</p>
+      <p class="helptext" style="margin:-8px 0 14px;">${fmtDateRangeLabel(range.from)} – ${fmtDateRangeLabel(range.to)}</p>
       <table class="statement-table">
         <tbody>
           <tr><td>Gross First-Year Commission</td><td>${fmt(st.gross)}</td></tr>
@@ -1037,7 +1040,7 @@ function renderProfit(){
 
     <div class="panel">
       <h2>Unit economics</h2>
-      <p class="helptext" style="margin:-8px 0 14px;">${fmtDateShort(range.from)} – ${fmtDateShort(range.to)}</p>
+      <p class="helptext" style="margin:-8px 0 14px;">${fmtDateRangeLabel(range.from)} – ${fmtDateRangeLabel(range.to)}</p>
       <div class="metrics-grid">
         <div class="metric-cell"><div class="mlabel">Cost per Sale</div><div class="mvalue">${fmt(costPerSale)}</div></div>
         <div class="metric-cell"><div class="mlabel">Commission per Dial</div><div class="mvalue">${fmtMoney2(commissionPerDial)}</div></div>
