@@ -27,6 +27,14 @@
       <tbody id="producerRows"></tbody>
     </table>
   </div>
+
+  <div class="page-header"><div><div class="page-eyebrow">Admin</div><h1>Suggestions &amp; feedback</h1></div></div>
+  <div class="panel" id="suggestionsPanel" style="display:none;">
+    <table>
+      <thead><tr><th>Sent</th><th>Producer</th><th>Message</th><th>Status</th></tr></thead>
+      <tbody id="suggestionRows"></tbody>
+    </table>
+  </div>
 </div>
 
 <script src="/js/supabaseClient.js"></script>
@@ -56,9 +64,33 @@ async function init(){
   } catch (err) {
     if (err.message === 'Not authorized.') {
       statusEl.textContent = "This account isn't set up as an admin.";
-    } else {
-      statusEl.textContent = err.message;
+      return;
     }
+    statusEl.textContent = err.message;
+    return;
+  }
+
+  const STATUSES = ['open', 'planned', 'done', 'declined'];
+  try {
+    const suggestions = await apiFetch('/api/admin/suggestions');
+    document.getElementById('suggestionsPanel').style.display = '';
+    document.getElementById('suggestionRows').innerHTML = suggestions.map(s => `
+      <tr>
+        <td>${fmtDate(s.createdAt)}</td>
+        <td>${s.producerName}<br><span class="helptext">${s.producerEmail}</span></td>
+        <td>${s.message}</td>
+        <td><select data-id="${s.id}" class="suggestionStatusSelect">${STATUSES.map(st => `<option value="${st}" ${st===s.status?'selected':''}>${st}</option>`).join('')}</select></td>
+      </tr>`).join('') || '<tr><td colspan="4" class="helptext">No suggestions yet.</td></tr>';
+
+    document.querySelectorAll('.suggestionStatusSelect').forEach(sel => {
+      sel.addEventListener('change', async () => {
+        try {
+          await apiFetch(`/api/admin/suggestions/${sel.dataset.id}`, { method:'PUT', body:{ status: sel.value } });
+        } catch (err) { alert(err.message); }
+      });
+    });
+  } catch (err) {
+    // Producers table already loaded fine above, so just leave the suggestions panel hidden.
   }
 }
 document.getElementById('logoutBtn').onclick = async () => { await supabaseClient.auth.signOut(); window.location.href = '/login.html'; };

@@ -39,6 +39,9 @@ app.use('/api/goals', requireProducer, requireActiveOrTrial, require('./routes/g
 app.use('/api/team-goals', requireProducer, requireActiveOrTrial, require('./routes/teamGoals'));
 app.use('/api/team', requireProducer, requireActiveOrTrial, require('./routes/team'));
 app.use('/api/commission-schedule', requireProducer, requireActiveOrTrial, require('./routes/commissionSchedule'));
+// Deliberately no requireActiveOrTrial — feedback should stay open even to a producer
+// whose trial/subscription lapsed, and it costs nothing to let them keep talking to us.
+app.use('/api/suggestions', requireProducer, require('./routes/suggestions'));
 app.use('/api/admin', requireAdmin, require('./routes/admin'));
 
 // GET /api/dashboard — the numbers the mockup's dashboard tab needs, in one call.

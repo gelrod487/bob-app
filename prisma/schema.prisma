@@ -70,8 +70,24 @@ model Producer {
   commissionEntries CommissionEntry[] @relation("ProducerCommissionEntries")
   dailyActivities   DailyActivity[]
   goals             Goal[]
+  suggestions       Suggestion[]
 
   @@map("producer")
+}
+
+// A producer's feature request / bug report / general feedback — private between the
+// submitting producer and BOB's own team (gated by requireAdmin, not visible to other
+// producers). See the Feedback tab in app.html and the Suggestions panel in admin.html.
+model Suggestion {
+  id         String   @id @default(uuid())
+  producerId String   @map("producer_id")
+  message    String
+  status     String   @default("open") // 'open' | 'planned' | 'done' | 'declined'
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  producer Producer @relation(fields: [producerId], references: [id])
+
+  @@map("suggestion")
 }
 
 // One row per producer per calendar day — the "Today" tally on the Desk (dashboard) and
