@@ -1515,8 +1515,15 @@ async function renderGoals(){
 /* ================= CALCULATOR (Producer Plus / Agency Owner) ================= */
 let calcSchedule = { imo: null, rates: [] };
 let annuitySchedule = { imo: null, rates: [] };
+// Products whose names don't self-describe their type well enough for the keyword
+// matching below to guess at correctly — confirmed by Gustin one at a time rather than
+// inferred, since a wrong guess here is worse than leaving it unclassified.
+const PRODUCT_TYPE_OVERRIDES = {
+  'eagle premier': 'Whole Life', // Americo
+};
 function productTypeLabel(productName){
   const name = productName.toLowerCase();
+  if (PRODUCT_TYPE_OVERRIDES[name]) return PRODUCT_TYPE_OVERRIDES[name];
   if (name.includes('iul')) return 'IUL';
   if (name.includes('gul')) return 'GUL';
   if (name.includes('whole life') || name.includes('ibc')) return 'Whole Life';
