@@ -505,7 +505,49 @@ async function openClientDetail(policyId){
       <button class="ghost" type="button" onclick="closeModal()">Close</button>
     </div>
     <div class="errortext" id="detailError"></div>
+
+    <div class="panel" style="margin-top:18px;">
+      <h2 style="font-size:1rem; margin-bottom:10px;">Commission entries</h2>
+      <p class="helptext" style="margin:-6px 0 10px;">Log what's actually paid on this case right here — no need to go to the Profit tab separately.</p>
+      <table><thead><tr><th>Type</th><th>Amount</th><th>Date</th></tr></thead>
+        <tbody>${[...(p.commissionEntries||[])].sort((a,b)=>new Date(b.entryDate)-new Date(a.entryDate)).map(e=>`<tr class="row-clickable" data-entry-id="${e.id}"><td>${COMM_TYPE_MAP_REV[e.entryType]||e.entryType}</td><td>${fmt(e.amount)}</td><td>${fmtDate(e.entryDate)}</td></tr>`).join('') || '<tr><td colspan="3" class="helptext">No commission logged yet.</td></tr>'}</tbody>
+      </table>
+      <form class="entry" id="logPolicyCommForm" style="margin-top:12px;">
+        <div><label>Type</label><select name="type">
+          <option value="Initial">Initial</option>
+          <option value="Renewal">Renewal</option>
+          ${me.subscriptionTier==='agency_owner'?`<option value="Override">Override</option>`:''}
+          <option value="Chargeback">Chargeback</option>
+        </select></div>
+        <div><label>Amount ($)</label><input required type="number" step="0.01" name="amount" placeholder="850"></div>
+        <div><label>Date</label><input required type="date" name="date" value="${todayISO()}"></div>
+        <div class="full"><button class="primary" type="submit">Log Commission</button></div>
+        <div class="full errortext" id="logPolicyCommError"></div>
+      </form>
+    </div>
   `, { wide: true });
+
+  document.querySelectorAll('[data-entry-id]').forEach(row => {
+    row.onclick = () => {
+      const entry = (p.commissionEntries||[]).find(e => e.id === row.dataset.entryId);
+      if (entry) openEditPolicyCommissionModal(entry, p.id);
+    };
+  });
+  document.getElementById('logPolicyCommForm').addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const errEl = document.getElementById('logPolicyCommError');
+    const f = new FormData(ev.target);
+    const entryType = COMM_TYPE_MAP[f.get('type')];
+    const ownerType = entryType === 'override' ? 'agency' : 'producer';
+    try {
+      await apiFetch('/api/commission-entries', { method:'POST', body:{
+        policyId: p.id, ownerType, entryType, amount: Number(f.get('amount')), entryDate: f.get('date'),
+      }});
+      say('Commission logged!');
+      policiesCache = await apiFetch('/api/policies');
+      openClientDetail(p.id);
+    } catch (err) { errEl.textContent = err.message; }
+  });
 
   document.getElementById('saveNotesBtn').onclick = async () => {
     try {
@@ -546,6 +588,52 @@ async function openClientDetail(policyId){
       closeModal();
       renderCurrentPage();
     } catch (err) { document.getElementById('detailError').textContent = err.message; }
+  };
+}
+function openEditPolicyCommissionModal(entry, policyId){
+  openModal(`
+    <div class="modal-head"><h2>Edit commission entry</h2><button class="modal-close" onclick="closeModal()">×</button></div>
+    <form id="editPolicyCommForm">
+      <div class="detail-grid">
+        <div><label>Type</label><select name="type">
+          <option value="Initial" ${COMM_TYPE_MAP_REV[entry.entryType]==='Initial'?'selected':''}>Initial</option>
+          <option value="Renewal" ${COMM_TYPE_MAP_REV[entry.entryType]==='Renewal'?'selected':''}>Renewal</option>
+          ${me.subscriptionTier==='agency_owner'?`<option value="Override" ${COMM_TYPE_MAP_REV[entry.entryType]==='Override'?'selected':''}>Override</option>`:''}
+          <option value="Chargeback" ${COMM_TYPE_MAP_REV[entry.entryType]==='Chargeback'?'selected':''}>Chargeback</option>
+        </select></div>
+        <div><label>Amount ($)</label><input required type="number" step="0.01" name="amount" value="${Math.abs(entry.amount)}"></div>
+        <div class="full" style="grid-column:1/-1;"><label>Date</label><input required type="date" name="date" value="${entry.entryDate.slice(0,10)}"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="primary" type="submit">Save</button>
+        <button class="danger" type="button" id="deletePolicyCommBtn">Delete</button>
+        <button class="ghost" type="button" id="cancelPolicyCommBtn">Cancel</button>
+      </div>
+      <div class="errortext" id="editPolicyCommError"></div>
+    </form>
+  `);
+  document.getElementById('cancelPolicyCommBtn').onclick = () => openClientDetail(policyId);
+  document.getElementById('editPolicyCommForm').addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const errEl = document.getElementById('editPolicyCommError');
+    const f = new FormData(ev.target);
+    try {
+      await apiFetch(`/api/commission-entries/${entry.id}`, { method:'PUT', body:{
+        entryType: COMM_TYPE_MAP[f.get('type')], amount: Number(f.get('amount')), entryDate: f.get('date'),
+      }});
+      say('Commission entry updated.');
+      policiesCache = await apiFetch('/api/policies');
+      openClientDetail(policyId);
+    } catch (err) { errEl.textContent = err.message; }
+  });
+  document.getElementById('deletePolicyCommBtn').onclick = async () => {
+    if (!confirm('Delete this commission entry? This can\'t be undone.')) return;
+    try {
+      await apiFetch(`/api/commission-entries/${entry.id}`, { method:'DELETE' });
+      say('Commission entry deleted.');
+      policiesCache = await apiFetch('/api/policies');
+      openClientDetail(policyId);
+    } catch (err) { document.getElementById('editPolicyCommError').textContent = err.message; }
   };
 }
 
