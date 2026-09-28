@@ -1633,12 +1633,12 @@ async function renderCalculator(){
 const SUGGESTION_STATUS_LABEL = { open: 'Open', planned: 'Planned', done: 'Done', declined: 'Declined' };
 const SUGGESTION_STATUS_PILL = { open: '', planned: 'past_due', done: 'active', declined: 'canceled' };
 async function renderFeedback(){
-  mainInner.innerHTML = `<div class="page-header"><div><div class="page-eyebrow">Feedback</div><h1>Suggestions &amp; feature requests</h1></div></div><p class="helptext">Loading…</p>`;
+  mainInner.innerHTML = `<div class="page-header"><div><div class="page-eyebrow">Feedback</div><h1>Have a suggestion? Want to request a feature? Need to report a bug?</h1></div></div><p class="helptext">Loading…</p>`;
   const mine = await apiFetch('/api/suggestions');
 
   mainInner.innerHTML = `
-    <div class="page-header"><div><div class="page-eyebrow">Feedback</div><h1>Suggestions &amp; feature requests</h1></div></div>
-    <p class="helptext" style="margin-top:-10px;">Have an idea, a bug to report, or something that would make Bob better for you? Send straight to our developer team so we can continue to improve your experience!</p>
+    <div class="page-header"><div><div class="page-eyebrow">Feedback</div><h1>Have a suggestion? Want to request a feature? Need to report a bug?</h1></div></div>
+    <p class="helptext" style="margin-top:-10px;">Send instant feedback directly to our developer team so we can continue to improve your experience.</p>
 
     <div class="panel">
       <h2>Send a suggestion</h2>
