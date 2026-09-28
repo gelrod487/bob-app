@@ -128,6 +128,9 @@ function computeDateRange(key, customFrom, customTo){
     case 'ytd': return { from: toISO(new Date(y,0,1)), to: toISO(now) };
     // A safely-early sentinel date rather than querying for an actual earliest record —
     // no real client predates this, and it keeps the range computation synchronous.
+    // A safely-early sentinel, not the BOB account's own creation date — a producer can
+    // (and does, via the Book tab's spreadsheet import) bring in client/case history that
+    // predates their BOB account entirely, and "All time" needs to cover that too.
     case 'all_time': return { from: '2000-01-01', to: toISO(now) };
     case 'custom': return { from: customFrom || toISO(new Date(y,m,1)), to: customTo || toISO(now) };
     case 'this_month': default: return { from: toISO(new Date(y,m,1)), to: toISO(now) };
