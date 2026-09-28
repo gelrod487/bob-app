@@ -1516,10 +1516,41 @@ async function renderGoals(){
 let calcSchedule = { imo: null, rates: [] };
 let annuitySchedule = { imo: null, rates: [] };
 // Products whose names don't self-describe their type well enough for the keyword
-// matching below to guess at correctly — confirmed by Gustin one at a time rather than
-// inferred, since a wrong guess here is worse than leaving it unclassified.
+// matching below to guess at correctly — sourced from Gustin's product definitions
+// spreadsheet (COMP/product definitions.xlsx) rather than inferred, since a wrong guess
+// here is worse than leaving it unclassified. A few products (e.g. Accidental Death /
+// "Accidental") are deliberately left uncategorized in that source too — they're neither
+// IUL, Term, Whole Life, GUL, nor UL, so they correctly fall through to '—' below.
 const PRODUCT_TYPE_OVERRIDES = {
+  'allianz life pro+': 'IUL', // Allianz
+  'ameritas': 'Term', // Ethos
   'eagle premier': 'Whole Life', // Americo
+  'everlast 0-17': 'IUL', // Fidelity & Guaranty (F&G)
+  'everlast 18-80': 'IUL', // Fidelity & Guaranty (F&G)
+  'family protector': 'Whole Life', // American Amicable
+  'fe': 'Whole Life', // Transamerica
+  'final ex': 'Whole Life', // Aflac
+  'final expense': 'Whole Life', // Mutual of Omaha
+  'fx': 'Whole Life', // Liberty Bankers, Ladder Life, United Home Life
+  'giwl': 'Whole Life', // Corebridge, United Home Life
+  'hms 125': 'Term', // Americo
+  'home protector': 'Term', // American Amicable
+  'index universal life': 'IUL', // Ethos
+  'indexed explorer now': 'IUL', // Columbus Life
+  'indexed explorer plus': 'IUL', // Columbus Life
+  'instant decision': 'IUL', // Americo
+  'oba': 'Whole Life', // American Amicable
+  'pathsetter 0-17': 'IUL', // Fidelity & Guaranty (F&G)
+  'pathsetter 18-80': 'IUL', // Fidelity & Guaranty (F&G)
+  'planright': 'Whole Life', // Foresters
+  'royal legacy spwl': 'Whole Life', // Royal Neighbors
+  'secure life': 'Whole Life', // American Amicable
+  'senior/family choice': 'Whole Life', // American Amicable
+  'siwl': 'Whole Life', // Corebridge
+  'strong foundation': 'Term', // Foresters
+  'tawl max % (age band 20-59 and 80+)': 'Whole Life', // Ethos
+  'tawl max % (age band 60-80)': 'Whole Life', // Ethos
+  'universal life': 'IUL', // National Life Group (NLG)
 };
 function productTypeLabel(productName){
   const name = productName.toLowerCase();
