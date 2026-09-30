@@ -61,6 +61,15 @@ function trialEndsAt(producer) {
   return new Date(producer.createdAt.getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
 }
 
+// Shared by requireAdmin, requireActiveOrTrial, and GET /api/me — a short allowlist of
+// emails set via the ADMIN_EMAILS env var (comma-separated). Deliberately not a DB flag,
+// so granting or revoking admin access is a Render dashboard change, not a code/data change
+// (a bug or exploit that can write to the database still can't self-promote to admin).
+function isAdminEmail(email) {
+  const allowlist = (process.env.ADMIN_EMAILS || '').split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
+  return !!email && allowlist.includes(email.toLowerCase());
+}
+
 // Apply after requireProducer on any route that should stop working once a free trial
 // runs out and was never converted to a paid subscription. Deliberately NOT applied to
 // /api/me (needs to report trial status even when expired) or /api/billing (has to stay
@@ -69,7 +78,10 @@ function trialEndsAt(producer) {
 // Note: an agent invited into an agency still needs their own subscription — being under
 // an agencyId only determines whose dashboard their numbers roll up into, not billing.
 // Each producer (owner or agent) carries their own trial clock and subscriptionStatus.
+// Admin-allowlisted accounts are exempt — they're internal team, not paying customers.
 function requireActiveOrTrial(req, res, next) {
+  if (isAdminEmail(req.supabaseUser?.email)) return next();
+
   const producer = req.producer;
   const stillTrialing = new Date() < trialEndsAt(producer);
   if (producer.subscriptionStatus === 'active' || producer.subscriptionStatus === 'past_due' || stillTrialing) {
@@ -78,18 +90,14 @@ function requireActiveOrTrial(req, res, next) {
   return res.status(402).json({ error: 'Your 14-day trial has ended. Subscribe to keep using BOB.', trialExpired: true });
 }
 
-// Gates the internal admin dashboard to a short allowlist of emails set via the
-// ADMIN_EMAILS env var (comma-separated) — deliberately not a DB flag, so granting or
-// revoking admin access is a Render dashboard change, not a code/data change.
+// Gates the internal admin dashboard to the ADMIN_EMAILS allowlist.
 function requireAdmin(req, res, next) {
-  const allowlist = (process.env.ADMIN_EMAILS || '').split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
-  const email = (req.supabaseUser?.email || '').toLowerCase();
-  if (!email || !allowlist.includes(email)) {
+  if (!isAdminEmail(req.supabaseUser?.email)) {
     return res.status(403).json({ error: 'Not authorized.' });
   }
   next();
 }
 
 module.exports = {
-  requireAuth: asyncHandler(requireAuth), requireProducer, requireAdmin, requireActiveOrTrial, trialEndsAt,
+  requireAuth: asyncHandler(requireAuth), requireProducer, requireAdmin, requireActiveOrTrial, trialEndsAt, isAdminEmail,
 };

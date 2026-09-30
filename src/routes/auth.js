@@ -1,6 +1,7 @@
 const express = require('express');
 const prisma = require('../lib/db');
 const asyncHandler = require('../middleware/asyncHandler');
+const { isAdminEmail } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -11,8 +12,14 @@ router.post('/bootstrap', asyncHandler(async (req, res) => {
   const existing = await prisma.producer.findUnique({ where: { supabaseUserId: req.supabaseUser.id } });
   if (existing) return res.json(existing);
 
-  const { name, tier, agencyName, inviteAgencyId } = req.body;
+  let { tier } = req.body;
+  const { name, agencyName, inviteAgencyId } = req.body;
   if (!name) return res.status(400).json({ error: 'name is required.' });
+
+  // Internal admin accounts (ADMIN_EMAILS) aren't a paying customer tier — the signup form
+  // skips the plan picker for them (see login.html's ?admin=1 flow), so default it here
+  // rather than requiring a meaningless choice. requireActiveOrTrial exempts them anyway.
+  if (!tier && isAdminEmail(req.supabaseUser.email)) tier = 'individual';
 
   // Signing up via an agency owner's invite link joins that agency as a regular producer.
   // They still get their own trial and still need their own subscription afterward (see

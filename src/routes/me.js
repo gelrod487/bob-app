@@ -1,7 +1,7 @@
 const express = require('express');
 const prisma = require('../lib/db');
 const asyncHandler = require('../middleware/asyncHandler');
-const { trialEndsAt } = require('../middleware/auth');
+const { trialEndsAt, isAdminEmail } = require('../middleware/auth');
 const { getKnownImoNames, findTypoMatch } = require('../lib/knownImos');
 
 const router = express.Router();
@@ -14,7 +14,11 @@ router.get('/', asyncHandler(async (req, res) => {
 
   const producer = await prisma.producer.findUnique({ where: { id: req.producerId } });
   const endsAt = trialEndsAt(producer);
-  const trialExpired = !['active', 'past_due'].includes(producer.subscriptionStatus) && new Date() >= endsAt;
+  const isAdmin = isAdminEmail(req.supabaseUser.email);
+  // Admin (internal team) accounts are exempt from the trial/subscription gate entirely —
+  // see requireActiveOrTrial. Computed here too so this field is self-consistent on its own,
+  // not just correct because the frontend happens to also check isAdmin separately.
+  const trialExpired = !isAdmin && !['active', 'past_due'].includes(producer.subscriptionStatus) && new Date() >= endsAt;
 
   // agencyId is MEMBERSHIP (whose team this producer's own personal numbers count
   // toward); ownedAgencyId is OWNERSHIP (the agency this producer manages, if any) — see
@@ -37,6 +41,7 @@ router.get('/', asyncHandler(async (req, res) => {
       subscriptionStatus: producer.subscriptionStatus,
       trialEndsAt: endsAt.toISOString(),
       trialExpired,
+      isAdmin,
     },
   });
 }));

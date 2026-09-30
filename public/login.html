@@ -187,6 +187,24 @@ if (inviteAgencyId) {
   document.getElementById('completeAgencyNameField').classList.add('section-hidden');
 }
 
+/* ---- arriving from an admin-setup link (/login.html?admin=1) ----
+   For internal team accounts, not customers — the plan tier is meaningless (the backend
+   defaults it for any ADMIN_EMAILS-listed address; see POST /api/auth/bootstrap), and
+   requireActiveOrTrial exempts them from the trial/subscription gate entirely. This param
+   only simplifies THIS form — actual admin access still depends solely on the server-side
+   ADMIN_EMAILS allowlist, so visiting this link doesn't grant anything by itself. */
+const isAdminSignup = new URLSearchParams(window.location.search).get('admin') === '1';
+if (isAdminSignup) {
+  document.querySelector('.auth-tab[data-mode="signup"]').click();
+  document.getElementById('tierPickerField').classList.add('section-hidden');
+  document.getElementById('agencyNameField').classList.add('section-hidden');
+  const notice = document.getElementById('inviteNotice');
+  notice.textContent = "Setting up a BOB admin account — no plan needed, admin accounts aren't billed.";
+  notice.classList.remove('section-hidden');
+  document.getElementById('completeTierPickerField').classList.add('section-hidden');
+  document.getElementById('completeAgencyNameField').classList.add('section-hidden');
+}
+
 /* ---- after any successful auth, figure out where to send the user ---- */
 function safeRedirectTarget() {
   const target = new URLSearchParams(window.location.search).get('redirect');
