@@ -216,6 +216,10 @@ model Policy {
   policyNumber   String?  @map("policy_number")
   carrier        String
   productType    String   @map("product_type")
+  // 'life' | 'annuity' | null (unclassified — legacy rows, or not yet set at entry time).
+  // Drives commission reporting by sale type; not derived from productType because a
+  // carrier's product naming is free text and too inconsistent to pattern-match reliably.
+  saleType       String?  @map("sale_type")
   faceAmount     Decimal? @map("face_amount") @db.Decimal(12, 2)
   monthlyPremium Decimal  @map("monthly_premium") @db.Decimal(10, 2)
   // annualPremium is intentionally NOT stored — compute as monthlyPremium * 12 wherever needed,

@@ -8,6 +8,7 @@ const router = express.Router();
 // reminder/chargeback logic below don't need a data migration) — see STATUS_TAG in
 // app.html for the label shown to users.
 const VALID_STATUSES = ['pending', 'approved_not_paid', 'active', 'declined', 'withdrawn', 'cancelled', 'lapsed'];
+const VALID_SALE_TYPES = ['life', 'annuity'];
 
 // bob-schema.md: reminders only ever get generated for an active policy, at
 // months 10/11/12/13 after issue. Kept as its own function so the import
@@ -39,7 +40,7 @@ router.post('/', asyncHandler(async (req, res) => {
   const {
     clientId, policyNumber, carrier, productType, faceAmount,
     monthlyPremium, issueDate, status, leadType, leadVendor,
-    dateSubmitted, approvedDate, notes,
+    dateSubmitted, approvedDate, notes, saleType,
   } = req.body;
 
   if (!clientId || !carrier || !productType || !monthlyPremium || !issueDate || !status) {
@@ -49,6 +50,9 @@ router.post('/', asyncHandler(async (req, res) => {
   }
   if (!VALID_STATUSES.includes(status)) {
     return res.status(400).json({ error: `status must be one of: ${VALID_STATUSES.join(', ')}` });
+  }
+  if (saleType && !VALID_SALE_TYPES.includes(saleType)) {
+    return res.status(400).json({ error: `saleType must be one of: ${VALID_SALE_TYPES.join(', ')}` });
   }
 
   const policy = await prisma.policy.create({
@@ -61,6 +65,7 @@ router.post('/', asyncHandler(async (req, res) => {
       dateSubmitted: dateSubmitted ? new Date(dateSubmitted) : new Date(issueDate),
       approvedDate: approvedDate ? new Date(approvedDate) : null,
       notes: notes || null,
+      saleType: saleType || null,
     },
   });
 
@@ -90,10 +95,13 @@ router.put('/:id', asyncHandler(async (req, res) => {
 
   const {
     notes, status, issueDate, approvedDate, dateSubmitted,
-    carrier, productType, policyNumber, faceAmount, monthlyPremium, leadType, leadVendor,
+    carrier, productType, policyNumber, faceAmount, monthlyPremium, leadType, leadVendor, saleType,
   } = req.body;
   if (status !== undefined && !VALID_STATUSES.includes(status)) {
     return res.status(400).json({ error: `status must be one of: ${VALID_STATUSES.join(', ')}` });
+  }
+  if (saleType && !VALID_SALE_TYPES.includes(saleType)) {
+    return res.status(400).json({ error: `saleType must be one of: ${VALID_SALE_TYPES.join(', ')}` });
   }
 
   const data = { notes: notes ?? policy.notes };
@@ -108,6 +116,7 @@ router.put('/:id', asyncHandler(async (req, res) => {
   if (monthlyPremium !== undefined) data.monthlyPremium = monthlyPremium;
   if (leadType !== undefined) data.leadType = leadType || null;
   if (leadVendor !== undefined) data.leadVendor = leadVendor || null;
+  if (saleType !== undefined) data.saleType = saleType || null;
 
   const updated = await prisma.policy.update({ where: { id: policy.id }, data });
 
