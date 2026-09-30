@@ -3,6 +3,7 @@ const XLSX = require('xlsx');
 const prisma = require('../lib/db');
 const { buildReminderDates } = require('./policies');
 const asyncHandler = require('../middleware/asyncHandler');
+const { checkZipDecompressionSafety } = require('../lib/zipGuard');
 
 const router = express.Router();
 
@@ -220,7 +221,13 @@ router.post('/parse-workbook', (req, res) => {
   const { base64, sheetName } = req.body;
   if (!base64) return res.status(400).json({ error: 'base64 file content is required.' });
 
-  const workbook = XLSX.read(Buffer.from(base64, 'base64'), { type: 'buffer', cellDates: true });
+  const buffer = Buffer.from(base64, 'base64');
+  // XLSX/XLSM is a ZIP archive — check what it would expand to BEFORE asking SheetJS to
+  // actually decompress it. See zipGuard.js's doc comment for why this matters.
+  const unsafeReason = checkZipDecompressionSafety(buffer);
+  if (unsafeReason) return res.status(400).json({ error: unsafeReason });
+
+  const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
   const targetSheet = sheetName || workbook.SheetNames[0];
   if (!workbook.Sheets[targetSheet]) {
     return res.status(400).json({ error: `Sheet "${targetSheet}" not found.`, availableSheets: workbook.SheetNames });
