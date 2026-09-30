@@ -258,13 +258,13 @@ async function renderDesk(){
   policiesCache = policies;
 
   const funnel = activityRange.reduce((s,r) => ({
-    dials: s.dials + r.dials, appointments: s.appointments + r.appointments,
+    dials: s.dials + r.dials, contacts: s.contacts + r.contacts, appointments: s.appointments + r.appointments,
     presentations: s.presentations + r.presentations, sales: s.sales + r.sales,
-  }), { dials:0, appointments:0, presentations:0, sales:0 });
+  }), { dials:0, contacts:0, appointments:0, presentations:0, sales:0 });
 
   const monthKey = todayISO().slice(0,7);
   const monthActivity = activityAll.filter(r => r.date.slice(0,7) === monthKey)
-    .reduce((s,r) => ({ dials:s.dials+r.dials, appointments:s.appointments+r.appointments, presentations:s.presentations+r.presentations, sales:s.sales+r.sales }), {dials:0,appointments:0,presentations:0,sales:0});
+    .reduce((s,r) => ({ dials:s.dials+r.dials, contacts:s.contacts+r.contacts, appointments:s.appointments+r.appointments, presentations:s.presentations+r.presentations, sales:s.sales+r.sales }), {dials:0,contacts:0,appointments:0,presentations:0,sales:0});
 
   const t = todayRow(activityAll);
 
@@ -288,7 +288,7 @@ async function renderDesk(){
     <div class="panel">
       <h2>Today</h2>
       <div class="stepper-grid">
-        ${['dials','appointments','presentations','sales'].map(f => `
+        ${['dials','contacts','appointments','presentations','sales'].map(f => `
           <div class="stepper-box">
             <button class="stepper-btn" data-field="${f}" data-delta="-1">−</button>
             <div class="count-wrap"><span class="count" id="today-${f}">${t[f]}</span><span class="count-label">${f}</span></div>
@@ -299,9 +299,10 @@ async function renderDesk(){
 
     <div class="panel">
       <h2>Production funnel</h2>
-      <p class="helptext" style="margin:-8px 0 14px;">${funnel.dials} dials · ${funnel.appointments} set · ${funnel.presentations} sits · ${funnel.sales} sales (${fmtDateRangeLabel(range.from)}–${fmtDateRangeLabel(range.to)})</p>
+      <p class="helptext" style="margin:-8px 0 14px;">${funnel.dials} dials · ${funnel.contacts} contacts · ${funnel.appointments} set · ${funnel.presentations} sits · ${funnel.sales} sales (${fmtDateRangeLabel(range.from)}–${fmtDateRangeLabel(range.to)})</p>
       ${funnelRow('Dials', funnel.dials, funnel.dials, null)}
-      ${funnelRow('Appointments set', funnel.appointments, funnel.dials, pct(funnel.appointments,funnel.dials))}
+      ${funnelRow('Contacts', funnel.contacts, funnel.dials, pct(funnel.contacts,funnel.dials))}
+      ${funnelRow('Appointments set', funnel.appointments, funnel.dials, pct(funnel.appointments,funnel.contacts))}
       ${funnelRow('Presentations', funnel.presentations, funnel.dials, pct(funnel.presentations,funnel.appointments))}
       ${funnelRow('Sales', funnel.sales, funnel.dials, pct(funnel.sales,funnel.presentations))}
       <p class="helptext">${pct(funnel.sales,funnel.dials)} of dials became a sale.</p>
@@ -342,7 +343,7 @@ async function renderDesk(){
 
 function todayRow(rows){
   const iso = todayISO();
-  return rows.find(r => r.date.slice(0,10) === iso) || { dials:0, appointments:0, presentations:0, sales:0 };
+  return rows.find(r => r.date.slice(0,10) === iso) || { dials:0, contacts:0, appointments:0, presentations:0, sales:0 };
 }
 async function bumpActivity(field, delta){
   const row = await apiFetch('/api/activity/increment', { method:'POST', body:{ date: todayISO(), field, delta } });
@@ -723,6 +724,7 @@ function logRow(r){
     <div class="log-date"><div class="log-dow">${d.toLocaleDateString(undefined,{weekday:'short'})}</div><div class="log-daynum">${fmtDate(r.date)}</div></div>
     <div class="log-metrics">
       <div class="log-metric"><div class="lm-label">Dials</div><div class="lm-value">${r.dials}</div></div>
+      <div class="log-metric"><div class="lm-label">Contacts</div><div class="lm-value">${r.contacts}</div></div>
       <div class="log-metric"><div class="lm-label">Appts</div><div class="lm-value">${r.appointments}</div></div>
       <div class="log-metric"><div class="lm-label">Sits</div><div class="lm-value">${r.presentations}</div></div>
       <div class="log-metric"><div class="lm-label">Sales</div><div class="lm-value">${r.sales}</div></div>
@@ -730,12 +732,13 @@ function logRow(r){
   </div>`;
 }
 function openEditActivityModal(dateKey){
-  const row = activityRowsCache.find(r => r.date.slice(0,10) === dateKey) || { date: dateKey, dials:0, appointments:0, presentations:0, sales:0 };
+  const row = activityRowsCache.find(r => r.date.slice(0,10) === dateKey) || { date: dateKey, dials:0, contacts:0, appointments:0, presentations:0, sales:0 };
   openModal(`
     <div class="modal-head"><h2>Edit ${fmtDate(dateKey)}</h2><button class="modal-close" onclick="closeModal()">×</button></div>
     <form id="editActivityForm">
       <div class="detail-grid">
         <div><label>Dials</label><input required type="number" min="0" name="dials" value="${row.dials}"></div>
+        <div><label>Contacts</label><input required type="number" min="0" name="contacts" value="${row.contacts}"></div>
         <div><label>Appointments</label><input required type="number" min="0" name="appointments" value="${row.appointments}"></div>
         <div><label>Presentations</label><input required type="number" min="0" name="presentations" value="${row.presentations}"></div>
         <div><label>Sales</label><input required type="number" min="0" name="sales" value="${row.sales}"></div>
@@ -754,7 +757,7 @@ function openEditActivityModal(dateKey){
     const f = new FormData(ev.target);
     try {
       await apiFetch('/api/activity', { method:'PUT', body:{
-        date: dateKey, dials:Number(f.get('dials')), appointments:Number(f.get('appointments')),
+        date: dateKey, dials:Number(f.get('dials')), contacts:Number(f.get('contacts')), appointments:Number(f.get('appointments')),
         presentations:Number(f.get('presentations')), sales:Number(f.get('sales')),
       }});
       closeModal();
@@ -782,7 +785,7 @@ async function renderActivity(){
   const t = todayRow(rowsAll);
   const sortedRows = [...rowsRange].sort((a,b)=>new Date(a.date)-new Date(b.date));
   activityRowsCache = sortedRows;
-  const totals = sortedRows.reduce((s,r) => ({ dials:s.dials+r.dials, appointments:s.appointments+r.appointments, presentations:s.presentations+r.presentations, sales:s.sales+r.sales }), {dials:0,appointments:0,presentations:0,sales:0});
+  const totals = sortedRows.reduce((s,r) => ({ dials:s.dials+r.dials, contacts:s.contacts+r.contacts, appointments:s.appointments+r.appointments, presentations:s.presentations+r.presentations, sales:s.sales+r.sales }), {dials:0,contacts:0,appointments:0,presentations:0,sales:0});
   const todayLabel = new Date().toLocaleDateString(undefined,{weekday:'short', month:'short', day:'numeric', year:'numeric'});
 
   mainInner.innerHTML = `
@@ -794,7 +797,7 @@ async function renderActivity(){
       <div class="today-title">Today · ${todayLabel}</div>
       <div class="today-sub">${sortedRows.length} working day${sortedRows.length===1?'':'s'} in view</div>
       <div class="mini-stepper-row">
-        ${['dials','appointments','presentations','sales'].map(f => `
+        ${['dials','contacts','appointments','presentations','sales'].map(f => `
           <div class="mini-stepper">
             <button class="mini-stepper-btn" data-field="${f}" data-delta="-1">−</button>
             <div class="mini-stepper-mid"><div class="mini-stepper-count" id="today-${f}">${t[f]}</div><div class="mini-stepper-label">${f}</div></div>
@@ -803,8 +806,9 @@ async function renderActivity(){
       </div>
     </div>
 
-    <div class="grid" style="margin-bottom:18px;">
-      <div class="card"><div class="stat-label">Dials</div><div class="stat-value">${totals.dials}</div><div class="stat-sub">${pct(totals.appointments,totals.dials)} to appt</div></div>
+    <div class="grid grid-5" style="margin-bottom:18px;">
+      <div class="card"><div class="stat-label">Dials</div><div class="stat-value">${totals.dials}</div><div class="stat-sub">${pct(totals.contacts,totals.dials)} to contact</div></div>
+      <div class="card"><div class="stat-label">Contacts</div><div class="stat-value">${totals.contacts}</div><div class="stat-sub">${pct(totals.appointments,totals.contacts)} to appt</div></div>
       <div class="card"><div class="stat-label">Appointments</div><div class="stat-value">${totals.appointments}</div><div class="stat-sub">${pct(totals.presentations,totals.appointments)} sat</div></div>
       <div class="card"><div class="stat-label">Presentations</div><div class="stat-value">${totals.presentations}</div><div class="stat-sub">${pct(totals.sales,totals.presentations)} closed</div></div>
       <div class="card"><div class="stat-label">Sales</div><div class="stat-value">${totals.sales}</div><div class="stat-sub">${pct(totals.sales,totals.dials)} of dials</div></div>
@@ -849,6 +853,7 @@ function openLogDayModal(){
       <div class="detail-grid">
         <div class="full" style="grid-column:1/-1;"><label>Date</label><input required type="date" name="date" value="${todayISO()}" max="${todayISO()}"></div>
         <div><label>Dials</label><input required type="number" min="0" name="dials" value="0"></div>
+        <div><label>Contacts</label><input required type="number" min="0" name="contacts" value="0"></div>
         <div><label>Appointments</label><input required type="number" min="0" name="appointments" value="0"></div>
         <div><label>Presentations</label><input required type="number" min="0" name="presentations" value="0"></div>
         <div><label>Sales</label><input required type="number" min="0" name="sales" value="0"></div>
@@ -863,7 +868,7 @@ function openLogDayModal(){
     const f = new FormData(e.target);
     try {
       await apiFetch('/api/activity', { method:'PUT', body:{
-        date: f.get('date'), dials:Number(f.get('dials')), appointments:Number(f.get('appointments')),
+        date: f.get('date'), dials:Number(f.get('dials')), contacts:Number(f.get('contacts')), appointments:Number(f.get('appointments')),
         presentations:Number(f.get('presentations')), sales:Number(f.get('sales')),
       }});
       closeModal();

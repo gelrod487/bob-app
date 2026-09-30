@@ -4,7 +4,7 @@ const asyncHandler = require('../middleware/asyncHandler');
 
 const router = express.Router();
 
-const FIELDS = ['dials', 'appointments', 'presentations', 'sales'];
+const FIELDS = ['dials', 'contacts', 'appointments', 'presentations', 'sales'];
 
 // GET /api/activity?from=YYYY-MM-DD&to=YYYY-MM-DD — raw daily rows for the funnel,
 // "This month vs. goals," and the trend chart. No rows for a day just means zero activity.

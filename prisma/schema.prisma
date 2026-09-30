@@ -107,6 +107,9 @@ model DailyActivity {
   producerId    String   @map("producer_id")
   date          DateTime @db.Date
   dials         Int      @default(0)
+  // A dial where you actually reached/spoke with the prospect — sits between Dials and
+  // Appointments in the funnel (Dials -> Contacts -> Appointments -> Presentations -> Sales).
+  contacts      Int      @default(0)
   appointments  Int      @default(0)
   presentations Int      @default(0)
   sales         Int      @default(0)
