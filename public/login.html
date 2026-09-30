@@ -73,6 +73,14 @@
       <div class="helptext" id="signupNotice"></div>
     </form>
 
+    <!-- MFA CHALLENGE (password verified, this account also has 2FA enrolled) -->
+    <form class="auth-form section-hidden" id="mfaForm">
+      <p class="helptext">Enter the 6-digit code from your authenticator app.</p>
+      <div><label>Authentication Code</label><input required name="code" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="6" placeholder="123456"></div>
+      <button class="primary" type="submit">Verify</button>
+      <div class="errortext" id="mfaError"></div>
+    </form>
+
     <!-- COMPLETE PROFILE (already authenticated, e.g. after email confirmation) -->
     <form class="auth-form section-hidden" id="completeForm">
       <p class="helptext">Just a couple more details to finish setting up your account.</p>
@@ -160,6 +168,36 @@ function safeRedirectTarget() {
   const target = new URLSearchParams(window.location.search).get('redirect');
   return target && target.startsWith('/') && !target.startsWith('//') ? target : null;
 }
+
+/* ---- MFA step-up: password (aal1) alone isn't enough for an account with 2FA enrolled ---- */
+const mfaForm = document.getElementById('mfaForm');
+let pendingMfaEmail = null;
+async function proceedOrChallengeMfa(email) {
+  const { data, error } = await supabaseClient.auth.mfa.getAuthenticatorAssuranceLevel();
+  if (!error && data.nextLevel === 'aal2' && data.currentLevel !== data.nextLevel) {
+    pendingMfaEmail = email;
+    document.getElementById('authTabs').classList.add('section-hidden');
+    signinForm.classList.add('section-hidden');
+    signupForm.classList.add('section-hidden');
+    mfaForm.classList.remove('section-hidden');
+    mfaForm.code.focus();
+    return;
+  }
+  completeLoginFlow(email);
+}
+mfaForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const errEl = document.getElementById('mfaError');
+  errEl.textContent = '';
+  const code = mfaForm.code.value.trim();
+  const { data: factorsData, error: factorsError } = await supabaseClient.auth.mfa.listFactors();
+  const totpFactor = factorsError ? null : factorsData.totp[0];
+  if (!totpFactor) { errEl.textContent = 'No authenticator found for this account.'; return; }
+  const { error } = await supabaseClient.auth.mfa.challengeAndVerify({ factorId: totpFactor.id, code });
+  if (error) { errEl.textContent = error.message; return; }
+  completeLoginFlow(pendingMfaEmail);
+});
+
 async function completeLoginFlow(email) {
   let me;
   try {
@@ -233,7 +271,7 @@ signinForm.addEventListener('submit', async (e) => {
     email: f.get('email'), password: f.get('password'),
   });
   if (error) { errEl.textContent = error.message; return; }
-  completeLoginFlow(data.user.email);
+  proceedOrChallengeMfa(data.user.email);
 });
 
 /* ---- sign up ---- */
@@ -282,7 +320,7 @@ completeForm.addEventListener('submit', async (e) => {
 /* ---- if already signed in, skip straight to the right place ---- */
 (async () => {
   const { data: { session } } = await supabaseClient.auth.getSession();
-  if (session) completeLoginFlow(session.user.email);
+  if (session) proceedOrChallengeMfa(session.user.email);
 })();
 </script>
 </body>

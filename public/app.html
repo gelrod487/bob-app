@@ -15,7 +15,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <link rel="stylesheet" href="/css/bob.css">
 </head>
@@ -2080,6 +2080,9 @@ const ANNUITY_TIER_OPTIONS = [
 async function renderSettings(){
   mainInner.innerHTML = `<div class="page-header"><div><div class="page-eyebrow">Settings</div><h1>Account</h1></div></div><p class="helptext">Loading…</p>`;
   const { imos } = await apiFetch('/api/imos');
+  const { data: factorsData } = await supabaseClient.auth.mfa.listFactors();
+  const totpFactors = factorsData ? factorsData.totp : [];
+  const verifiedFactor = totpFactors.find(f => f.status === 'verified');
 
   mainInner.innerHTML = `
     <div class="page-header"><div><div class="page-eyebrow">Settings</div><h1>Account</h1></div></div>
@@ -2089,6 +2092,32 @@ async function renderSettings(){
       <p class="helptext">Name: <strong>${me.name}</strong></p>
       <p class="helptext">Email: <strong>${me.email}</strong></p>
       <p class="helptext">Plan: <strong>${PLAN_LABEL[me.subscriptionTier] || 'Producer'}</strong></p>
+    </div>
+
+    <div class="panel" id="mfaPanel">
+      <h2>Two-Factor Authentication</h2>
+      <p class="helptext" style="margin-top:-8px;">Adds a second step at sign-in (a 6-digit code from an authenticator app like Google Authenticator or Authy) so a stolen or guessed password alone can't get into your account.</p>
+      <div id="mfaStatusView">
+        ${verifiedFactor ? `
+          <p class="helptext">Status: <strong>Enabled</strong></p>
+          <button class="ghost" id="mfaDisableBtn">Disable 2FA</button>
+          <div class="errortext" id="mfaDisableError"></div>
+        ` : `
+          <p class="helptext">Status: <strong>Not enabled</strong></p>
+          <button class="primary" id="mfaEnrollBtn">Enable 2FA</button>
+          <div class="errortext" id="mfaEnrollError"></div>
+        `}
+      </div>
+      <div id="mfaEnrollView" class="section-hidden">
+        <p class="helptext">Scan this QR code with your authenticator app, then enter the 6-digit code it shows.</p>
+        <div id="mfaQrHolder" style="margin:10px 0;"></div>
+        <p class="helptext">Can't scan? Enter this key manually: <code id="mfaSecretText"></code></p>
+        <form id="mfaVerifyForm" class="entry">
+          <div><label>6-digit code</label><input required name="code" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="123456"></div>
+          <div class="full"><button class="primary" type="submit">Verify &amp; Enable</button> <button class="ghost" type="button" id="mfaEnrollCancel">Cancel</button></div>
+          <div class="full errortext" id="mfaVerifyError"></div>
+        </form>
+      </div>
     </div>
 
     <div class="panel">
@@ -2116,6 +2145,61 @@ async function renderSettings(){
       </form>
     </div>
   `;
+  /* ---- Two-Factor Authentication (TOTP via Supabase Auth MFA) ---- */
+  let pendingFactorId = null;
+  const mfaEnrollBtn = document.getElementById('mfaEnrollBtn');
+  if (mfaEnrollBtn) {
+    mfaEnrollBtn.addEventListener('click', async () => {
+      const errEl = document.getElementById('mfaEnrollError');
+      errEl.textContent = '';
+      const { data, error } = await supabaseClient.auth.mfa.enroll({ factorType: 'totp' });
+      if (error) { errEl.textContent = error.message; return; }
+      pendingFactorId = data.id;
+      // Supabase returns qr_code as a raw (unescaped) inline SVG data URI, which itself
+      // contains double quotes — escapeHtml so it doesn't break out of the src attribute.
+      document.getElementById('mfaQrHolder').innerHTML = `<img src="${escapeHtml(data.totp.qr_code)}" alt="2FA QR code" style="max-width:200px;">`;
+      document.getElementById('mfaSecretText').textContent = data.totp.secret;
+      document.getElementById('mfaStatusView').classList.add('section-hidden');
+      document.getElementById('mfaEnrollView').classList.remove('section-hidden');
+    });
+  }
+  const mfaEnrollCancel = document.getElementById('mfaEnrollCancel');
+  if (mfaEnrollCancel) {
+    mfaEnrollCancel.addEventListener('click', async () => {
+      if (pendingFactorId) await supabaseClient.auth.mfa.unenroll({ factorId: pendingFactorId });
+      renderSettings();
+    });
+  }
+  const mfaVerifyForm = document.getElementById('mfaVerifyForm');
+  if (mfaVerifyForm) {
+    mfaVerifyForm.addEventListener('submit', async e => {
+      e.preventDefault();
+      const errEl = document.getElementById('mfaVerifyError');
+      errEl.textContent = '';
+      const code = new FormData(e.target).get('code').trim();
+      const { error } = await supabaseClient.auth.mfa.challengeAndVerify({ factorId: pendingFactorId, code });
+      if (error) { errEl.textContent = error.message; return; }
+      say('Two-factor authentication enabled.');
+      renderSettings();
+    });
+  }
+  const mfaDisableBtn = document.getElementById('mfaDisableBtn');
+  if (mfaDisableBtn) {
+    mfaDisableBtn.addEventListener('click', async () => {
+      if (!confirm('Disable two-factor authentication for your account?')) return;
+      const errEl = document.getElementById('mfaDisableError');
+      errEl.textContent = '';
+      const { data } = await supabaseClient.auth.mfa.listFactors();
+      const factor = data.totp.find(f => f.status === 'verified');
+      if (factor) {
+        const { error } = await supabaseClient.auth.mfa.unenroll({ factorId: factor.id });
+        if (error) { errEl.textContent = error.message; return; }
+      }
+      say('Two-factor authentication disabled.');
+      renderSettings();
+    });
+  }
+
   document.getElementById('imoForm').addEventListener('submit', async e => {
     e.preventDefault();
     const errEl = document.getElementById('imoError');

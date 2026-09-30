@@ -2,6 +2,19 @@ const supabaseAdmin = require('../lib/supabase');
 const prisma = require('../lib/db');
 const asyncHandler = require('./asyncHandler');
 
+// The access token's signature is already verified by supabaseAdmin.auth.getUser() below —
+// this just reads the `aal` (Authenticator Assurance Level) claim out of the payload that
+// call already vouched for, so we don't need a second round-trip to inspect it.
+function decodeJwtPayload(token) {
+  const part = token.split('.')[1];
+  if (!part) return null;
+  try {
+    return JSON.parse(Buffer.from(part, 'base64url').toString('utf8'));
+  } catch {
+    return null;
+  }
+}
+
 // Verifies the Supabase access token on every /api request and, if a Producer row already
 // exists for that Supabase user, attaches it. Routes that need an existing Producer (i.e.
 // everything except POST /api/auth/bootstrap) should also apply requireProducer below.
@@ -12,6 +25,18 @@ async function requireAuth(req, res, next) {
 
   const { data, error } = await supabaseAdmin.auth.getUser(token);
   if (error || !data?.user) return res.status(401).json({ error: 'Invalid or expired session.' });
+
+  // If this account has TOTP enrolled, a password-only (aal1) session isn't enough — the
+  // browser must have completed the MFA challenge (aal2) too. Without this, someone who
+  // steals just the password (phishing, credential stuffing, a leaked-password match) could
+  // hit the API directly with an aal1 token and skip the second factor the login UI enforces.
+  const hasVerifiedFactor = (data.user.factors || []).some((f) => f.status === 'verified');
+  if (hasVerifiedFactor) {
+    const claims = decodeJwtPayload(token);
+    if (!claims || claims.aal !== 'aal2') {
+      return res.status(401).json({ error: 'Additional verification required.', mfaRequired: true });
+    }
+  }
 
   req.supabaseUser = data.user;
   const producer = await prisma.producer.findUnique({ where: { supabaseUserId: data.user.id } });
