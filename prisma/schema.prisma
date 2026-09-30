@@ -224,6 +224,11 @@ model Policy {
   monthlyPremium Decimal  @map("monthly_premium") @db.Decimal(10, 2)
   // annualPremium is intentionally NOT stored — compute as monthlyPremium * 12 wherever needed,
   // matching the generated column in the SQL spec. Keeping it derived avoids drift.
+  // Annuities are typically written as one lump-sum deposit, not a recurring premium —
+  // set instead of monthlyPremium when saleType = 'annuity' (monthlyPremium stays 0 for
+  // those rows). See premiumSize() in app.html / profitability.js for the one place that
+  // should read "whichever of these applies" rather than assuming monthlyPremium.
+  singlePremium  Decimal? @map("single_premium") @db.Decimal(12, 2)
   issueDate      DateTime @map("issue_date") @db.Date
   status         String   // 'active' | 'pending' | 'lapsed' | 'declined' | 'withdrawn'
   leadType       String?  @map("lead_type")   // descriptive only, not a real relationship

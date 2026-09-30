@@ -40,12 +40,12 @@ router.post('/', asyncHandler(async (req, res) => {
   const {
     clientId, policyNumber, carrier, productType, faceAmount,
     monthlyPremium, issueDate, status, leadType, leadVendor,
-    dateSubmitted, approvedDate, notes, saleType,
+    dateSubmitted, approvedDate, notes, saleType, singlePremium,
   } = req.body;
 
-  if (!clientId || !carrier || !productType || !monthlyPremium || !issueDate || !status) {
+  if (!clientId || !carrier || !productType || !issueDate || !status) {
     return res.status(400).json({
-      error: 'clientId, carrier, productType, monthlyPremium, issueDate, and status are required.',
+      error: 'clientId, carrier, productType, issueDate, and status are required.',
     });
   }
   if (!VALID_STATUSES.includes(status)) {
@@ -54,12 +54,22 @@ router.post('/', asyncHandler(async (req, res) => {
   if (saleType && !VALID_SALE_TYPES.includes(saleType)) {
     return res.status(400).json({ error: `saleType must be one of: ${VALID_SALE_TYPES.join(', ')}` });
   }
+  // Annuities are typically one lump-sum deposit, not a recurring premium — require
+  // whichever amount actually applies instead of forcing every case through monthlyPremium.
+  const isAnnuity = saleType === 'annuity';
+  if (isAnnuity && !singlePremium) {
+    return res.status(400).json({ error: 'singlePremium is required when saleType is "annuity".' });
+  }
+  if (!isAnnuity && !monthlyPremium) {
+    return res.status(400).json({ error: 'monthlyPremium is required.' });
+  }
 
   const policy = await prisma.policy.create({
     data: {
       clientId, policyNumber, carrier, productType,
       faceAmount: faceAmount ?? null,
-      monthlyPremium,
+      monthlyPremium: isAnnuity ? 0 : monthlyPremium,
+      singlePremium: isAnnuity ? singlePremium : null,
       issueDate: new Date(issueDate),
       status, leadType, leadVendor,
       dateSubmitted: dateSubmitted ? new Date(dateSubmitted) : new Date(issueDate),
@@ -95,7 +105,7 @@ router.put('/:id', asyncHandler(async (req, res) => {
 
   const {
     notes, status, issueDate, approvedDate, dateSubmitted,
-    carrier, productType, policyNumber, faceAmount, monthlyPremium, leadType, leadVendor, saleType,
+    carrier, productType, policyNumber, faceAmount, monthlyPremium, leadType, leadVendor, saleType, singlePremium,
   } = req.body;
   if (status !== undefined && !VALID_STATUSES.includes(status)) {
     return res.status(400).json({ error: `status must be one of: ${VALID_STATUSES.join(', ')}` });
@@ -114,6 +124,7 @@ router.put('/:id', asyncHandler(async (req, res) => {
   if (policyNumber !== undefined) data.policyNumber = policyNumber || null;
   if (faceAmount !== undefined) data.faceAmount = faceAmount || null;
   if (monthlyPremium !== undefined) data.monthlyPremium = monthlyPremium;
+  if (singlePremium !== undefined) data.singlePremium = singlePremium || null;
   if (leadType !== undefined) data.leadType = leadType || null;
   if (leadVendor !== undefined) data.leadVendor = leadVendor || null;
   if (saleType !== undefined) data.saleType = saleType || null;

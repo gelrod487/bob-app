@@ -99,6 +99,9 @@ function escapeHtml(value){
     .replace(/'/g, '&#39;');
 }
 function fmt(n){ return '$'+Number(n||0).toLocaleString(undefined,{maximumFractionDigits:0}); }
+// Annuities are typically one lump-sum deposit, not a recurring premium — this is the one
+// place that should read "whichever amount actually applies" instead of assuming monthlyPremium.
+function premiumSize(p){ return p.saleType==='annuity' ? Number(p.singlePremium||0) : Number(p.monthlyPremium||0)*12; }
 function wireCopyButton(btnId, inputId){
   const btn = document.getElementById(btnId);
   btn.onclick = async () => {
@@ -366,7 +369,7 @@ function caseCardFromPolicy(p){
   return `<div class="case-card">
     <div><button class="case-name-link" onclick="openClientDetail('${p.id}')">${escapeHtml(p.client?.name) || '—'}</button><div class="case-sub">${escapeHtml(p.productType)} · ${escapeHtml(p.carrier)} · ${fmtDate(p.issueDate)}</div></div>
     <div class="case-right">
-      <div class="case-amount">${fmt(Number(p.monthlyPremium)*12)}</div>
+      <div class="case-amount">${fmt(premiumSize(p))}</div>
       <div style="margin-top:4px;"><span class="tag ${tag.cls}">${tag.label}</span>${cb ? ` <span class="helptext" style="color:var(--red);">−${fmt(cb)} CB</span>`:''}</div>
     </div>
   </div>`;
@@ -428,14 +431,15 @@ function openAddClientModal(){
         <div><label>Phone</label><input name="phone" placeholder="(555) 555-0100"></div>
         <div><label>Carrier</label><input required name="carrier" placeholder="e.g. North Star Life"></div>
         <div><label>Product Type</label><input required name="product" placeholder="e.g. Term 20"></div>
-        <div><label>Sale Type</label><select name="saleType">
+        <div><label>Sale Type</label><select name="saleType" id="addSaleType">
           <option value="">Not set</option>
           <option value="life">Life</option>
           <option value="annuity">Annuity</option>
         </select></div>
         <div><label>Policy Number</label><input name="policyNumber" placeholder="Optional"></div>
         <div><label>Coverage Amount</label><input type="number" step="0.01" name="faceAmount" placeholder="Optional"></div>
-        <div><label>Monthly Premium ($)</label><input required type="number" step="0.01" name="premium" placeholder="150"></div>
+        <div id="addMonthlyPremiumField"><label>Monthly Premium ($)</label><input required type="number" step="0.01" name="premium" placeholder="150"></div>
+        <div id="addSinglePremiumField" class="section-hidden"><label>Single Premium ($)</label><input type="number" step="0.01" name="singlePremium" placeholder="100000"></div>
         <div><label>Status</label><select name="status">
           <option value="pending">Pending</option>
           <option value="approved_not_paid">Approved not paid</option>
@@ -456,6 +460,15 @@ function openAddClientModal(){
       <div class="errortext" id="addClientError"></div>
     </form>
   `);
+  const addSaleTypeEl = document.getElementById('addSaleType');
+  const addMonthlyPremiumInput = document.querySelector('#addMonthlyPremiumField input');
+  addSaleTypeEl.addEventListener('change', (e) => {
+    const isAnnuity = e.target.value === 'annuity';
+    document.getElementById('addMonthlyPremiumField').classList.toggle('section-hidden', isAnnuity);
+    document.getElementById('addSinglePremiumField').classList.toggle('section-hidden', !isAnnuity);
+    addMonthlyPremiumInput.required = !isAnnuity;
+  });
+
   document.getElementById('addClientForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const errEl = document.getElementById('addClientError');
@@ -466,6 +479,11 @@ function openAddClientModal(){
     const isPlaced = status === 'active';
     const issueDate = f.get('issueDate') || dateSubmitted;
     const approvedDate = f.get('approvedDate') || (isPlaced ? dateSubmitted : null);
+    const isAnnuity = f.get('saleType') === 'annuity';
+    if (isAnnuity && !Number(f.get('singlePremium'))) {
+      errEl.textContent = 'Single Premium is required for an annuity sale.';
+      return;
+    }
     try {
       const client = await apiFetch('/api/clients', { method:'POST', body:{ name: f.get('name'), email: f.get('email')||null, phone: f.get('phone')||null } });
       clientsCache.push(client);
@@ -473,7 +491,9 @@ function openAddClientModal(){
         clientId: client.id, carrier: f.get('carrier'), productType: f.get('product'),
         policyNumber: f.get('policyNumber')||null, faceAmount: f.get('faceAmount') ? Number(f.get('faceAmount')) : null,
         saleType: f.get('saleType')||null,
-        monthlyPremium: Number(f.get('premium')), issueDate, status,
+        monthlyPremium: isAnnuity ? 0 : Number(f.get('premium')),
+        singlePremium: isAnnuity ? Number(f.get('singlePremium')) : null,
+        issueDate, status,
         leadVendor: f.get('leadVendor')||null, leadType: f.get('leadType')||null,
         dateSubmitted, approvedDate, notes: f.get('notes')||null,
       }});
@@ -503,7 +523,7 @@ async function openClientDetail(policyId){
     <div class="detail-grid">
       <div class="detail-item"><div class="dlabel">Email</div><div class="dvalue">${escapeHtml(contact.email)||'—'}</div></div>
       <div class="detail-item"><div class="dlabel">Phone</div><div class="dvalue">${escapeHtml(contact.phone)||'—'}</div></div>
-      <div class="detail-item"><div class="dlabel">Annual Premium</div><div class="dvalue">${fmt(Number(p.monthlyPremium)*12)}</div></div>
+      <div class="detail-item"><div class="dlabel">${p.saleType==='annuity'?'Single Premium':'Annual Premium'}</div><div class="dvalue">${fmt(premiumSize(p))}</div></div>
       <div class="detail-item"><div class="dlabel">Issue Paid FYC</div><div class="dvalue">${fmt(paidSoFar)}</div></div>
     </div>
     <div class="detail-grid">
@@ -518,7 +538,8 @@ async function openClientDetail(policyId){
       <div><label>Coverage Amount</label><input id="editFaceAmount" type="number" step="0.01" value="${p.faceAmount||''}"></div>
       <div><label>Lead Vendor</label><input id="editLeadVendor" value="${escapeHtml(p.leadVendor||'')}"></div>
       <div><label>Lead Type</label><input id="editLeadType" value="${escapeHtml(p.leadType||'')}"></div>
-      <div><label>Monthly Premium</label><input id="editMonthlyPremium" type="number" step="0.01" value="${p.monthlyPremium}"></div>
+      <div id="editMonthlyPremiumField" class="${p.saleType==='annuity'?'section-hidden':''}"><label>Monthly Premium</label><input id="editMonthlyPremium" type="number" step="0.01" value="${p.monthlyPremium}"></div>
+      <div id="editSinglePremiumField" class="${p.saleType==='annuity'?'':'section-hidden'}"><label>Single Premium</label><input id="editSinglePremium" type="number" step="0.01" value="${p.singlePremium||''}"></div>
       <div><label>Date Submitted</label><input id="editDateSubmitted" type="date" value="${(p.dateSubmitted||p.issueDate).slice(0,10)}"></div>
       <div><label>Approved Date</label><input id="editApprovedDate" type="date" value="${p.approvedDate ? p.approvedDate.slice(0,10) : ''}"></div>
       <div>
@@ -592,8 +613,15 @@ async function openClientDetail(policyId){
     } catch (err) { errEl.textContent = err.message; }
   });
 
+  document.getElementById('editSaleType').addEventListener('change', (e) => {
+    const isAnnuity = e.target.value === 'annuity';
+    document.getElementById('editMonthlyPremiumField').classList.toggle('section-hidden', isAnnuity);
+    document.getElementById('editSinglePremiumField').classList.toggle('section-hidden', !isAnnuity);
+  });
+
   document.getElementById('saveNotesBtn').onclick = async () => {
     try {
+      const isAnnuity = document.getElementById('editSaleType').value === 'annuity';
       await apiFetch(`/api/policies/${p.id}`, { method:'PUT', body:{
         notes: document.getElementById('clientNotes').value,
         status: document.getElementById('clientStatus').value,
@@ -605,7 +633,8 @@ async function openClientDetail(policyId){
         faceAmount: document.getElementById('editFaceAmount').value ? Number(document.getElementById('editFaceAmount').value) : null,
         leadVendor: document.getElementById('editLeadVendor').value || null,
         leadType: document.getElementById('editLeadType').value || null,
-        monthlyPremium: Number(document.getElementById('editMonthlyPremium').value),
+        monthlyPremium: isAnnuity ? 0 : Number(document.getElementById('editMonthlyPremium').value),
+        singlePremium: isAnnuity ? (Number(document.getElementById('editSinglePremium').value) || null) : null,
         dateSubmitted: document.getElementById('editDateSubmitted').value,
         approvedDate: document.getElementById('editApprovedDate').value || undefined,
       }});
@@ -935,8 +964,9 @@ function bookCaseCard(p){
     </div>
     <div class="case-right">
       <div class="case-sub">${fmtDate(p.dateSubmitted || p.issueDate)}</div>
-      <div class="case-amount">${fmt(p.monthlyPremium)}/mo</div>
-      <div class="case-sub">AP ${fmt(Number(p.monthlyPremium)*12)}</div>
+      ${p.saleType==='annuity'
+        ? `<div class="case-amount">${fmt(p.singlePremium)}</div><div class="case-sub">Single premium</div>`
+        : `<div class="case-amount">${fmt(p.monthlyPremium)}/mo</div><div class="case-sub">AP ${fmt(Number(p.monthlyPremium)*12)}</div>`}
       <div style="margin-top:4px;"><span class="tag ${tag.cls}">${tag.label}</span>${cb ? ` <span class="helptext" style="color:var(--red);">−${fmt(cb)} CB</span>`:''}</div>
     </div>
   </div>`;
@@ -1267,7 +1297,7 @@ async function renderProfit(){
   const costPerAppointment = actTotals.appointments ? dash.totalExpenses/actTotals.appointments : 0;
   const costPerDial = actTotals.dials ? dash.totalExpenses/actTotals.dials : 0;
   const avgCaseFYC = placedRange.length ? dash.grossCommission/placedRange.length : 0;
-  const avgAnnualPremium = placedRange.length ? placedRange.reduce((s,p)=>s+Number(p.monthlyPremium)*12,0)/placedRange.length : 0;
+  const avgAnnualPremium = placedRange.length ? placedRange.reduce((s,p)=>s+premiumSize(p),0)/placedRange.length : 0;
 
   const profitMargin = dashAllTime.grossCommission ? (dashAllTime.netProfit/dashAllTime.grossCommission*100) : 0;
   const chargebackRatio = dashAllTime.grossCommission ? (dashAllTime.chargebacks/dashAllTime.grossCommission*100) : 0;

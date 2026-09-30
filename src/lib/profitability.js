@@ -1,6 +1,14 @@
 const prisma = require('./db');
 const { sumExpensesInRange } = require('./recurring');
 
+// An annuity is typically one lump-sum deposit, not a recurring premium, so its "deal
+// size" for pipeline/reporting purposes is the deposit itself, not (0 monthly * 12).
+function premiumSize(policy) {
+  return policy.saleType === 'annuity'
+    ? Number(policy.singlePremium || 0)
+    : Number(policy.monthlyPremium || 0) * 12;
+}
+
 // These two functions are the direct implementation of the "Profitability formulas"
 // section of bob-schema.md. Keep them as the single source of truth for the math —
 // the dashboard, any reports, and the mobile app (if one ever exists) should all
@@ -37,14 +45,14 @@ async function producerProfitability(producerId, { from, to } = {}) {
     }),
     prisma.policy.findMany({
       where: { status: 'pending', client: { producerId } },
-      select: { monthlyPremium: true },
+      select: { monthlyPremium: true, singlePremium: true, saleType: true },
     }),
   ]);
 
   const totalCommission = Number(commissionAgg._sum.amount || 0);
   const grossCommission = Number(grossAgg._sum.amount || 0);
   const chargebacks = Math.abs(Number(chargebackAgg._sum.amount || 0));
-  const pendingPremium = pendingPolicies.reduce((s, p) => s + Number(p.monthlyPremium) * 12, 0);
+  const pendingPremium = pendingPolicies.reduce((s, p) => s + premiumSize(p), 0);
 
   return {
     totalCommission,
@@ -114,7 +122,7 @@ async function agencyProfitability(agencyId, { from, to } = {}) {
     }),
     prisma.policy.findMany({
       where: { status: 'pending', client: { producer: { agencyId: { in: agencyIds } } } },
-      select: { monthlyPremium: true },
+      select: { monthlyPremium: true, singlePremium: true, saleType: true },
     }),
   ]);
 
@@ -122,7 +130,7 @@ async function agencyProfitability(agencyId, { from, to } = {}) {
   const grossCommission = Number(grossAgg._sum.amount || 0);
   const chargebacks = Math.abs(Number(chargebackAgg._sum.amount || 0));
   const totalOverrides = Number(overrideAgg._sum.amount || 0);
-  const pendingPremium = pendingPolicies.reduce((s, p) => s + Number(p.monthlyPremium) * 12, 0);
+  const pendingPremium = pendingPolicies.reduce((s, p) => s + premiumSize(p), 0);
 
   return {
     totalProducerCommission,
