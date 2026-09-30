@@ -14,6 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileLoad&render=explicit" async defer></script>
 <link rel="stylesheet" href="/css/bob.css">
 </head>
 <body>
@@ -36,6 +37,7 @@
     <form class="auth-form" id="signinForm">
       <div><label>Email</label><input required type="email" name="email" placeholder="you@example.com"></div>
       <div><label>Password</label><input required type="password" name="password" placeholder="••••••••"></div>
+      <div id="turnstileSignin"></div>
       <button class="primary" type="submit">Sign In</button>
       <div class="errortext" id="signinError"></div>
       <p class="helptext" style="text-align:right;"><a class="link-accent" href="#" id="forgotPasswordLink">Forgot password?</a></p>
@@ -45,6 +47,7 @@
     <form class="auth-form section-hidden" id="forgotForm">
       <p class="helptext">Enter your email and we'll send you a link to reset your password.</p>
       <div><label>Email</label><input required type="email" name="email" placeholder="you@example.com"></div>
+      <div id="turnstileForgot"></div>
       <button class="primary" type="submit">Send reset link</button>
       <div class="errortext" id="forgotError"></div>
       <div class="helptext" id="forgotNotice"></div>
@@ -57,6 +60,7 @@
       <div><label>Your Name</label><input required name="name" placeholder="Jordan Alvarez"></div>
       <div><label>Email</label><input required type="email" name="email" placeholder="you@example.com"></div>
       <div><label>Password</label><input required type="password" name="password" placeholder="At least 8 characters" minlength="8"></div>
+      <div id="turnstileSignup"></div>
       <div id="tierPickerField">
         <label>Plan</label>
         <div class="tier-options">
@@ -109,6 +113,26 @@
 <script src="/js/registerSW.js"></script>
 <script>
 wireMascot('navMascot', ["Hi, I'm Bob!", "Let's get your book set up.", "One book per account."]);
+
+/* ---- Cloudflare Turnstile (bot protection on the three auth-submitting forms) ----
+   Supabase itself verifies the token server-side (Attack Protection > Bot and Abuse
+   Protection) once the secret key is configured there; this just collects it. */
+const TURNSTILE_SITE_KEY = '0x4AAAAAAFKTVtHFDTMrcPUr';
+const turnstileWidgetIds = {};
+function onTurnstileLoad() {
+  ['turnstileSignin', 'turnstileSignup', 'turnstileForgot'].forEach((containerId) => {
+    turnstileWidgetIds[containerId] = turnstile.render(`#${containerId}`, { sitekey: TURNSTILE_SITE_KEY });
+  });
+}
+function captchaTokenFor(containerId) {
+  const widgetId = turnstileWidgetIds[containerId];
+  return widgetId !== undefined ? (turnstile.getResponse(widgetId) || undefined) : undefined;
+}
+function resetCaptcha(containerId) {
+  const widgetId = turnstileWidgetIds[containerId];
+  if (widgetId !== undefined) turnstile.reset(widgetId);
+}
+
 /* ---- tab switching ---- */
 const signinForm = document.getElementById('signinForm');
 const signupForm = document.getElementById('signupForm');
@@ -256,7 +280,9 @@ forgotForm.addEventListener('submit', async (e) => {
   errEl.textContent = ''; noticeEl.textContent = '';
   const { error } = await supabaseClient.auth.resetPasswordForEmail(f.get('email'), {
     redirectTo: `${window.location.origin}/reset-password.html`,
+    captchaToken: captchaTokenFor('turnstileForgot'),
   });
+  resetCaptcha('turnstileForgot');
   if (error) { errEl.textContent = error.message; return; }
   noticeEl.textContent = "Check your email for a link to reset your password.";
 });
@@ -269,7 +295,9 @@ signinForm.addEventListener('submit', async (e) => {
   errEl.textContent = '';
   const { data, error } = await supabaseClient.auth.signInWithPassword({
     email: f.get('email'), password: f.get('password'),
+    options: { captchaToken: captchaTokenFor('turnstileSignin') },
   });
+  resetCaptcha('turnstileSignin');
   if (error) { errEl.textContent = error.message; return; }
   proceedOrChallengeMfa(data.user.email);
 });
@@ -287,7 +315,11 @@ signupForm.addEventListener('submit', async (e) => {
     ? { name: f.get('name'), inviteAgencyId, email }
     : { name: f.get('name'), tier: selectedTier(signupForm), agencyName: f.get('agencyName') || null, email };
 
-  const { data, error } = await supabaseClient.auth.signUp({ email, password: f.get('password') });
+  const { data, error } = await supabaseClient.auth.signUp({
+    email, password: f.get('password'),
+    options: { captchaToken: captchaTokenFor('turnstileSignup') },
+  });
+  resetCaptcha('turnstileSignup');
   if (error) { errEl.textContent = error.message; return; }
 
   localStorage.setItem('bob_pending_signup', JSON.stringify(pending));
