@@ -40,6 +40,7 @@ model Agency {
   commissionEntries CommissionEntry[] @relation("AgencyCommissionEntries")
   teamGoals     TeamGoal[]
 
+  @@index([parentAgencyId])
   @@map("agency")
 }
 
@@ -77,6 +78,7 @@ model Producer {
   goals             Goal[]
   suggestions       Suggestion[]
 
+  @@index([agencyId])
   @@map("producer")
 }
 
@@ -92,6 +94,7 @@ model Suggestion {
 
   producer Producer @relation(fields: [producerId], references: [id])
 
+  @@index([producerId])
   @@map("suggestion")
 }
 
@@ -203,6 +206,7 @@ model Client {
   producer Producer @relation(fields: [producerId], references: [id])
   policies Policy[]
 
+  @@index([producerId])
   @@map("client")
 }
 
@@ -229,6 +233,7 @@ model Policy {
   commissionEntries CommissionEntry[]
   paymentReminders  PaymentReminder[]
 
+  @@index([clientId])
   @@map("policy")
 }
 
@@ -248,6 +253,9 @@ model CommissionEntry {
   producer Producer? @relation("ProducerCommissionEntries", fields: [producerId], references: [id])
   agency   Agency?   @relation("AgencyCommissionEntries", fields: [agencyId], references: [id])
 
+  @@index([policyId])
+  @@index([producerId])
+  @@index([agencyId])
   @@map("commission_entry")
 }
 
@@ -261,6 +269,7 @@ model PaymentReminder {
 
   policy Policy @relation(fields: [policyId], references: [id])
 
+  @@index([policyId])
   @@map("payment_reminder")
 }
 
@@ -287,6 +296,8 @@ model Expense {
   producer Producer? @relation("ProducerExpenses", fields: [producerId], references: [id])
   agency   Agency?   @relation("AgencyExpenses", fields: [agencyId], references: [id])
 
+  @@index([producerId])
+  @@index([agencyId])
   @@map("expense")
 }
 
@@ -301,5 +312,6 @@ model OwnerDraw {
 
   agency Agency @relation(fields: [agencyId], references: [id])
 
+  @@index([agencyId])
   @@map("owner_draw")
 }

@@ -1,0 +1,12 @@
+ALTER INDEX "idx_agency_parent_agency_id" RENAME TO "agency_parent_agency_id_idx";
+ALTER INDEX "idx_client_producer_id" RENAME TO "client_producer_id_idx";
+ALTER INDEX "idx_commission_entry_agency_id" RENAME TO "commission_entry_agency_id_idx";
+ALTER INDEX "idx_commission_entry_policy_id" RENAME TO "commission_entry_policy_id_idx";
+ALTER INDEX "idx_commission_entry_producer_id" RENAME TO "commission_entry_producer_id_idx";
+ALTER INDEX "idx_expense_agency_id" RENAME TO "expense_agency_id_idx";
+ALTER INDEX "idx_expense_producer_id" RENAME TO "expense_producer_id_idx";
+ALTER INDEX "idx_owner_draw_agency_id" RENAME TO "owner_draw_agency_id_idx";
+ALTER INDEX "idx_payment_reminder_policy_id" RENAME TO "payment_reminder_policy_id_idx";
+ALTER INDEX "idx_policy_client_id" RENAME TO "policy_client_id_idx";
+ALTER INDEX "idx_producer_agency_id" RENAME TO "producer_agency_id_idx";
+ALTER INDEX "idx_suggestion_producer_id" RENAME TO "suggestion_producer_id_idx";
