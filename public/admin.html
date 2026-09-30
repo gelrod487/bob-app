@@ -41,6 +41,18 @@
 <script src="/js/api.js"></script>
 <script>
 function fmtDate(dateStr){ return new Date(dateStr).toLocaleDateString(undefined,{month:'short', day:'numeric', year:'numeric'}); }
+// This page renders other people's data (producer name/email, free-text feedback
+// messages) into innerHTML — every one of those fields is attacker-controlled by
+// whichever producer entered it, so it must be escaped before insertion.
+function escapeHtml(value){
+  if (value === null || value === undefined) return '';
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 async function init(){
   const statusEl = document.getElementById('statusMsg');
@@ -52,11 +64,11 @@ async function init(){
     document.getElementById('tablePanel').style.display = '';
     document.getElementById('producerRows').innerHTML = producers.map(p => `
       <tr>
-        <td>${p.name}</td>
-        <td>${p.email}</td>
-        <td>${p.agencyName || '—'}</td>
+        <td>${escapeHtml(p.name)}</td>
+        <td>${escapeHtml(p.email)}</td>
+        <td>${escapeHtml(p.agencyName) || '—'}</td>
         <td>${p.subscriptionTier === 'agency_owner' ? 'Agency' : 'Producer'}</td>
-        <td><span class="tag ${p.subscriptionStatus === 'active' ? 'active-pol' : 'pending'}">${p.subscriptionStatus}</span></td>
+        <td><span class="tag ${p.subscriptionStatus === 'active' ? 'active-pol' : 'pending'}">${escapeHtml(p.subscriptionStatus)}</span></td>
         <td>${p.clientCount}</td>
         <td>${fmtDate(p.createdAt)}</td>
       </tr>`).join('') || '<tr><td colspan="7" class="helptext">No customers yet.</td></tr>';
@@ -77,8 +89,8 @@ async function init(){
     document.getElementById('suggestionRows').innerHTML = suggestions.map(s => `
       <tr>
         <td>${fmtDate(s.createdAt)}</td>
-        <td>${s.producerName}<br><span class="helptext">${s.producerEmail}</span></td>
-        <td>${s.message}</td>
+        <td>${escapeHtml(s.producerName)}<br><span class="helptext">${escapeHtml(s.producerEmail)}</span></td>
+        <td>${escapeHtml(s.message)}</td>
         <td><select data-id="${s.id}" class="suggestionStatusSelect">${STATUSES.map(st => `<option value="${st}" ${st===s.status?'selected':''}>${st}</option>`).join('')}</select></td>
       </tr>`).join('') || '<tr><td colspan="4" class="helptext">No suggestions yet.</td></tr>';
 

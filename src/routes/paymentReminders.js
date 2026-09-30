@@ -26,11 +26,20 @@ router.patch('/:id', asyncHandler(async (req, res) => {
   if (!['pending', 'completed', 'dismissed'].includes(status)) {
     return res.status(400).json({ error: 'status must be pending, completed, or dismissed.' });
   }
-  const reminder = await prisma.paymentReminder.update({
-    where: { id: req.params.id },
+  // Prisma's update() takes a unique-key where, which can't express the ownership
+  // filter directly — confirm ownership with a scoped lookup first (matching every
+  // other route's pattern) so one producer can't touch another's reminder just by
+  // guessing/obtaining its id.
+  const reminder = await prisma.paymentReminder.findFirst({
+    where: { id: req.params.id, policy: { client: { producerId: req.producerId } } },
+  });
+  if (!reminder) return res.status(404).json({ error: 'Reminder not found.' });
+
+  const updated = await prisma.paymentReminder.update({
+    where: { id: reminder.id },
     data: { status },
   });
-  res.json(reminder);
+  res.json(updated);
 }));
 
 module.exports = router;
