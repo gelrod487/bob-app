@@ -51,7 +51,7 @@ const BOB_JR_FAQ = [
   },
   {
     q: "What is my trial period, and what happens when it ends?",
-    keywords: ['trial', '14-day', '14 day', 'subscribe', 'subscription', 'expire', 'billing'],
+    keywords: ['trial', '14-day', '14 day', 'free trial', 'expire'],
     a: "Every new account gets a 14-day free trial with full Producer Plus-level access — including the Commission Calculator and Analytics — no matter which plan you pick at signup. Once it ends, you'll be routed to the Subscribe tab to pick a plan — Producer ($29/mo), Producer Plus ($39/mo, keeps the Calculator and Analytics), or Agency Owner ($79/mo, adds the Team tab too). Your data is never deleted, you just can't use the app again until you subscribe.",
   },
   {
@@ -98,6 +98,31 @@ const BOB_JR_FAQ = [
     q: "How do I log costs or expenses?",
     keywords: ['costs', 'expenses', 'lead cost', 'overhead'],
     a: "The Costs tab is where you log recurring or one-time expenses (lead costs, tools, etc.) — these are what get subtracted from Gross Commission to get your Net Profit.",
+  },
+  {
+    q: "How do I cancel my subscription?",
+    keywords: ['cancel', 'stop subscription'],
+    a: "Go to the Subscribe tab and click \"Manage Billing\" — that opens Stripe's secure billing portal, where you can cancel anytime. No contract, no cancellation fee. Your clients, cases, and commission history are never deleted, so everything's still there if you resubscribe later.",
+  },
+  {
+    q: "How do I update my payment method or see past invoices?",
+    keywords: ['payment method', 'update card', 'update billing', 'past invoice', 'invoices', 'billing history'],
+    a: "Go to the Subscribe tab and click \"Manage Billing\" — that's the same Stripe billing portal link used for cancelling, and it also lets you update your card on file and view past invoices.",
+  },
+  {
+    q: "Can I switch plans later — upgrade or downgrade?",
+    keywords: ['switch plan', 'upgrade plan', 'downgrade plan', 'change plan', 'change my plan'],
+    a: "Yes. Go to the Subscribe tab and pick a different plan, or use \"Manage Billing\" to change it through Stripe's portal. Switching takes effect on your billing account right away — there's no lock-in period.",
+  },
+  {
+    q: "Do you offer refunds?",
+    keywords: ['refund', 'money back', 'reimburse'],
+    a: "There's no refund policy built into the app itself. If you have a billing question or issue, send it through the Feedback tab and it'll go straight to BOB's team.",
+  },
+  {
+    q: "What happens to my data if I cancel my subscription?",
+    keywords: ['data if i cancel', 'lose my data', 'data deleted', 'after i cancel'],
+    a: "Nothing is deleted. Cancelling just pauses access to the app until you subscribe again — your clients, cases, commission history, and everything else you've entered is still sitting there waiting for you.",
   },
 ];
 
