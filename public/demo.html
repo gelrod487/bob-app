@@ -263,6 +263,13 @@ function grossFYCInRange(from,to){ return store.clients.filter(c => (c.status===
 function placedInRange(from,to){ return store.clients.filter(c => (c.status==='active'||c.status==='lapsed') && c.issueDate>=from && c.issueDate<=to); }
 function chargebacksInRange(from,to){ return store.clients.filter(c => c.chargebackDate && c.chargebackDate>=from && c.chargebackDate<=to).reduce((s,c)=>s+c.chargebackAmount,0); }
 function costsTotalInRange(from,to){ return costsInRange(from,to).reduce((s,c)=>s+c.amount,0); }
+// Flattens every client's commissionEntries into one book-wide list for the Profit tab's
+// Commission History table, tagging each entry with its owning client for display/editing.
+function allCommissionEntriesInRange(from,to){
+  return store.clients.flatMap(c => (c.commissionEntries||[])
+    .filter(e => e.date >= from && e.date <= to)
+    .map(e => ({ ...e, clientId: c.id, clientName: c.name, carrier: c.carrier, product: c.product })));
+}
 function pendingAsOf(to){ return store.clients.filter(c => c.status==='pending' && c.dateSubmitted<=to).reduce((s,c)=>s+annualPremium(c),0); }
 function statement(from,to){
   const gross = grossFYCInRange(from,to);
@@ -776,7 +783,8 @@ function openClientDetail(id){
     renderCurrentPage();
   };
 }
-function openEditCommEntryModal(entry, clientId){
+function openEditCommEntryModal(entry, clientId, onDone){
+  onDone = onDone || (() => openClientDetail(clientId));
   openModal(`
     <div class="modal-head"><h2>Edit commission entry</h2><button class="modal-close" onclick="closeModal()">×</button></div>
     <form id="editCommEntryForm">
@@ -798,7 +806,7 @@ function openEditCommEntryModal(entry, clientId){
       </div>
     </form>
   `);
-  document.getElementById('cancelCommEntryBtn').onclick = () => openClientDetail(clientId);
+  document.getElementById('cancelCommEntryBtn').onclick = () => onDone();
   document.getElementById('editCommEntryForm').addEventListener('submit', (ev) => {
     ev.preventDefault();
     const f = new FormData(ev.target);
@@ -809,7 +817,7 @@ function openEditCommEntryModal(entry, clientId){
     recalcIssuePaidFYC(c);
     saveStore();
     say('Commission entry updated.');
-    openClientDetail(clientId);
+    onDone();
   });
   document.getElementById('deleteCommEntryBtn').onclick = () => {
     if (!confirm('Delete this commission entry? This can\'t be undone.')) return;
@@ -818,7 +826,7 @@ function openEditCommEntryModal(entry, clientId){
     recalcIssuePaidFYC(c);
     saveStore();
     say('Commission entry deleted.');
-    openClientDetail(clientId);
+    onDone();
   };
 }
 
@@ -1241,6 +1249,7 @@ function renderProfit(){
   const persistency = matured.length ? Math.round(maturedRetained/matured.length*100) : 100;
 
   const stats = monthlyStats(trendMonths);
+  const commEntries = allCommissionEntriesInRange(range.from, range.to);
 
   mainInner.innerHTML = `
     <div class="page-header"><div><div class="page-eyebrow">Profit</div><h1>Financial reporting</h1></div></div>
@@ -1304,6 +1313,25 @@ function renderProfit(){
       <table><thead><tr><th>Month</th><th>Dials</th><th>Sales</th><th>Gross Commission</th><th>Chargebacks</th><th>Costs</th><th>Net Profit</th></tr></thead>
       <tbody>${stats.slice().reverse().map(m=>`<tr><td>${m.label}</td><td>${m.dials}</td><td>${m.sales}</td><td>${fmt(m.gross)}</td><td class="neg">−${fmt(m.cb)}</td><td>${fmt(m.cost)}</td><td class="${m.net>=0?'pos':'neg'}">${fmt(m.net)}</td></tr>`).join('')}</tbody></table>
     </div>
+
+    <div class="panel">
+      <h2>Log Commission</h2>
+      <form class="entry" id="commForm">
+        <div class="full"><label>Case</label><select required name="clientId" id="commClientSelect">${store.clients.map(c=>`<option value="${c.id}">${c.name} — ${c.carrier} — ${c.product}</option>`).join('') || '<option value="">No cases yet</option>'}</select></div>
+        <div><label>Type</label><select name="type"><option value="Initial">Initial</option><option value="Installment">Installment</option><option value="Renewal">Renewal</option><option value="Override">Override</option><option value="Chargeback">Chargeback</option></select></div>
+        <div><label>Amount ($)</label><input required type="number" step="0.01" name="amount" placeholder="850"></div>
+        <div><label>Date</label><input required type="date" name="date"></div>
+        <div class="full"><button class="primary" type="submit">Log Commission</button></div>
+        <div class="full errortext" id="commError"></div>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h2>Commission History</h2>
+      <p class="helptext" style="margin:-8px 0 14px;">Click a row to edit or delete it.</p>
+      <table><thead><tr><th>Client</th><th>Type</th><th>Amount</th><th>Date</th></tr></thead>
+      <tbody>${[...commEntries].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(e=>`<tr class="row-clickable" data-hist-entry-id="${e.id}" data-hist-client-id="${e.clientId}"><td>${e.clientName}</td><td>${e.type}</td><td>${fmt(e.amount)}</td><td>${fmtDate(e.date)}</td></tr>`).join('') || '<tr><td colspan="4" class="helptext">No commissions in this range.</td></tr>'}</tbody></table>
+    </div>
   `;
   wireDateFilter('profit', renderProfit);
   document.getElementById('trendRangeSelect').onchange = (e) => {
@@ -1312,6 +1340,31 @@ function renderProfit(){
     renderProfit();
   };
   renderNetChart(stats.map(m=>m.net), stats.map(m=>m.label));
+
+  document.querySelectorAll('[data-hist-entry-id]').forEach(row => {
+    row.onclick = () => {
+      const clientId = row.dataset.histClientId;
+      const c = store.clients.find(x => x.id === clientId);
+      const entry = (c?.commissionEntries||[]).find(e => e.id === row.dataset.histEntryId);
+      if (entry) openEditCommEntryModal(entry, clientId, renderProfit);
+    };
+  });
+  document.getElementById('commForm').addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    const errEl = document.getElementById('commError');
+    errEl.textContent = '';
+    const f = new FormData(ev.target);
+    const c = store.clients.find(x => x.id === f.get('clientId'));
+    if (!c) { errEl.textContent = 'Pick a case first.'; return; }
+    const type = f.get('type');
+    const amount = type === 'Chargeback' ? -Math.abs(Number(f.get('amount'))) : Number(f.get('amount'));
+    c.commissionEntries = c.commissionEntries || [];
+    c.commissionEntries.push({ id: uid('ce'), type, amount, date: f.get('date') });
+    recalcIssuePaidFYC(c);
+    saveStore();
+    say('Commission logged!');
+    renderProfit();
+  });
 }
 
 /* ================= COMMISSION CALCULATOR ================= */
