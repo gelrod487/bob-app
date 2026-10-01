@@ -1367,12 +1367,13 @@ async function monthlyStatsReal(count){
 async function renderProfit(){
   mainInner.innerHTML = `<div class="page-header"><div><div class="page-eyebrow">Profit</div><h1>Financial reporting</h1></div></div><p class="helptext">Loading…</p>`;
   const range = computeDateRange(dateFilterState.profit.key, dateFilterState.profit.from, dateFilterState.profit.to);
-  const [dash, dashAllTime, entries, policies, activityRange] = await Promise.all([
+  const [dash, dashAllTime, entries, policies, activityRange, draws] = await Promise.all([
     apiFetch(`/api/dashboard?from=${range.from}&to=${range.to}`),
     apiFetch('/api/dashboard'),
     apiFetch(`/api/commission-entries?from=${range.from}&to=${range.to}`),
     apiFetch('/api/policies'),
     apiFetch(`/api/activity?from=${range.from}&to=${range.to}`),
+    apiFetch(`/api/owner-draws?from=${range.from}&to=${range.to}`),
   ]);
   policiesCache = policies;
   const isAgency = dash.tier === 'agency_owner';
@@ -1394,6 +1395,7 @@ async function renderProfit(){
   const persistency = matured.length ? Math.round(matured.filter(p=>p.status==='active').length/matured.length*100) : 100;
 
   const stats = await monthlyStatsReal(trendMonths);
+  const drawsTotal = draws.reduce((s,d)=>s+Number(d.amount),0);
 
   mainInner.innerHTML = `
     <div class="page-header"><div><div class="page-eyebrow">Profit</div><h1>Financial reporting</h1></div></div>
@@ -1411,6 +1413,24 @@ async function renderProfit(){
           <tr class="statement-total"><td>Net Profit</td><td class="${dash.netProfit>=0?'pos':'neg'}">${fmt(dash.netProfit)}</td></tr>
           <tr><td>Pending (not yet paid)</td><td style="color:var(--gold);">${fmt(dash.pendingPremium)}</td></tr>
         </tbody>
+      </table>
+    </div>
+
+    <div class="panel">
+      <h2>Owner Draws</h2>
+      <p class="helptext" style="margin:-8px 0 14px;">Cash you've taken out of already-earned profit — not a business expense, and never subtracted from Net Profit above. Tracked here purely for your own visibility into what's actually left in the business.</p>
+      <div class="grid" style="margin-bottom:18px;">
+        <div class="card"><div class="stat-label">Draws this period</div><div class="stat-value">${fmt(drawsTotal)}</div></div>
+      </div>
+      <form class="entry" id="drawForm">
+        <div><label>Amount ($)</label><input required type="number" step="0.01" name="amount" placeholder="1500"></div>
+        <div><label>Date</label><input required type="date" name="date"></div>
+        <div class="full"><label>Notes</label><input name="notes" placeholder="Optional"></div>
+        <div class="full"><button class="primary" type="submit">Log Draw</button></div>
+        <div class="full errortext" id="drawError"></div>
+      </form>
+      <table style="margin-top:18px;"><thead><tr><th>Amount</th><th>Date</th><th>Notes</th></tr></thead>
+        <tbody>${draws.map(d=>`<tr class="row-clickable" onclick="openEditDrawModal('${d.id}')"><td>${fmt(d.amount)}</td><td>${fmtDate(d.drawDate)}</td><td>${escapeHtml(d.notes||'')}</td></tr>`).join('') || '<tr><td colspan="3" class="helptext">No draws in this range.</td></tr>'}</tbody>
       </table>
     </div>
 
@@ -1516,6 +1536,64 @@ async function renderProfit(){
       renderProfit();
     } catch (err) { errEl.textContent = err.message; }
   });
+
+  ownerDrawsCache = draws;
+  document.getElementById('drawForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const errEl = document.getElementById('drawError');
+    errEl.textContent = '';
+    const f = new FormData(e.target);
+    try {
+      await apiFetch('/api/owner-draws', { method:'POST', body:{
+        amount: Number(f.get('amount')), drawDate: f.get('date'), notes: f.get('notes') || null,
+      }});
+      say('Draw logged!');
+      renderProfit();
+    } catch (err) { errEl.textContent = err.message; }
+  });
+}
+let ownerDrawsCache = [];
+function openEditDrawModal(id){
+  const d = ownerDrawsCache.find(x => x.id === id);
+  if (!d) return;
+  openModal(`
+    <div class="modal-head"><h2>Edit owner draw</h2><button class="modal-close" onclick="closeModal()">×</button></div>
+    <form id="editDrawForm">
+      <div class="detail-grid">
+        <div><label>Amount ($)</label><input required type="number" step="0.01" name="amount" value="${d.amount}"></div>
+        <div><label>Date</label><input required type="date" name="date" value="${d.drawDate.slice(0,10)}"></div>
+        <div class="full" style="grid-column:1/-1;"><label>Notes</label><input name="notes" value="${escapeHtml(d.notes||'')}" placeholder="Optional"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="primary" type="submit">Save</button>
+        <button class="danger" type="button" id="deleteDrawBtn">Delete</button>
+        <button class="ghost" type="button" onclick="closeModal()">Cancel</button>
+      </div>
+      <div class="errortext" id="editDrawError"></div>
+    </form>
+  `);
+  document.getElementById('editDrawForm').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const errEl = document.getElementById('editDrawError');
+    const f = new FormData(ev.target);
+    try {
+      await apiFetch(`/api/owner-draws/${id}`, { method:'PUT', body:{
+        amount: Number(f.get('amount')), drawDate: f.get('date'), notes: f.get('notes') || null,
+      }});
+      closeModal();
+      say('Owner draw updated.');
+      renderProfit();
+    } catch (err) { errEl.textContent = err.message; }
+  });
+  document.getElementById('deleteDrawBtn').onclick = async () => {
+    if (!confirm('Delete this owner draw? This can\'t be undone.')) return;
+    try {
+      await apiFetch(`/api/owner-draws/${id}`, { method:'DELETE' });
+      closeModal();
+      say('Owner draw deleted.');
+      renderProfit();
+    } catch (err) { document.getElementById('editDrawError').textContent = err.message; }
+  };
 }
 
 /* ================= SUBSCRIBE (billing) ================= */

@@ -35,7 +35,9 @@ model Agency {
 
   producers     Producer[] @relation("AgencyMembers")
   expenses      Expense[]  @relation("AgencyExpenses")
-  ownerDraws    OwnerDraw[]
+  // The agency owner's OWN draws (every other producer's draws are tracked against their
+  // own producerId instead — see OwnerDraw's doc comment).
+  ownerDraws    OwnerDraw[] @relation("AgencyOwnerDraws")
   // Overrides logged against this agency (commission_entry.owner_type = 'agency')
   commissionEntries CommissionEntry[] @relation("AgencyCommissionEntries")
   teamGoals     TeamGoal[]
@@ -77,6 +79,7 @@ model Producer {
   dailyActivities   DailyActivity[]
   goals             Goal[]
   suggestions       Suggestion[]
+  ownerDraws        OwnerDraw[] @relation("ProducerOwnerDraws")
 
   @@index([agencyId])
   @@map("producer")
@@ -325,16 +328,23 @@ model Expense {
 }
 
 // Owner draws are NOT expenses — see bob-schema.md. Tracked separately, never netted
-// against Net Profit; surfaced on the dashboard as a distinct "cash out" line if desired.
+// against Net Profit; surfaced on the Profit tab as a distinct "cash out" line.
+// Exactly one of agencyId/producerId is set, same two-owner shape as CommissionEntry:
+// an agency owner's draws are tracked at the agency level (ownerId's own draw from the
+// shared pot), while every other producer — solo or a member of someone else's agency —
+// tracks their own draws against their own producerId.
 model OwnerDraw {
-  id        String   @id @default(uuid())
-  agencyId  String   @map("agency_id")
-  amount    Decimal  @db.Decimal(10, 2)
-  drawDate  DateTime @map("draw_date") @db.Date
-  notes     String?
+  id         String   @id @default(uuid())
+  agencyId   String?  @map("agency_id")
+  producerId String?  @map("producer_id")
+  amount     Decimal  @db.Decimal(10, 2)
+  drawDate   DateTime @map("draw_date") @db.Date
+  notes      String?
 
-  agency Agency @relation(fields: [agencyId], references: [id])
+  agency   Agency?   @relation("AgencyOwnerDraws", fields: [agencyId], references: [id])
+  producer Producer? @relation("ProducerOwnerDraws", fields: [producerId], references: [id])
 
   @@index([agencyId])
+  @@index([producerId])
   @@map("owner_draw")
 }
