@@ -61,6 +61,14 @@ function trialEndsAt(producer) {
   return new Date(producer.createdAt.getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
 }
 
+// Shared by requireActiveOrTrial and the Producer Plus feature gate (src/middleware/tier.js)
+// — a producer still inside their 14-day trial gets full Producer Plus-level feature access
+// regardless of which plan they picked at signup, so the trial actually shows off the more
+// robust version of BOB rather than whatever tier they happened to click first.
+function isTrialing(producer) {
+  return new Date() < trialEndsAt(producer);
+}
+
 // Shared by requireAdmin, requireActiveOrTrial, and GET /api/me — a short allowlist of
 // emails set via the ADMIN_EMAILS env var (comma-separated). Deliberately not a DB flag,
 // so granting or revoking admin access is a Render dashboard change, not a code/data change
@@ -83,8 +91,7 @@ function requireActiveOrTrial(req, res, next) {
   if (isAdminEmail(req.supabaseUser?.email)) return next();
 
   const producer = req.producer;
-  const stillTrialing = new Date() < trialEndsAt(producer);
-  if (producer.subscriptionStatus === 'active' || producer.subscriptionStatus === 'past_due' || stillTrialing) {
+  if (producer.subscriptionStatus === 'active' || producer.subscriptionStatus === 'past_due' || isTrialing(producer)) {
     return next();
   }
   return res.status(402).json({ error: 'Your 14-day trial has ended. Subscribe to keep using BOB.', trialExpired: true });
@@ -99,5 +106,5 @@ function requireAdmin(req, res, next) {
 }
 
 module.exports = {
-  requireAuth: asyncHandler(requireAuth), requireProducer, requireAdmin, requireActiveOrTrial, trialEndsAt, isAdminEmail,
+  requireAuth: asyncHandler(requireAuth), requireProducer, requireAdmin, requireActiveOrTrial, trialEndsAt, isAdminEmail, isTrialing,
 };

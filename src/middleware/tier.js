@@ -1,5 +1,6 @@
 const prisma = require('../lib/db');
 const asyncHandler = require('./asyncHandler');
+const { isTrialing } = require('./auth');
 
 // commission_entry.entry_type='override' must only ever have owner_type='agency' —
 // this middleware assumes the authenticated producer's id is on req.producerId.
@@ -25,14 +26,17 @@ async function requireAgencyOwner(req, res, next) {
   next();
 }
 
-// Gates the commission calculator: Producer Plus ($39/mo) or Agency Owner ($79/mo,
-// which includes every Producer Plus feature) — not the base Producer tier.
+// Gates the commission calculator and Analytics: Producer Plus ($39/mo) or Agency Owner
+// ($79/mo, which includes every Producer Plus feature) — not the base Producer tier.
+// A producer still inside their 14-day trial gets this regardless of picked tier, so the
+// trial shows off the more robust version of BOB — see isTrialing()'s doc comment.
 async function requireProducerPlusOrAbove(req, res, next) {
   const producer = await prisma.producer.findUnique({ where: { id: req.producerId } });
   if (!producer) return res.status(401).json({ error: 'Unknown producer.' });
-  if (!['producer_plus', 'agency_owner'].includes(producer.subscriptionTier)) {
+  const eligible = ['producer_plus', 'agency_owner'].includes(producer.subscriptionTier) || isTrialing(producer);
+  if (!eligible) {
     return res.status(403).json({
-      error: 'The commission calculator is available on Producer Plus and Agency Owner plans.',
+      error: 'This feature is available on Producer Plus and Agency Owner plans.',
     });
   }
   req.producer = producer;

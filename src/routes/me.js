@@ -1,7 +1,7 @@
 const express = require('express');
 const prisma = require('../lib/db');
 const asyncHandler = require('../middleware/asyncHandler');
-const { trialEndsAt, isAdminEmail } = require('../middleware/auth');
+const { trialEndsAt, isAdminEmail, isTrialing } = require('../middleware/auth');
 const { getKnownImoNames, findTypoMatch } = require('../lib/knownImos');
 
 const router = express.Router();
@@ -41,6 +41,12 @@ router.get('/', asyncHandler(async (req, res) => {
       subscriptionStatus: producer.subscriptionStatus,
       trialEndsAt: endsAt.toISOString(),
       trialExpired,
+      // Producer Plus-level features (Commission Calculator, Analytics) — available on
+      // the Producer Plus/Agency Owner tiers, or to ANY tier still inside its 14-day
+      // trial, so the trial shows off the more robust version of BOB regardless of which
+      // plan was picked at signup. See requireProducerPlusOrAbove in middleware/tier.js,
+      // which enforces the same rule server-side for the data those features read.
+      hasPlusFeatures: ['producer_plus', 'agency_owner'].includes(producer.subscriptionTier) || isTrialing(producer),
       isAdmin,
     },
   });

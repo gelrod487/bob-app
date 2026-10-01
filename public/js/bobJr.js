@@ -52,7 +52,7 @@ const BOB_JR_FAQ = [
   {
     q: "What is my trial period, and what happens when it ends?",
     keywords: ['trial', '14-day', '14 day', 'subscribe', 'subscription', 'expire', 'billing'],
-    a: "Every new account gets a 14-day free trial. Once it ends, you'll be routed to the Subscribe tab to pick a plan — Producer ($29/mo), Producer Plus ($39/mo, adds the Commission Calculator), or Agency Owner ($79/mo, adds the Team tab). Your data is never deleted, you just can't use the app again until you subscribe.",
+    a: "Every new account gets a 14-day free trial with full Producer Plus-level access — including the Commission Calculator and Analytics — no matter which plan you pick at signup. Once it ends, you'll be routed to the Subscribe tab to pick a plan — Producer ($29/mo), Producer Plus ($39/mo, keeps the Calculator and Analytics), or Agency Owner ($79/mo, adds the Team tab too). Your data is never deleted, you just can't use the app again until you subscribe.",
   },
   {
     q: "How do I submit feedback or request a feature?",
@@ -92,7 +92,7 @@ const BOB_JR_FAQ = [
   {
     q: "What's the difference between the Producer, Producer Plus, and Agency Owner plans?",
     keywords: ['plan', 'pricing', 'producer plus', 'agency owner', 'tier', 'difference'],
-    a: "Producer ($29/mo) is the core book-of-business tracker. Producer Plus ($39/mo) adds the Commission Calculator. Agency Owner ($79/mo) adds the Team tab so you can invite agents and see rolled-up agency numbers, on top of everything Producer Plus includes.",
+    a: "Producer ($29/mo) is the core book-of-business tracker. Producer Plus ($39/mo) adds the Commission Calculator and Analytics (conversion rates, lead vendor ROI, goal blueprint). Agency Owner ($79/mo) adds the Team tab so you can invite agents and see rolled-up agency numbers, on top of everything Producer Plus includes. Your 14-day trial gives you Producer Plus-level access regardless of which plan you pick, so you can try everything before deciding.",
   },
   {
     q: "How do I log costs or expenses?",
