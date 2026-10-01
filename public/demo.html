@@ -75,7 +75,7 @@ function uid(prefix){ return prefix+'_'+Math.random().toString(36).slice(2,9); }
    local to this browser, seeded once with ~14 months of sample
    history so every report/filter has something real to show.
    ============================================================ */
-const STORE_KEY = 'bob_demo_store_v6';
+const STORE_KEY = 'bob_demo_store_v7';
 const COST_CATEGORIES = [
   { key:'Leads',      color:'#7A3B4A' },
   { key:'Marketing',      color:'#A63D40' },
@@ -112,6 +112,9 @@ function seedStore(){
     const issuePaidFYC = isPlaced ? Math.round(monthlyPremium * 12 * 0.75) : 0;
     const chargebackAmount = status === 'lapsed' ? issuePaidFYC : 0;
     const chargebackDate = status === 'lapsed' ? addDays(issueDate, 60) : null;
+    // issuePaidFYC is a DERIVED total (see recalcIssuePaidFYC) — this one seeded "Initial"
+    // entry is what it derives from, so the Commission entries panel has real history.
+    const commissionEntries = isPlaced ? [{ id: uid('ce'), type: 'Initial', amount: issuePaidFYC, date: issueDate }] : [];
     return {
       id: uid('c'), name,
       email: name.toLowerCase().replace(/[^a-z]+/g,'.') + '@example.com',
@@ -123,7 +126,7 @@ function seedStore(){
       monthlyPremium, status,
       leadVendor: LEAD_VENDORS[i % LEAD_VENDORS.length],
       leadType: LEAD_TYPES[i % LEAD_TYPES.length],
-      dateSubmitted: submitted, approvedDate, issueDate, issuePaidFYC,
+      dateSubmitted: submitted, approvedDate, issueDate, issuePaidFYC, commissionEntries,
       chargebackAmount, chargebackDate,
       notes: '',
     };
@@ -178,6 +181,10 @@ function saveStore(){ try { localStorage.setItem(STORE_KEY, JSON.stringify(store
 let store = loadStore();
 
 function annualPremium(c){ return c.monthlyPremium * 12; }
+// issuePaidFYC is kept as a plain field (every report already reads it directly) but is
+// derived from the commission entries ledger — call this after any add/edit/delete so it
+// never drifts from the entries actually logged.
+function recalcIssuePaidFYC(c){ c.issuePaidFYC = (c.commissionEntries||[]).reduce((s,e)=>s+Number(e.amount),0); }
 function clientsSubmittedInRange(from,to){ return store.clients.filter(c => c.dateSubmitted >= from && c.dateSubmitted <= to); }
 function activityInRange(from,to){ return store.activity.filter(a => a.date >= from && a.date <= to); }
 // A recurring cost is a TEMPLATE (isRecurring:true), expanded here into one virtual
@@ -521,13 +528,14 @@ function openAddClientModal(){
     const approvedDate = isPlaced ? addDays(dateSubmitted,5) : null;
     const issueDate = isPlaced ? addDays(dateSubmitted,9) : null;
     const issuePaidFYC = isPlaced ? Math.round(monthlyPremium*12*0.75) : 0;
+    const commissionEntries = isPlaced ? [{ id: uid('ce'), type: 'Initial', amount: issuePaidFYC, date: issueDate }] : [];
     store.clients.unshift({
       id: uid('c'), name: f.get('name'), email: f.get('email')||'', phone: f.get('phone')||'',
       carrier: f.get('carrier'), product: f.get('product'),
       policyNumber: isPlaced ? `NEW-${Math.floor(1000+Math.random()*9000)}` : null,
       faceAmount: Math.round(monthlyPremium*12*18), monthlyPremium, status,
       leadVendor: f.get('leadVendor')||'', leadType: f.get('leadType')||'',
-      dateSubmitted, approvedDate, issueDate, issuePaidFYC,
+      dateSubmitted, approvedDate, issueDate, issuePaidFYC, commissionEntries,
       chargebackAmount: 0, chargebackDate: null, notes: f.get('notes')||'',
     });
     saveStore();
@@ -581,7 +589,45 @@ function openClientDetail(id){
       <button class="danger" type="button" id="deleteCaseBtn">Delete case</button>
       <button class="ghost" type="button" onclick="closeModal()">Close</button>
     </div>
+
+    <div class="panel" style="margin-top:18px;">
+      <h2 style="font-size:1rem; margin-bottom:10px;">Commission entries</h2>
+      <p class="helptext" style="margin:-6px 0 10px;">Log what's actually paid on this case right here — no need to go to the Profit tab separately. Large cases paid out in more than one payment? Log each later payment as <strong>Installment</strong> (not Renewal) — it still counts toward this case's total Issue Paid FYC.</p>
+      <table><thead><tr><th>Type</th><th>Amount</th><th>Date</th></tr></thead>
+        <tbody>${[...(c.commissionEntries||[])].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(e=>`<tr class="row-clickable" data-entry-id="${e.id}"><td>${e.type}</td><td>${fmt(e.amount)}</td><td>${fmtDate(e.date)}</td></tr>`).join('') || '<tr><td colspan="3" class="helptext">No commission logged yet.</td></tr>'}</tbody>
+      </table>
+      <form id="logCommForm" style="margin-top:12px;">
+        <div class="detail-grid" style="margin-bottom:0;">
+          <div><label>Type</label><select name="type">
+            <option value="Initial">Initial</option>
+            <option value="Installment">Installment</option>
+            <option value="Renewal">Renewal</option>
+          </select></div>
+          <div><label>Amount ($)</label><input required type="number" step="0.01" name="amount" placeholder="850"></div>
+          <div class="full" style="grid-column:1/-1;"><label>Date</label><input required type="date" name="date" value="${todayISO()}"></div>
+          <div class="full" style="grid-column:1/-1;"><button class="primary" type="submit">Log Commission</button></div>
+        </div>
+      </form>
+    </div>
   `, { wide: true });
+
+  document.querySelectorAll('[data-entry-id]').forEach(row => {
+    row.onclick = () => {
+      const entry = (c.commissionEntries||[]).find(e => e.id === row.dataset.entryId);
+      if (entry) openEditCommEntryModal(entry, c.id);
+    };
+  });
+  document.getElementById('logCommForm').addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    const f = new FormData(ev.target);
+    c.commissionEntries = c.commissionEntries || [];
+    c.commissionEntries.push({ id: uid('ce'), type: f.get('type'), amount: Number(f.get('amount')), date: f.get('date') });
+    recalcIssuePaidFYC(c);
+    saveStore();
+    say('Commission logged!');
+    openClientDetail(id);
+  });
+
   document.getElementById('saveNotesBtn').onclick = () => {
     const newStatus = document.getElementById('clientStatusSel').value;
     const wasIssued = c.status === 'issued';
@@ -599,7 +645,10 @@ function openClientDetail(id){
     c.approvedDate = document.getElementById('editApprovedDate').value || null;
     if (newStatus === 'issued' && !wasIssued) {
       if (!c.approvedDate) c.approvedDate = c.issueDate;
-      if (!c.issuePaidFYC) c.issuePaidFYC = Math.round(c.monthlyPremium * 12 * 0.75);
+      if (!(c.commissionEntries||[]).length) {
+        c.commissionEntries = [{ id: uid('ce'), type: 'Initial', amount: Math.round(c.monthlyPremium * 12 * 0.75), date: c.issueDate }];
+        recalcIssuePaidFYC(c);
+      }
     }
     saveStore();
     say("Changes saved.");
@@ -624,6 +673,47 @@ function openClientDetail(id){
     say("Case deleted.");
     closeModal();
     renderCurrentPage();
+  };
+}
+function openEditCommEntryModal(entry, clientId){
+  openModal(`
+    <div class="modal-head"><h2>Edit commission entry</h2><button class="modal-close" onclick="closeModal()">×</button></div>
+    <form id="editCommEntryForm">
+      <div class="detail-grid">
+        <div><label>Type</label><select name="type">
+          <option value="Initial" ${entry.type==='Initial'?'selected':''}>Initial</option>
+          <option value="Installment" ${entry.type==='Installment'?'selected':''}>Installment</option>
+          <option value="Renewal" ${entry.type==='Renewal'?'selected':''}>Renewal</option>
+        </select></div>
+        <div><label>Amount ($)</label><input required type="number" step="0.01" name="amount" value="${entry.amount}"></div>
+        <div class="full" style="grid-column:1/-1;"><label>Date</label><input required type="date" name="date" value="${entry.date}"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="primary" type="submit">Save</button>
+        <button class="danger" type="button" id="deleteCommEntryBtn">Delete</button>
+        <button class="ghost" type="button" id="cancelCommEntryBtn">Cancel</button>
+      </div>
+    </form>
+  `);
+  document.getElementById('cancelCommEntryBtn').onclick = () => openClientDetail(clientId);
+  document.getElementById('editCommEntryForm').addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    const f = new FormData(ev.target);
+    entry.type = f.get('type'); entry.amount = Number(f.get('amount')); entry.date = f.get('date');
+    const c = store.clients.find(x => x.id === clientId);
+    recalcIssuePaidFYC(c);
+    saveStore();
+    say('Commission entry updated.');
+    openClientDetail(clientId);
+  });
+  document.getElementById('deleteCommEntryBtn').onclick = () => {
+    if (!confirm('Delete this commission entry? This can\'t be undone.')) return;
+    const c = store.clients.find(x => x.id === clientId);
+    c.commissionEntries = c.commissionEntries.filter(e => e.id !== entry.id);
+    recalcIssuePaidFYC(c);
+    saveStore();
+    say('Commission entry deleted.');
+    openClientDetail(clientId);
   };
 }
 
