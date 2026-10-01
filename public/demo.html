@@ -172,7 +172,7 @@ function seedStore(){
   // plausible defaults to show what that panel looks like.
   const teamGoals = { issuedPaidTarget: 85000, newWritersTarget: 3, headcountTarget: 12 };
 
-  return { clients, activity, costs, goals, teamGoals, suggestions: [], calcContractLevel: 100 };
+  return { clients, activity, costs, goals, teamGoals, suggestions: [], calcContractLevel: 100, calcAnnuityTier: 'green' };
 }
 function loadStore(){
   try {
@@ -1421,6 +1421,25 @@ function productTypeLabel(productName){
   if (name.includes('ul')) return 'UL';
   return '';
 }
+let calcMode = 'life';
+// Fictional sample annuity data — tiers are based on lifetime annuity production, not a
+// contract %, so each carrier/product pays its own rate at the same tier (unlike Life,
+// where one contract level applies across every carrier).
+const ANNUITY_TIER_OPTIONS = [
+  ['green', 'Green (New Agent)'], ['yellow', 'Yellow ($100K)'], ['blue', 'Blue ($500K)'], ['silver', 'Silver ($1M)'],
+  ['gold', 'Gold ($2M)'], ['platinum', 'Platinum ($5M)'], ['black', 'Black ($10M)'], ['royal', 'Royal ($120M)'], ['red', 'Red ($175M)'],
+];
+const SAMPLE_ANNUITY_PRODUCTS = [
+  { carrier: 'Meridian Annuity Co', product: 'Guaranteed Income 7', rates: [4.00, 4.50, 5.00, 5.50, 6.00, 6.50, 7.00, 7.50, 8.00] },
+  { carrier: 'Meridian Annuity Co', product: 'Fixed Indexed Select', rates: [3.50, 4.00, 4.50, 5.00, 5.50, 6.00, 6.50, 7.00, 7.50] },
+  { carrier: 'Keystone Retirement', product: 'RetireSecure 10', rates: [4.25, 4.75, 5.25, 5.75, 6.25, 6.75, 7.25, 7.75, 8.25] },
+  { carrier: 'Keystone Retirement', product: 'Income Max', rates: [3.75, 4.25, 4.75, 5.25, 5.75, 6.25, 6.75, 7.25, 7.75] },
+  { carrier: 'Summit Income Partners', product: 'Accumulator Plus', rates: [4.10, 4.60, 5.10, 5.60, 6.10, 6.60, 7.10, 7.60, 8.10] },
+  { carrier: 'Summit Income Partners', product: 'Lifetime Income Builder', rates: [3.90, 4.40, 4.90, 5.40, 5.90, 6.40, 6.90, 7.40, 7.90] },
+];
+const SAMPLE_ANNUITY_RATES = SAMPLE_ANNUITY_PRODUCTS.flatMap(({ carrier, product, rates }) =>
+  ANNUITY_TIER_OPTIONS.map(([tier], i) => ({ carrierName: carrier, productName: product, tier, payoutRate: rates[i] }))
+);
 /* ================= ANALYTICS ================= */
 function vendorKey(s){ return (s||'Unclassified').trim().toLowerCase() || 'unclassified'; }
 
@@ -1598,11 +1617,28 @@ function renderAnalytics(){
 }
 
 function renderCalculator(){
-  const carriers = [...new Set(SAMPLE_RATES.map(r => r.carrierName))].sort((a,b) => a.localeCompare(b));
-
   mainInner.innerHTML = `
     <div class="page-header"><div><div class="page-eyebrow">Calculator</div><h1>Commission calculator</h1></div></div>
-    <p class="helptext" style="margin-top:-10px;">Rates for <strong>${SAMPLE_IMO_NAME}</strong> — sample data for this tour. ${SAMPLE_RATES.length} rates loaded. In the real app, this reads live from your actual IMO's comp guide, shared with everyone at your IMO.</p>
+    <div class="auth-tabs">
+      <button class="auth-tab${calcMode==='life'?' active':''}" type="button" id="calcModeLifeBtn">Life</button>
+      <button class="auth-tab${calcMode==='annuity'?' active':''}" type="button" id="calcModeAnnuityBtn">Annuities</button>
+    </div>
+    <div id="calcModeBody"></div>
+  `;
+  document.getElementById('calcModeLifeBtn').onclick = () => { calcMode = 'life'; renderCalculator(); };
+  document.getElementById('calcModeAnnuityBtn').onclick = () => { calcMode = 'annuity'; renderCalculator(); };
+
+  if (calcMode === 'annuity') renderAnnuityCalculatorBody();
+  else renderLifeCalculatorBody();
+}
+
+function renderLifeCalculatorBody(){
+  const bodyEl = document.getElementById('calcModeBody');
+  const carriers = [...new Set(SAMPLE_RATES.map(r => r.carrierName))].sort((a,b) => a.localeCompare(b));
+  let compareTypeFilter = 'all';
+
+  bodyEl.innerHTML = `
+    <p class="helptext" style="margin-top:10px;">Rates for <strong>${SAMPLE_IMO_NAME}</strong> — sample data for this tour. ${SAMPLE_RATES.length} rates loaded. In the real app, this reads live from your actual IMO's comp guide, shared with everyone at your IMO.</p>
 
     <div class="panel">
       <h2 class="calc-section-title">Your numbers</h2>
@@ -1639,8 +1675,16 @@ function renderCalculator(){
 
     <div class="panel">
       <h2 class="calc-section-title">Compare every product at your level</h2>
+      <div class="carrier-pills" id="calcCompareFilter" style="margin-bottom:14px;">
+        <div class="carrier-pill selected" data-type="all">All Products</div>
+        <div class="carrier-pill" data-type="IUL">IUL Only</div>
+        <div class="carrier-pill" data-type="Term">Term Only</div>
+        <div class="carrier-pill" data-type="Whole Life">Whole Life Only</div>
+        <div class="carrier-pill" data-type="Annuity">Annuity Only</div>
+      </div>
+      <p class="helptext" style="margin:-6px 0 12px;">Annuity rows use your saved Annuity Tier (set above, switch to the Annuities tab — defaults to Green if none saved) and the amount above as a lump-sum premium, not an annual one.</p>
       <table class="statement-table">
-        <thead><tr><th>Carrier</th><th>Product</th><th>Payout %</th><th>You earn</th></tr></thead>
+        <thead><tr><th>#</th><th>Carrier</th><th>Product</th><th>Type</th><th>Payout %</th><th>You earn</th></tr></thead>
         <tbody id="calcCompareBody"></tbody>
       </table>
     </div>
@@ -1743,17 +1787,183 @@ function renderCalculator(){
     }
 
     const compareBody = document.getElementById('calcCompareBody');
-    const atLevel = SAMPLE_RATES.filter(r => r.contractLevel === level).sort((a,b) => Number(b.payoutRate) - Number(a.payoutRate));
-    compareBody.innerHTML = atLevel.map(r => `<tr><td>${r.carrierName}</td><td>${r.productName}</td><td>${r.payoutRate}%</td><td>${fmt(premium * Number(r.payoutRate) / 100)}</td></tr>`).join('')
-      || '<tr><td colspan="4" class="helptext">No products on file at this contract level.</td></tr>';
+    const lifeRows = SAMPLE_RATES
+      .filter(r => r.contractLevel === level)
+      .map(r => ({ carrierName: r.carrierName, productName: r.productName, payoutRate: r.payoutRate, type: productTypeLabel(r.productName) }));
+    const annuityTier = store.calcAnnuityTier || 'green';
+    const annuityRows = SAMPLE_ANNUITY_RATES
+      .filter(r => r.tier === annuityTier)
+      .map(r => ({ carrierName: r.carrierName, productName: r.productName, payoutRate: r.payoutRate, type: 'Annuity' }));
+    let combined = [...lifeRows, ...annuityRows];
+    if (compareTypeFilter !== 'all') combined = combined.filter(r => r.type === compareTypeFilter);
+    combined = combined.sort((a,b) => Number(b.payoutRate) - Number(a.payoutRate));
+    compareBody.innerHTML = combined.map((r,i) => {
+      return `<tr><td>${i+1}</td><td>${r.carrierName}</td><td>${r.productName}</td><td>${r.type ? `<span class="product-type-badge">${r.type}</span>` : '—'}</td><td>${r.payoutRate}%</td><td>${fmt(premium * Number(r.payoutRate) / 100)}</td></tr>`;
+    }).join('') || '<tr><td colspan="6" class="helptext">No products match this filter.</td></tr>';
   }
 
   document.getElementById('calcLevel').addEventListener('input', recompute);
   document.getElementById('calcPremium').addEventListener('input', recompute);
+  document.querySelectorAll('#calcCompareFilter .carrier-pill').forEach(pill => {
+    pill.onclick = () => {
+      document.querySelectorAll('#calcCompareFilter .carrier-pill').forEach(p => p.classList.remove('selected'));
+      pill.classList.add('selected');
+      compareTypeFilter = pill.dataset.type;
+      recompute();
+    };
+  });
   renderProductCards(carriers[0]);
   document.querySelectorAll('#calcCarrierPicker .carrier-pill').forEach(pill => {
     pill.onclick = () => {
       document.querySelectorAll('#calcCarrierPicker .carrier-pill').forEach(p => p.classList.remove('selected'));
+      pill.classList.add('selected');
+      renderProductCards(pill.dataset.carrier);
+      recompute();
+    };
+  });
+  recompute();
+}
+
+function renderAnnuityCalculatorBody(){
+  const bodyEl = document.getElementById('calcModeBody');
+  const carriers = [...new Set(SAMPLE_ANNUITY_RATES.map(r => r.carrierName))].sort((a,b) => a.localeCompare(b));
+  const defaultTier = store.calcAnnuityTier || 'green';
+
+  bodyEl.innerHTML = `
+    <p class="helptext" style="margin-top:10px;">Annuity rates for <strong>${SAMPLE_IMO_NAME}</strong> — sample data for this tour. ${SAMPLE_ANNUITY_RATES.length} rates loaded. Unlike Life, each carrier pays a different rate at the same tier, and your tier is based on your own lifetime annuity production, not a contract %.</p>
+
+    <div class="panel">
+      <h2 class="calc-section-title">Your numbers</h2>
+      <div class="detail-grid">
+        <div>
+          <label>Your Annuity Tier</label>
+          <div class="carrier-pills" id="calcTierPicker">
+            ${ANNUITY_TIER_OPTIONS.map(([value,label]) => `<div class="carrier-pill${value===defaultTier?' selected':''}" data-tier="${value}">${label}</div>`).join('')}
+          </div>
+        </div>
+        <div>
+          <label>Premium ($)</label>
+          <input type="number" id="calcAnnuityPremium" value="100000" min="0" step="1000">
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2 class="calc-section-title">Carrier &amp; Product</h2>
+      <div class="carrier-pills" id="calcAnnuityCarrierPicker">
+        ${carriers.map((c,i) => `<div class="carrier-pill${i===0?' selected':''}" data-carrier="${c}">${c}</div>`).join('')}
+      </div>
+      <div class="product-cards" id="calcAnnuityProductPicker" style="margin-top:14px;"></div>
+    </div>
+
+    <div class="panel" style="border:1.5px solid var(--maroon);">
+      <h2 class="calc-section-title">Your Payout</h2>
+      <div id="calcAnnuityResult"></div>
+    </div>
+
+    <div class="panel">
+      <h2 class="calc-section-title">Compare every product at your tier</h2>
+      <table class="statement-table">
+        <thead><tr><th>Carrier</th><th>Product</th><th>Payout %</th><th>You earn</th></tr></thead>
+        <tbody id="calcAnnuityCompareBody"></tbody>
+      </table>
+    </div>
+
+    <div class="panel">
+      <h2 class="calc-section-title">Where does this data come from?</h2>
+      <p class="helptext" style="margin-top:-8px;">In the real app, your IMO's annuity rates are loaded once and shared with everyone at your IMO — no manual entry needed once it's set up, and it stays in sync as your tier changes.</p>
+    </div>
+  `;
+
+  function selectedTier(){
+    const el = document.querySelector('#calcTierPicker .carrier-pill.selected');
+    return el ? el.dataset.tier : defaultTier;
+  }
+  function tierLabel(tier){
+    return (ANNUITY_TIER_OPTIONS.find(([v]) => v === tier) || [tier,tier])[1];
+  }
+  function selectedProduct(){
+    const el = document.querySelector('#calcAnnuityProductPicker .product-card.selected');
+    return el ? { carrier: el.dataset.carrier, product: el.dataset.product } : null;
+  }
+  function renderProductCards(carrier){
+    const tier = selectedTier();
+    const products = [...new Set(SAMPLE_ANNUITY_RATES.filter(r => r.carrierName === carrier).map(r => r.productName))].sort((a,b) => a.localeCompare(b));
+    const pickerEl = document.getElementById('calcAnnuityProductPicker');
+    pickerEl.innerHTML = products.map((p,i) => {
+      const rate = SAMPLE_ANNUITY_RATES.find(r => r.carrierName === carrier && r.productName === p && r.tier === tier);
+      return `
+        <div class="product-card${i===0?' selected':''}" data-carrier="${carrier}" data-product="${p}">
+          <div class="product-name">${p}</div>
+          <div class="product-rate">${rate ? Number(rate.payoutRate) + '%' : '—'}</div>
+        </div>`;
+    }).join('');
+    pickerEl.querySelectorAll('.product-card').forEach(card => {
+      card.onclick = () => {
+        pickerEl.querySelectorAll('.product-card').forEach(c => c.classList.remove('selected'));
+        card.classList.add('selected');
+        recompute();
+      };
+    });
+  }
+  function refreshProductCardRates(tier){
+    document.querySelectorAll('#calcAnnuityProductPicker .product-card').forEach(card => {
+      const rate = SAMPLE_ANNUITY_RATES.find(r => r.carrierName === card.dataset.carrier && r.productName === card.dataset.product && r.tier === tier);
+      card.querySelector('.product-rate').textContent = rate ? Number(rate.payoutRate) + '%' : '—';
+    });
+  }
+  function recompute(){
+    const tier = selectedTier();
+    const premium = Number(document.getElementById('calcAnnuityPremium').value) || 0;
+    store.calcAnnuityTier = tier;
+    saveStore();
+    refreshProductCardRates(tier);
+
+    const sel = selectedProduct();
+    const resultEl = document.getElementById('calcAnnuityResult');
+    if (sel) {
+      const match = SAMPLE_ANNUITY_RATES.find(r => r.carrierName===sel.carrier && r.productName===sel.product && r.tier===tier);
+      if (match) {
+        const commission = premium * Number(match.payoutRate) / 100;
+        resultEl.innerHTML = `
+          <div class="payout-grid">
+            <div class="payout-left">
+              <p class="payout-label">${sel.carrier} — ${sel.product}</p>
+              <div class="payout-amount">${fmt(commission)}</div>
+              <p class="payout-sub">At the ${tierLabel(tier)} tier on a ${fmt(premium)} premium</p>
+            </div>
+            <div class="payout-right">
+              <div class="payout-row"><span>Premium</span><strong>${fmt(premium)}</strong></div>
+              <div class="payout-row"><span>Your Tier</span><strong>${tierLabel(tier)}</strong></div>
+              <div class="payout-row"><span>Carrier Payout Rate</span><strong>${match.payoutRate}%</strong></div>
+              <div class="payout-row total"><span>Total Commission</span><strong>${fmt(commission)}</strong></div>
+            </div>
+          </div>
+        `;
+      } else {
+        resultEl.innerHTML = `<p class="helptext">${sel.carrier} — ${sel.product} isn't offered at the ${tierLabel(tier)} tier (no rate on file).</p>`;
+      }
+    }
+
+    const compareBody = document.getElementById('calcAnnuityCompareBody');
+    const atTier = SAMPLE_ANNUITY_RATES.filter(r => r.tier === tier).sort((a,b) => Number(b.payoutRate) - Number(a.payoutRate));
+    compareBody.innerHTML = atTier.map(r => `<tr><td>${r.carrierName}</td><td>${r.productName}</td><td>${r.payoutRate}%</td><td>${fmt(premium * Number(r.payoutRate) / 100)}</td></tr>`).join('')
+      || '<tr><td colspan="4" class="helptext">No products on file at this tier.</td></tr>';
+  }
+
+  document.getElementById('calcAnnuityPremium').addEventListener('input', recompute);
+  document.querySelectorAll('#calcTierPicker .carrier-pill').forEach(pill => {
+    pill.onclick = () => {
+      document.querySelectorAll('#calcTierPicker .carrier-pill').forEach(p => p.classList.remove('selected'));
+      pill.classList.add('selected');
+      renderProductCards(document.querySelector('#calcAnnuityCarrierPicker .carrier-pill.selected').dataset.carrier);
+      recompute();
+    };
+  });
+  renderProductCards(carriers[0]);
+  document.querySelectorAll('#calcAnnuityCarrierPicker .carrier-pill').forEach(pill => {
+    pill.onclick = () => {
+      document.querySelectorAll('#calcAnnuityCarrierPicker .carrier-pill').forEach(p => p.classList.remove('selected'));
       pill.classList.add('selected');
       renderProductCards(pill.dataset.carrier);
       recompute();
