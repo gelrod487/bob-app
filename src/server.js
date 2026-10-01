@@ -5,6 +5,7 @@ const express = require('express');
 const { producerProfitability, agencyProfitability } = require('./lib/profitability');
 const prisma = require('./lib/db');
 const { requireAuth, requireProducer, requireAdmin, requireActiveOrTrial } = require('./middleware/auth');
+const { requireProducerPlusOrAbove } = require('./middleware/tier');
 const handleStripeWebhook = require('./routes/billingWebhook');
 const asyncHandler = require('./middleware/asyncHandler');
 
@@ -40,6 +41,7 @@ app.use('/api/team-goals', requireProducer, requireActiveOrTrial, require('./rou
 app.use('/api/team', requireProducer, requireActiveOrTrial, require('./routes/team'));
 app.use('/api/commission-schedule', requireProducer, requireActiveOrTrial, require('./routes/commissionSchedule'));
 app.use('/api/annuity-commission-schedule', requireProducer, requireActiveOrTrial, require('./routes/annuityCommissionSchedule'));
+app.use('/api/analytics', requireProducer, requireActiveOrTrial, requireProducerPlusOrAbove, require('./routes/analytics'));
 // Deliberately no requireActiveOrTrial — feedback should stay open even to a producer
 // whose trial/subscription lapsed, and it costs nothing to let them keep talking to us.
 app.use('/api/suggestions', requireProducer, require('./routes/suggestions'));

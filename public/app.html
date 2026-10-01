@@ -30,8 +30,8 @@
       <button data-page="costs"><span class="ic">🧾</span>Costs</button>
       <button data-page="profit"><span class="ic">📈</span>Profit</button>
       <button data-page="goals"><span class="ic">🎯</span>Goals</button>
-      <button data-page="analytics" id="analyticsNavBtn" style="display:none;"><span class="ic">📊</span>Analytics</button>
-      <button data-page="calculator" id="calculatorNavBtn" style="display:none;"><span class="ic">🧮</span>Commission Calculator</button>
+      <button data-page="analytics" id="analyticsNavBtn"><span class="ic">📊</span>Analytics</button>
+      <button data-page="calculator" id="calculatorNavBtn"><span class="ic">🧮</span>Commission Calculator</button>
     </div>
     <div class="sidebar-footer">
       <button data-page="subscribe"><span class="ic">💳</span>Subscribe <span class="pill" id="sidebarStatusPill" style="margin-left:auto;"></span></button>
@@ -88,6 +88,50 @@ const PLAN_LABEL = { individual: 'Producer', producer_plus: 'Producer Plus', age
 function trialPreviewBanner(){
   if (me.subscriptionTier !== 'individual') return '';
   return `<div class="panel" style="border-color:var(--accent); margin-bottom:16px;"><p class="helptext" style="font-weight:600; margin:0;">You're previewing this Producer Plus feature free during your trial. <a href="#" onclick="go('subscribe');return false;" style="color:var(--maroon); font-weight:700; text-decoration:none;">See plans →</a></p></div>`;
+}
+// Shown in place of a Producer Plus tab's normal content when the server-side gate
+// (requireProducerPlusOrAbove) rejects the request — e.g. a Producer-tier account whose
+// trial just ended, or a downgrade that happened in another tab mid-session. The server
+// call is the real enforcement; this is just a readable response to it instead of a
+// silent stuck "Loading…" state.
+function upgradeRequiredPanel(featureName, bodyHtml){
+  return `
+    <div class="page-header"><div><div class="page-eyebrow">${escapeHtml(featureName)}</div><h1>${escapeHtml(featureName)}</h1></div></div>
+    <div class="panel" style="border-color:var(--maroon); background:var(--panel-alt);">
+      <p class="helptext" style="font-weight:700; color:var(--maroon); margin:0 0 10px; font-size:.95rem;">Unlock this feature by subscribing to the Producer Plus account</p>
+      <button class="primary" type="button" onclick="go('subscribe')">See plans</button>
+    </div>
+    ${bodyHtml}
+  `;
+}
+function calculatorPreviewBody(){
+  return `
+    <div class="panel">
+      <h2>Commission Calculator</h2>
+      <p class="helptext">See payout rates across every carrier and product at your own contract level — Life and Annuity, side by side.</p>
+      <ul style="margin:14px 0 0; padding-left:20px; color:var(--ink-soft); font-size:.88rem; line-height:1.8;">
+        <li>Compare payouts across carriers and products instantly</li>
+        <li>Built around your own contract level or annuity tier</li>
+        <li>Bring your own IMO's comp guide once — the calculator reads from it every time</li>
+      </ul>
+    </div>
+  `;
+}
+function analyticsPreviewBody(){
+  return `
+    <div class="panel">
+      <h2>Conversion rates</h2>
+      <p class="helptext">See your Contact Rate, Presentation Rate, Close Ratio, and Average AP over any date range — know exactly where your funnel is leaking.</p>
+    </div>
+    <div class="panel">
+      <h2>Lead vendor performance</h2>
+      <p class="helptext">Compare spend, placed cases, and conversion rate across every lead vendor you buy from, so you know which ones are actually worth the money.</p>
+    </div>
+    <div class="panel">
+      <h2>Goal blueprint</h2>
+      <p class="helptext">Set a target monthly commission and get a concrete blueprint — more activity, better conversion, or a blend of both — based on your own trailing production.</p>
+    </div>
+  `;
 }
 
 // Every page here builds HTML via template-literal strings assigned to .innerHTML, so any
@@ -248,8 +292,10 @@ document.getElementById('logoutBtn').onclick = async () => { await supabaseClien
   statusPill.textContent = me.subscriptionStatus;
   statusPill.className = 'pill ' + me.subscriptionStatus;
   if (me.subscriptionTier === 'agency_owner') document.getElementById('teamNavBtn').style.display = '';
-  if (me.hasPlusFeatures) document.getElementById('calculatorNavBtn').style.display = '';
-  if (me.hasPlusFeatures) document.getElementById('analyticsNavBtn').style.display = '';
+  // Calculator and Analytics stay visible to every tier — clicking in as a Producer-only
+  // account shows a feature preview instead of the real page (see upgradeRequiredPanel()),
+  // same idea as the Team tab staying hidden here since there's truly nothing to show a
+  // non-Agency-Owner there (vs. Calculator/Analytics, which are worth previewing).
 
   setTimeout(()=>say("Hi, I'm Bob!"), 900);
   go(me.trialExpired ? 'subscribe' : 'desk');
@@ -1745,13 +1791,20 @@ async function renderAnalytics(){
   mainInner.innerHTML = `<div class="page-header"><div><div class="page-eyebrow">Analytics</div><h1>Grow your book</h1></div></div><p class="helptext">Loading…</p>`;
   const range = computeDateRange(dateFilterState.analytics.key, dateFilterState.analytics.from, dateFilterState.analytics.to);
   const baseline = baselineWindow();
-  const [policies, activityRange, expensesRange, baselineActivity, baselineDash] = await Promise.all([
-    apiFetch('/api/policies'),
-    apiFetch(`/api/activity?from=${range.from}&to=${range.to}`),
-    apiFetch(`/api/expenses?from=${range.from}&to=${range.to}`),
-    apiFetch(`/api/activity?from=${baseline.from}&to=${baseline.to}`),
-    apiFetch(`/api/dashboard?from=${baseline.from}&to=${baseline.to}`),
-  ]);
+  let policies, activityRange, expensesRange, baselineActivity, baselineDash;
+  try {
+    [, policies, activityRange, expensesRange, baselineActivity, baselineDash] = await Promise.all([
+      apiFetch('/api/analytics'), // pure eligibility gate — see src/routes/analytics.js
+      apiFetch('/api/policies'),
+      apiFetch(`/api/activity?from=${range.from}&to=${range.to}`),
+      apiFetch(`/api/expenses?from=${range.from}&to=${range.to}`),
+      apiFetch(`/api/activity?from=${baseline.from}&to=${baseline.to}`),
+      apiFetch(`/api/dashboard?from=${baseline.from}&to=${baseline.to}`),
+    ]);
+  } catch (err) {
+    mainInner.innerHTML = upgradeRequiredPanel('Analytics', analyticsPreviewBody());
+    return;
+  }
 
   const funnel = sumActivity(activityRange);
   const placedRange = policies.filter(p => (p.status==='active'||p.status==='lapsed')
@@ -1889,10 +1942,16 @@ function productTypeLabel(productName){
 let calcMode = 'life';
 async function renderCalculator(){
   mainInner.innerHTML = `<div class="page-header"><div><div class="page-eyebrow">Calculator</div><h1>Commission calculator</h1></div></div><p class="helptext">Loading…</p>`;
-  const [life, annuity] = await Promise.all([
-    apiFetch('/api/commission-schedule'),
-    apiFetch('/api/annuity-commission-schedule'),
-  ]);
+  let life, annuity;
+  try {
+    [life, annuity] = await Promise.all([
+      apiFetch('/api/commission-schedule'),
+      apiFetch('/api/annuity-commission-schedule'),
+    ]);
+  } catch (err) {
+    mainInner.innerHTML = upgradeRequiredPanel('Commission Calculator', calculatorPreviewBody());
+    return;
+  }
   calcSchedule = life;
   annuitySchedule = annuity;
 
