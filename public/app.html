@@ -1461,10 +1461,10 @@ async function renderProfit(){
     <div class="panel">
       <h2>Log Commission</h2>
       <form class="entry" id="commForm">
-        <div class="full" id="commCaseField"><label>Case</label><select required name="policyId" id="commPolicySelect">${policies.map(p=>`<option value="${p.id}">${escapeHtml(p.client?.name||'—')} — ${escapeHtml(p.carrier)} — ${escapeHtml(p.productType)}</option>`).join('') || '<option value="">No cases yet</option>'}</select></div>
         <div><label>Type</label><select name="type" id="commTypeSelect"><option value="Initial">Initial</option><option value="Installment">Installment</option><option value="Renewal">Renewal</option>${isAgency?'<option value="Override">Override</option>':''}<option value="Chargeback">Chargeback</option></select></div>
-        <div><label>Amount ($)</label><input required type="number" step="0.01" name="amount" placeholder="850"></div>
         <div><label>Date</label><input required type="date" name="date"></div>
+        <div class="full" id="commCaseField"><label>Case</label><select required name="policyId" id="commPolicySelect">${policies.map(p=>`<option value="${p.id}">${escapeHtml(p.client?.name||'—')} — ${escapeHtml(p.carrier)} — ${escapeHtml(p.productType)}</option>`).join('') || '<option value="">No cases yet</option>'}</select></div>
+        <div><label>Amount ($)</label><input required type="number" step="0.01" name="amount" placeholder="850"></div>
         <div class="full section-hidden" id="commNotesField"><label>Which producer / case was this for?</label><input name="notes" placeholder="e.g. Jordan Alvarez's Americo term case"></div>
         <div class="full"><button class="primary" type="submit">Log Commission</button></div>
         <div class="full errortext" id="commError"></div>
