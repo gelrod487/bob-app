@@ -1308,6 +1308,7 @@ function openEditCommissionModal(id){
         </select></div>
         <div><label>Amount ($)</label><input required type="number" step="0.01" name="amount" value="${Math.abs(c.amount)}"></div>
         <div class="full" style="grid-column:1/-1;"><label>Date</label><input required type="date" name="date" value="${c.entryDate.slice(0,10)}"></div>
+        ${!c.policyId ? `<div class="full" style="grid-column:1/-1;"><label>Which producer / case was this for?</label><input name="notes" value="${escapeHtml(c.notes||'')}" placeholder="e.g. Jordan Alvarez's Americo term case"></div>` : ''}
       </div>
       <div class="modal-actions">
         <button class="primary" type="submit">Save</button>
@@ -1324,6 +1325,7 @@ function openEditCommissionModal(id){
     try {
       await apiFetch(`/api/commission-entries/${id}`, { method:'PUT', body:{
         entryType: COMM_TYPE_MAP[f.get('type')], amount: Number(f.get('amount')), entryDate: f.get('date'),
+        ...(f.has('notes') ? { notes: f.get('notes') } : {}),
       }});
       closeModal();
       say('Commission entry updated.');
@@ -1459,10 +1461,11 @@ async function renderProfit(){
     <div class="panel">
       <h2>Log Commission</h2>
       <form class="entry" id="commForm">
-        <div class="full"><label>Case</label><select required name="policyId" id="commPolicySelect">${policies.map(p=>`<option value="${p.id}">${escapeHtml(p.client?.name||'—')} — ${escapeHtml(p.carrier)} — ${escapeHtml(p.productType)}</option>`).join('') || '<option value="">No cases yet</option>'}</select></div>
-        <div><label>Type</label><select name="type"><option value="Initial">Initial</option><option value="Installment">Installment</option><option value="Renewal">Renewal</option>${isAgency?'<option value="Override">Override</option>':''}<option value="Chargeback">Chargeback</option></select></div>
+        <div class="full" id="commCaseField"><label>Case</label><select required name="policyId" id="commPolicySelect">${policies.map(p=>`<option value="${p.id}">${escapeHtml(p.client?.name||'—')} — ${escapeHtml(p.carrier)} — ${escapeHtml(p.productType)}</option>`).join('') || '<option value="">No cases yet</option>'}</select></div>
+        <div><label>Type</label><select name="type" id="commTypeSelect"><option value="Initial">Initial</option><option value="Installment">Installment</option><option value="Renewal">Renewal</option>${isAgency?'<option value="Override">Override</option>':''}<option value="Chargeback">Chargeback</option></select></div>
         <div><label>Amount ($)</label><input required type="number" step="0.01" name="amount" placeholder="850"></div>
         <div><label>Date</label><input required type="date" name="date"></div>
+        <div class="full section-hidden" id="commNotesField"><label>Which producer / case was this for?</label><input name="notes" placeholder="e.g. Jordan Alvarez's Americo term case"></div>
         <div class="full"><button class="primary" type="submit">Log Commission</button></div>
         <div class="full errortext" id="commError"></div>
       </form>
@@ -1484,6 +1487,18 @@ async function renderProfit(){
   };
   renderNetChart({ labels: stats.map(m=>m.label), data: stats.map(m=>m.net) });
 
+  const commCaseField = document.getElementById('commCaseField');
+  const commNotesField = document.getElementById('commNotesField');
+  const commPolicySelect = document.getElementById('commPolicySelect');
+  const commNotesInput = commNotesField.querySelector('input');
+  document.getElementById('commTypeSelect').addEventListener('change', (e) => {
+    const isOverride = e.target.value === 'Override';
+    commCaseField.classList.toggle('section-hidden', isOverride);
+    commNotesField.classList.toggle('section-hidden', !isOverride);
+    commPolicySelect.required = !isOverride;
+    commNotesInput.required = isOverride;
+  });
+
   document.getElementById('commForm').addEventListener('submit', async e => {
     e.preventDefault();
     const errEl = document.getElementById('commError');
@@ -1493,8 +1508,9 @@ async function renderProfit(){
     const ownerType = entryType === 'override' ? 'agency' : 'producer';
     try {
       await apiFetch('/api/commission-entries', { method:'POST', body:{
-        policyId: f.get('policyId'), ownerType, entryType,
+        policyId: ownerType === 'agency' ? null : f.get('policyId'), ownerType, entryType,
         amount: Number(f.get('amount')), entryDate: f.get('date'),
+        notes: f.get('notes') || null,
       }});
       say('Commission logged!');
       renderProfit();

@@ -251,7 +251,13 @@ model Policy {
 
 model CommissionEntry {
   id         String   @id @default(uuid())
-  policyId   String   @map("policy_id")
+  // Nullable ONLY for an agency override (ownerType = 'agency', entryType = 'override'):
+  // an override is commission earned on a DOWNLINE producer's sale, and an agency owner
+  // has no visibility into that producer's policies (GET /api/policies is scoped to the
+  // caller's own book), so there's no real Policy row to attach it to. `notes` is where
+  // the agency owner records which producer/case it came from instead. Every other entry
+  // type is still required to carry a real policyId.
+  policyId   String?  @map("policy_id")
   ownerType  String   @map("owner_type") // 'producer' | 'agency'
   producerId String?  @map("producer_id") // set when ownerType = 'producer'
   agencyId   String?  @map("agency_id")   // set when ownerType = 'agency'
@@ -261,7 +267,7 @@ model CommissionEntry {
   notes      String?
   createdAt  DateTime @default(now()) @map("created_at")
 
-  policy   Policy    @relation(fields: [policyId], references: [id])
+  policy   Policy?   @relation(fields: [policyId], references: [id])
   producer Producer? @relation("ProducerCommissionEntries", fields: [producerId], references: [id])
   agency   Agency?   @relation("AgencyCommissionEntries", fields: [agencyId], references: [id])
 

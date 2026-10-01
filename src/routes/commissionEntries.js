@@ -37,13 +37,20 @@ router.get('/', asyncHandler(async (req, res) => {
 router.post('/', asyncHandler(async (req, res) => {
   const { policyId, ownerType, entryType, amount, entryDate, notes } = req.body;
 
-  if (!policyId || !ownerType || !entryType || amount === undefined || !entryDate) {
+  if (!ownerType || !entryType || amount === undefined || !entryDate) {
     return res.status(400).json({
-      error: 'policyId, ownerType, entryType, amount, and entryDate are required.',
+      error: 'ownerType, entryType, amount, and entryDate are required.',
     });
   }
   if (!VALID_ENTRY_TYPES.includes(entryType)) {
     return res.status(400).json({ error: `entryType must be one of: ${VALID_ENTRY_TYPES.join(', ')}` });
+  }
+  // Every entry type except an agency override needs a real policy — an override is
+  // commission on a DOWNLINE producer's sale, which the agency owner has no policy
+  // visibility into (see the policyId doc comment on the CommissionEntry model), so
+  // `notes` carries that reference instead.
+  if (!policyId && ownerType !== 'agency') {
+    return res.status(400).json({ error: 'policyId is required.' });
   }
 
   try {
@@ -69,7 +76,7 @@ router.post('/', asyncHandler(async (req, res) => {
 
   const entry = await prisma.commissionEntry.create({
     data: {
-      policyId,
+      policyId: policyId || null,
       ownerType,
       producerId: ownerType === 'producer' ? req.producerId : null,
       agencyId,
@@ -82,7 +89,7 @@ router.post('/', asyncHandler(async (req, res) => {
 
   // bob-schema.md "Payment reminders — auto-dismiss rule": an 'additional' entry
   // auto-completes the policy's oldest still-pending reminder.
-  if (entryType === 'additional') {
+  if (entryType === 'additional' && policyId) {
     const oldestPending = await prisma.paymentReminder.findFirst({
       where: { policyId, status: 'pending' },
       orderBy: { reminderDate: 'asc' },
