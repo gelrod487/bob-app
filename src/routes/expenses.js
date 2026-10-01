@@ -10,6 +10,7 @@ const VALID_CATEGORIES = [
   'Leads', 'Marketing', 'E&O insurance', 'Licenses', 'CRM/Tools',
   'Office', 'Travel', 'Staff', 'Insurance', 'Other',
 ];
+const VALID_RECURRING_FREQUENCIES = ['monthly', 'weekly'];
 
 function ownerFilter(producerId) {
   return { OR: [{ producerId }, { agency: { producers: { some: { id: producerId } } } }] };
@@ -46,13 +47,16 @@ router.get('/', asyncHandler(async (req, res) => {
 
 // POST /api/expenses
 router.post('/', asyncHandler(async (req, res) => {
-  const { ownerType, category, description, vendor, quantity, unitCost, amount, expenseDate, isRecurring } = req.body;
+  const { ownerType, category, description, vendor, quantity, unitCost, amount, expenseDate, isRecurring, recurringFrequency } = req.body;
 
   if (!ownerType || !category || amount === undefined || !expenseDate) {
     return res.status(400).json({ error: 'ownerType, category, amount, and expenseDate are required.' });
   }
   if (!VALID_CATEGORIES.includes(category)) {
     return res.status(400).json({ error: `category must be one of: ${VALID_CATEGORIES.join(', ')}` });
+  }
+  if (recurringFrequency !== undefined && !VALID_RECURRING_FREQUENCIES.includes(recurringFrequency)) {
+    return res.status(400).json({ error: `recurringFrequency must be one of: ${VALID_RECURRING_FREQUENCIES.join(', ')}` });
   }
 
   try {
@@ -84,6 +88,7 @@ router.post('/', asyncHandler(async (req, res) => {
       amount,
       expenseDate: new Date(expenseDate),
       isRecurring: !!isRecurring,
+      recurringFrequency: recurringFrequency || 'monthly',
     },
   });
 
@@ -102,9 +107,12 @@ router.put('/:id', asyncHandler(async (req, res) => {
   });
   if (!expense) return res.status(404).json({ error: 'Cost not found.' });
 
-  const { category, description, amount, expenseDate, stopRecurringAsOf, isRecurring, vendor } = req.body;
+  const { category, description, amount, expenseDate, stopRecurringAsOf, isRecurring, recurringFrequency, vendor } = req.body;
   if (category !== undefined && !VALID_CATEGORIES.includes(category)) {
     return res.status(400).json({ error: `category must be one of: ${VALID_CATEGORIES.join(', ')}` });
+  }
+  if (recurringFrequency !== undefined && !VALID_RECURRING_FREQUENCIES.includes(recurringFrequency)) {
+    return res.status(400).json({ error: `recurringFrequency must be one of: ${VALID_RECURRING_FREQUENCIES.join(', ')}` });
   }
 
   const updated = await prisma.expense.update({
@@ -119,8 +127,10 @@ router.put('/:id', asyncHandler(async (req, res) => {
       // forward). Recurring -> one-time is deliberately NOT supported here: the single
       // template row backs every past month too, so flipping it off would silently wipe
       // out that history. Use stopRecurringAsOf (ends it going forward) or DELETE
-      // (removes the whole series) instead.
+      // (removes the whole series) instead. Same reasoning applies to the frequency
+      // itself — only settable on that same one-time -> recurring transition.
       isRecurring: (isRecurring !== undefined && !expense.isRecurring) ? !!isRecurring : expense.isRecurring,
+      recurringFrequency: (recurringFrequency !== undefined && !expense.isRecurring) ? recurringFrequency : expense.recurringFrequency,
       // Stops the series as of a given month — set instead of touched by default, so a
       // plain field edit (amount/category/etc.) never accidentally cancels the series.
       recurringEndDate: stopRecurringAsOf !== undefined

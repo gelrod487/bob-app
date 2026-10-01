@@ -298,12 +298,17 @@ model Expense {
   amount       Decimal  @db.Decimal(10, 2)
   expenseDate  DateTime @map("expense_date") @db.Date
   // A recurring row is a TEMPLATE, not a literal cost line — GET /api/expenses expands it
-  // into one virtual instance per calendar month (see src/lib/recurring.js) so the user
-  // never has to re-enter it. expenseDate is the anchor month (and day-of-month); nothing
-  // is stored per future month. recurringEndDate null = still active; set = the last
-  // month it still applies (the user "stopped" it), so past months stay accurate.
-  isRecurring      Boolean   @default(false) @map("is_recurring")
-  recurringEndDate DateTime? @map("recurring_end_date") @db.Date
+  // into one virtual instance per occurrence (see src/lib/recurring.js) so the user never
+  // has to re-enter it. expenseDate is the anchor date (month+day for monthly, the exact
+  // first occurrence for weekly); nothing is stored per future occurrence.
+  // recurringEndDate null = still active; set = the last occurrence it still applies to
+  // (the user "stopped" it), so past occurrences stay accurate.
+  isRecurring       Boolean   @default(false) @map("is_recurring")
+  // 'monthly' | 'weekly' — only meaningful when isRecurring. Defaults to 'monthly' so
+  // every pre-existing recurring row (all created before weekly existed) keeps its
+  // original behavior with no backfill needed beyond the column default.
+  recurringFrequency String   @default("monthly") @map("recurring_frequency")
+  recurringEndDate   DateTime? @map("recurring_end_date") @db.Date
 
   producer Producer? @relation("ProducerExpenses", fields: [producerId], references: [id])
   agency   Agency?   @relation("AgencyExpenses", fields: [agencyId], references: [id])

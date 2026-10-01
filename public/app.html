@@ -1093,7 +1093,7 @@ async function renderCosts(){
       <h2>All cost lines</h2>
       <p class="helptext" style="margin:-8px 0 14px;">Click a row to edit or delete it.</p>
       <table><thead><tr><th>Category</th><th>Description</th><th>Amount</th><th>Date</th></tr></thead>
-      <tbody>${[...expenses].sort((a,b)=>new Date(b.expenseDate)-new Date(a.expenseDate)).map(e=>`<tr class="row-clickable" onclick="openEditCostModal('${e.id}')"><td>${escapeHtml(e.category)}${e.isRecurring?' <span class="pill" style="margin-left:4px;" title="Recurring monthly">🔁</span>':''}</td><td>${escapeHtml(e.description||'')}</td><td>${fmt(e.amount)}</td><td>${fmtDate(e.expenseDate)}</td></tr>`).join('') || '<tr><td colspan="4" class="helptext">No costs logged in this range.</td></tr>'}</tbody></table>
+      <tbody>${[...expenses].sort((a,b)=>new Date(b.expenseDate)-new Date(a.expenseDate)).map(e=>`<tr class="row-clickable" onclick="openEditCostModal('${e.id}')"><td>${escapeHtml(e.category)}${e.isRecurring?` <span class="pill" style="margin-left:4px;" title="Recurring ${e.recurringFrequency==='weekly'?'weekly':'monthly'}">🔁</span>`:''}</td><td>${escapeHtml(e.description||'')}</td><td>${fmt(e.amount)}</td><td>${fmtDate(e.expenseDate)}</td></tr>`).join('') || '<tr><td colspan="4" class="helptext">No costs logged in this range.</td></tr>'}</tbody></table>
     </div>
   `;
   if (costLines.length) renderDonut('donutCanvas', costLines);
@@ -1103,10 +1103,12 @@ async function renderCosts(){
 function openEditCostModal(id){
   const e = expensesCache.find(x => x.id === id);
   if (!e) return;
-  const monthLabel = new Date(e.expenseDate).toLocaleString(undefined, { month:'long', year:'numeric' });
+  const isWeekly = e.recurringFrequency === 'weekly';
+  const occurrenceLabel = isWeekly ? fmtDate(e.expenseDate) : new Date(e.expenseDate).toLocaleString(undefined, { month:'long', year:'numeric' });
+  const freqNoun = isWeekly ? 'weekly' : 'monthly';
   openModal(`
     <div class="modal-head"><h2>Edit cost</h2><button class="modal-close" onclick="closeModal()">×</button></div>
-    ${e.isRecurring ? `<p class="helptext" style="margin-top:-4px;">🔁 Recurring monthly — changes here apply to every month of this series, past and future. This is the ${monthLabel} instance.</p>` : ''}
+    ${e.isRecurring ? `<p class="helptext" style="margin-top:-4px;">🔁 Recurring ${freqNoun} — changes here apply to every occurrence of this series, past and future. This is the ${occurrenceLabel} instance.</p>` : ''}
     <form id="editCostForm">
       <div class="detail-grid">
         <div><label>Category</label><select name="category">${COST_CATEGORIES.map(c=>`<option value="${c.key}" ${c.key===e.category?'selected':''}>${c.key}</option>`).join('')}</select></div>
@@ -1114,7 +1116,8 @@ function openEditCostModal(id){
         <div class="full ${e.category==='Leads'?'':'section-hidden'}" id="editLeadVendorField" style="grid-column:1/-1;"><label>Lead Vendor</label><input name="vendor" value="${escapeHtml(e.vendor||'')}" placeholder="e.g. Facebook Leads"></div>
         <div class="full" style="grid-column:1/-1;"><label>Frequency</label><select name="frequency" ${e.isRecurring ? 'disabled' : ''}>
           <option value="onetime" ${!e.isRecurring?'selected':''}>One-time charge</option>
-          <option value="recurring" ${e.isRecurring?'selected':''}>Recurring monthly charge</option>
+          <option value="recurring_monthly" ${e.isRecurring && !isWeekly?'selected':''}>Recurring monthly charge</option>
+          <option value="recurring_weekly" ${e.isRecurring && isWeekly?'selected':''}>Recurring weekly charge</option>
         </select>
         ${e.isRecurring ? `<p class="helptext" style="margin:4px 0 0;">To stop or remove this recurring series, use the buttons below instead.</p>` : ''}
         </div>
@@ -1123,7 +1126,7 @@ function openEditCostModal(id){
       </div>
       <div class="modal-actions">
         <button class="primary" type="submit">Save</button>
-        ${e.isRecurring ? `<button class="ghost" type="button" id="stopRecurringBtn">Stop recurring after ${monthLabel}</button>` : ''}
+        ${e.isRecurring ? `<button class="ghost" type="button" id="stopRecurringBtn">Stop recurring after ${occurrenceLabel}</button>` : ''}
         <button class="danger" type="button" id="deleteCostBtn">${e.isRecurring ? 'Delete entire series' : 'Delete'}</button>
         <button class="ghost" type="button" onclick="closeModal()">Cancel</button>
       </div>
@@ -1145,9 +1148,13 @@ function openEditCostModal(id){
         vendor: f.get('category') === 'Leads' ? (f.get('vendor') || null) : null,
         amount: Number(f.get('amount')), expenseDate: f.get('date'),
         // A disabled <select> (already-recurring cost) submits no value at all — omitting
-        // isRecurring here leaves it untouched, which is correct: see the server-side
-        // note on why recurring -> one-time isn't allowed through this field.
-        ...(f.get('frequency') ? { isRecurring: f.get('frequency') === 'recurring' } : {}),
+        // isRecurring/recurringFrequency here leaves them untouched, which is correct:
+        // see the server-side note on why recurring -> one-time isn't allowed through
+        // this field.
+        ...(f.get('frequency') ? {
+          isRecurring: f.get('frequency') !== 'onetime',
+          recurringFrequency: f.get('frequency') === 'recurring_weekly' ? 'weekly' : 'monthly',
+        } : {}),
       }});
       closeModal();
       say('Cost updated.');
@@ -1155,7 +1162,7 @@ function openEditCostModal(id){
     } catch (err) { errEl.textContent = err.message; }
   });
   if (e.isRecurring) document.getElementById('stopRecurringBtn').onclick = async () => {
-    if (!confirm(`Stop this recurring cost after ${monthLabel}? Past months (including this one) keep showing it; ${monthLabel} is the last month it'll be included.`)) return;
+    if (!confirm(`Stop this recurring cost after ${occurrenceLabel}? Past occurrences (including this one) keep showing it; ${occurrenceLabel} is the last one it'll be included.`)) return;
     try {
       await apiFetch(`/api/expenses/${id}`, { method:'PUT', body:{ stopRecurringAsOf: e.expenseDate.slice(0,10) }});
       closeModal();
@@ -1165,7 +1172,7 @@ function openEditCostModal(id){
   };
   document.getElementById('deleteCostBtn').onclick = async () => {
     const msg = e.isRecurring
-      ? 'Delete this ENTIRE recurring series? This removes it from every month, including past ones — not just going forward. This can\'t be undone.'
+      ? 'Delete this ENTIRE recurring series? This removes it from every occurrence, including past ones — not just going forward. This can\'t be undone.'
       : 'Delete this cost line? This can\'t be undone.';
     if (!confirm(msg)) return;
     try {
@@ -1186,19 +1193,20 @@ function openAddCostModal(){
         <div class="full" id="addLeadVendorField" style="grid-column:1/-1;"><label>Lead Vendor</label><input name="vendor" placeholder="e.g. Facebook Leads"></div>
         <div class="full" style="grid-column:1/-1;"><label>Frequency</label><select name="frequency">
           <option value="onetime">One-time charge</option>
-          <option value="recurring">Recurring monthly charge</option>
+          <option value="recurring_monthly">Recurring monthly charge</option>
+          <option value="recurring_weekly">Recurring weekly charge</option>
         </select></div>
         <div class="full" style="grid-column:1/-1;"><label id="addCostDateLabel">Date</label><input required type="date" name="date" value="${todayISO()}"></div>
         <div class="full" style="grid-column:1/-1;"><label>Description</label><input name="description" placeholder="Optional"></div>
       </div>
-      <p class="helptext full" id="recurringNote" style="display:none; grid-column:1/-1; margin:-4px 0 0;">This amount will automatically be included in every month's costs from this date forward, until you stop it — no need to re-enter it each month.</p>
+      <p class="helptext full" id="recurringNote" style="display:none; grid-column:1/-1; margin:-4px 0 0;">This amount will automatically be included every time it recurs from this date forward, until you stop it — no need to re-enter it each time.</p>
       <div class="modal-actions"><button class="primary" type="submit">Add Cost</button><button class="ghost" type="button" onclick="closeModal()">Cancel</button></div>
       <div class="errortext" id="addCostError"></div>
     </form>
   `);
   const freqSelect = document.querySelector('#addCostForm [name="frequency"]');
   freqSelect.addEventListener('change', () => {
-    const recurring = freqSelect.value === 'recurring';
+    const recurring = freqSelect.value !== 'onetime';
     document.getElementById('recurringNote').style.display = recurring ? '' : 'none';
     document.getElementById('addCostDateLabel').textContent = recurring ? 'Starting date' : 'Date';
   });
@@ -1216,7 +1224,8 @@ function openAddCostModal(){
         ownerType: 'producer', category: f.get('category'), description: f.get('description') || null,
         vendor: f.get('category') === 'Leads' ? (f.get('vendor') || null) : null,
         amount: Number(f.get('amount')), expenseDate: f.get('date'),
-        isRecurring: f.get('frequency') === 'recurring',
+        isRecurring: f.get('frequency') !== 'onetime',
+        recurringFrequency: f.get('frequency') === 'recurring_weekly' ? 'weekly' : 'monthly',
       }});
       closeModal();
       say('Cost logged.');
