@@ -76,7 +76,7 @@ function uid(prefix){ return prefix+'_'+Math.random().toString(36).slice(2,9); }
    local to this browser, seeded once with ~14 months of sample
    history so every report/filter has something real to show.
    ============================================================ */
-const STORE_KEY = 'bob_demo_store_v7';
+const STORE_KEY = 'bob_demo_store_v8';
 const COST_CATEGORIES = [
   { key:'Leads',      color:'#7A3B4A' },
   { key:'Marketing',      color:'#A63D40' },
@@ -98,7 +98,7 @@ function seedStore(){
   const LEAD_VENDORS = ['Facebook Leads','Google Ads','Referral','Direct Mail','Aged Leads Co'];
   const LEAD_TYPES = ['Final Expense','Mortgage Protection','IUL','Annuity Lead'];
   const MONTHLIES = [62.10,94.50,120.00,150.00,187.40,210.00,240.00,312.00,275.00,98.00,155.00,205.00,132.00,178.50];
-  const STATUS_PLAN = ['issued','issued','pending','lapsed','issued','issued','pending','issued','issued','issued','lapsed','issued','pending','issued'];
+  const STATUS_PLAN = ['active','active','pending','lapsed','active','active','pending','active','active','active','lapsed','active','pending','active'];
 
   const clients = NAMES.map((name, i) => {
     const monthsBack = 13 - Math.floor(i * 13 / (NAMES.length - 1)); // spreads ~0..13 months back, oldest first
@@ -107,7 +107,7 @@ function seedStore(){
     const submitted = monthsAgoISO(monthsBack, dayOfMonth);
     const status = STATUS_PLAN[i];
     const monthlyPremium = MONTHLIES[i];
-    const isPlaced = status === 'issued' || status === 'lapsed';
+    const isPlaced = status === 'active' || status === 'lapsed';
     const approvedDate = isPlaced ? addDays(submitted, 5) : null;
     const issueDate = isPlaced ? addDays(submitted, 9) : null;
     const issuePaidFYC = isPlaced ? Math.round(monthlyPremium * 12 * 0.75) : 0;
@@ -124,6 +124,7 @@ function seedStore(){
       product: PRODUCTS[i % PRODUCTS.length],
       policyNumber: status === 'pending' ? null : `${CARRIERS[i % CARRIERS.length].slice(0,2).toUpperCase()}-${10000+i*137}`,
       faceAmount: Math.round(monthlyPremium * 12 * 18),
+      saleType: 'life', singlePremium: null,
       monthlyPremium, status,
       leadVendor: LEAD_VENDORS[i % LEAD_VENDORS.length],
       leadType: LEAD_TYPES[i % LEAD_TYPES.length],
@@ -181,7 +182,16 @@ function loadStore(){
 function saveStore(){ try { localStorage.setItem(STORE_KEY, JSON.stringify(store)); } catch(e){} }
 let store = loadStore();
 
-function annualPremium(c){ return c.monthlyPremium * 12; }
+function annualPremium(c){ return c.saleType === 'annuity' ? Number(c.singlePremium||0) : c.monthlyPremium * 12; }
+const STATUS_TAG = {
+  pending: { cls: 'pending', label: 'Pending' },
+  approved_not_paid: { cls: 'approved', label: 'Approved not paid' },
+  active: { cls: 'active-pol', label: 'Issue paid' },
+  declined: { cls: 'lapsed', label: 'Declined' },
+  withdrawn: { cls: 'lapsed', label: 'Withdrew' },
+  cancelled: { cls: 'lapsed', label: 'Cancelled' },
+  lapsed: { cls: 'lapsed', label: 'Lapsed' },
+};
 // issuePaidFYC is kept as a plain field (every report already reads it directly) but is
 // derived from the commission entries ledger — call this after any add/edit/delete so it
 // never drifts from the entries actually logged.
@@ -224,8 +234,8 @@ function costsInRange(from,to){
   return [...oneTime, ...recurring];
 }
 function sumActivity(rows){ return rows.reduce((s,r)=>({dials:s.dials+r.dials, contacts:s.contacts+(r.contacts||0), appointments:s.appointments+r.appointments, presentations:s.presentations+r.presentations, sales:s.sales+r.sales}), {dials:0,contacts:0,appointments:0,presentations:0,sales:0}); }
-function grossFYCInRange(from,to){ return store.clients.filter(c => (c.status==='issued'||c.status==='lapsed') && c.issueDate>=from && c.issueDate<=to).reduce((s,c)=>s+c.issuePaidFYC,0); }
-function placedInRange(from,to){ return store.clients.filter(c => (c.status==='issued'||c.status==='lapsed') && c.issueDate>=from && c.issueDate<=to); }
+function grossFYCInRange(from,to){ return store.clients.filter(c => (c.status==='active'||c.status==='lapsed') && c.issueDate>=from && c.issueDate<=to).reduce((s,c)=>s+c.issuePaidFYC,0); }
+function placedInRange(from,to){ return store.clients.filter(c => (c.status==='active'||c.status==='lapsed') && c.issueDate>=from && c.issueDate<=to); }
 function chargebacksInRange(from,to){ return store.clients.filter(c => c.chargebackDate && c.chargebackDate>=from && c.chargebackDate<=to).reduce((s,c)=>s+c.chargebackAmount,0); }
 function costsTotalInRange(from,to){ return costsInRange(from,to).reduce((s,c)=>s+c.amount,0); }
 function pendingAsOf(to){ return store.clients.filter(c => c.status==='pending' && c.dateSubmitted<=to).reduce((s,c)=>s+annualPremium(c),0); }
@@ -340,7 +350,7 @@ function renderDesk(){
   const st = statement(range.from, range.to);
   const funnel = sumActivity(activityInRange(range.from, range.to));
   const t = todayRow();
-  const placedAll = store.clients.filter(c => c.status==='issued'||c.status==='lapsed').length;
+  const placedAll = store.clients.filter(c => c.status==='active'||c.status==='lapsed').length;
 
   const monthFrom = toISO(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const monthTo = todayISO();
@@ -437,13 +447,12 @@ function goalCell(label, [have, target], isMoney){
   </div>`;
 }
 function caseRow(c){
-  const tagClass = c.status === 'issued' ? 'active-pol' : c.status === 'lapsed' ? 'lapsed' : 'pending';
-  const tagLabel = c.status === 'issued' ? 'Issued — paid' : c.status === 'lapsed' ? 'Lapsed' : 'Pending';
+  const tag = STATUS_TAG[c.status] || STATUS_TAG.pending;
   return `<div class="case-card">
     <div><button class="case-name-link" onclick="openClientDetail('${c.id}')">${c.name}</button><div class="case-sub">${c.product} · ${c.carrier} · ${fmtDateShort(c.dateSubmitted)}</div></div>
     <div class="case-right">
-      <div class="case-amount">${fmt(c.status === 'pending' ? annualPremium(c) : c.monthlyPremium*12)}</div>
-      <div style="margin-top:4px;"><span class="tag ${tagClass}">${tagLabel}</span>${c.chargebackAmount ? ` <span class="helptext" style="color:var(--red);">−${fmt(c.chargebackAmount)} CB</span>`:''}</div>
+      <div class="case-amount">${fmt(annualPremium(c))}</div>
+      <div style="margin-top:4px;"><span class="tag ${tag.cls}">${tag.label}</span>${c.chargebackAmount ? ` <span class="helptext" style="color:var(--red);">−${fmt(c.chargebackAmount)} CB</span>`:''}</div>
     </div>
   </div>`;
 }
@@ -508,39 +517,81 @@ function openAddClientModal(){
         <div><label>Email</label><input type="email" name="email" placeholder="jordan@example.com"></div>
         <div><label>Phone</label><input name="phone" placeholder="(555) 555-0100"></div>
         <div><label>Carrier</label><input required name="carrier" placeholder="e.g. North Star Life"></div>
-        <div><label>Product</label><input required name="product" placeholder="e.g. Term 20"></div>
-        <div><label>Monthly Premium ($)</label><input required type="number" step="0.01" name="premium" placeholder="150"></div>
-        <div><label>Status</label><select name="status"><option value="issued">Issued — paid</option><option value="pending">Pending</option></select></div>
+        <div><label>Product Type</label><input required name="product" placeholder="e.g. Term 20"></div>
+        <div><label>Sale Type</label><select name="saleType" id="addSaleType">
+          <option value="">Not set</option>
+          <option value="life">Life</option>
+          <option value="annuity">Annuity</option>
+        </select></div>
+        <div><label>Policy Number</label><input name="policyNumber" placeholder="Optional"></div>
+        <div><label>Coverage Amount</label><input type="number" step="0.01" name="faceAmount" placeholder="Optional"></div>
+        <div id="addMonthlyPremiumField"><label>Monthly Premium ($)</label><input required type="number" step="0.01" name="premium" placeholder="150"></div>
+        <div id="addSinglePremiumField" class="section-hidden"><label>Single Premium ($)</label><input type="number" step="0.01" name="singlePremium" placeholder="100000"></div>
+        <div><label>Status</label><select name="status">
+          <option value="pending">Pending</option>
+          <option value="approved_not_paid">Approved not paid</option>
+          <option value="active">Issue paid</option>
+          <option value="declined">Declined</option>
+          <option value="withdrawn">Withdrew</option>
+          <option value="cancelled">Cancelled</option>
+          <option value="lapsed">Lapsed</option>
+        </select></div>
         <div><label>Lead Vendor</label><input name="leadVendor" placeholder="e.g. Facebook Leads"></div>
         <div><label>Lead Type</label><input name="leadType" placeholder="e.g. Final Expense"></div>
-        <div class="full" style="grid-column:1/-1;"><label>Date Submitted</label><input required type="date" name="dateSubmitted" value="${todayISO()}"></div>
+        <div><label>Date Submitted</label><input required type="date" name="dateSubmitted" value="${todayISO()}"></div>
+        <div><label>Approved Date</label><input type="date" name="approvedDate" placeholder="Optional"></div>
+        <div class="full" style="grid-column:1/-1;"><label>Issue / Paid Date</label><input type="date" name="issueDate"></div>
         <div class="full" style="grid-column:1/-1;"><label>Notes</label><input name="notes" placeholder="Optional"></div>
       </div>
       <div class="modal-actions"><button class="primary" type="submit">Add Client</button><button class="ghost" type="button" onclick="closeModal()">Cancel</button></div>
+      <div class="errortext" id="addClientError"></div>
     </form>
   `);
+  const addSaleTypeEl = document.getElementById('addSaleType');
+  const addMonthlyPremiumInput = document.querySelector('#addMonthlyPremiumField input');
+  addSaleTypeEl.addEventListener('change', (e) => {
+    const isAnnuity = e.target.value === 'annuity';
+    document.getElementById('addMonthlyPremiumField').classList.toggle('section-hidden', isAnnuity);
+    document.getElementById('addSinglePremiumField').classList.toggle('section-hidden', !isAnnuity);
+    addMonthlyPremiumInput.required = !isAnnuity;
+  });
+
   document.getElementById('addClientForm').addEventListener('submit', (e) => {
     e.preventDefault();
+    const errEl = document.getElementById('addClientError');
+    errEl.textContent = '';
     const f = new FormData(e.target);
     const status = f.get('status');
     const dateSubmitted = f.get('dateSubmitted');
-    const monthlyPremium = Number(f.get('premium'));
-    const isPlaced = status === 'issued';
-    const approvedDate = isPlaced ? addDays(dateSubmitted,5) : null;
-    const issueDate = isPlaced ? addDays(dateSubmitted,9) : null;
-    const issuePaidFYC = isPlaced ? Math.round(monthlyPremium*12*0.75) : 0;
-    const commissionEntries = isPlaced ? [{ id: uid('ce'), type: 'Initial', amount: issuePaidFYC, date: issueDate }] : [];
-    store.clients.unshift({
+    const isPlaced = status === 'active' || status === 'lapsed';
+    const issueDate = f.get('issueDate') || (isPlaced ? dateSubmitted : null);
+    const approvedDate = f.get('approvedDate') || (isPlaced ? dateSubmitted : null);
+    const isAnnuity = f.get('saleType') === 'annuity';
+    if (isAnnuity && !Number(f.get('singlePremium'))) {
+      errEl.textContent = 'Single Premium is required for an annuity sale.';
+      return;
+    }
+    const monthlyPremium = isAnnuity ? 0 : Number(f.get('premium'));
+    const singlePremium = isAnnuity ? Number(f.get('singlePremium')) : null;
+    const client = {
       id: uid('c'), name: f.get('name'), email: f.get('email')||'', phone: f.get('phone')||'',
-      carrier: f.get('carrier'), product: f.get('product'),
-      policyNumber: isPlaced ? `NEW-${Math.floor(1000+Math.random()*9000)}` : null,
-      faceAmount: Math.round(monthlyPremium*12*18), monthlyPremium, status,
+      carrier: f.get('carrier'), product: f.get('product'), saleType: f.get('saleType')||null,
+      policyNumber: f.get('policyNumber') || (isPlaced ? `NEW-${Math.floor(1000+Math.random()*9000)}` : null),
+      faceAmount: f.get('faceAmount') ? Number(f.get('faceAmount')) : Math.round((isAnnuity?singlePremium:monthlyPremium*12)*18),
+      monthlyPremium, singlePremium, status,
       leadVendor: f.get('leadVendor')||'', leadType: f.get('leadType')||'',
-      dateSubmitted, approvedDate, issueDate, issuePaidFYC, commissionEntries,
+      dateSubmitted, approvedDate, issueDate, issuePaidFYC: 0, commissionEntries: [],
       chargebackAmount: 0, chargebackDate: null, notes: f.get('notes')||'',
-    });
+    };
+    if (isPlaced) {
+      const amount = Math.round(annualPremium(client) * 0.75);
+      client.commissionEntries = [{ id: uid('ce'), type: 'Initial', amount, date: issueDate }];
+      recalcIssuePaidFYC(client);
+    }
+    store.clients.unshift(client);
     saveStore();
     closeModal();
+    say('Client added!');
     renderCurrentPage();
   });
 }
@@ -549,44 +600,54 @@ function openAddClientModal(){
 function openClientDetail(id){
   const c = store.clients.find(x => x.id === id);
   if (!c) return;
-  const tag = c.status === 'issued' ? {cls:'active-pol', label:'Issued — paid'} : c.status === 'lapsed' ? {cls:'lapsed', label:'Lapsed'} : {cls:'pending', label:'Pending'};
+  const tag = STATUS_TAG[c.status] || STATUS_TAG.pending;
   openModal(`
     <div class="modal-head"><h2>${c.name}</h2><button class="modal-close" onclick="closeModal()">×</button></div>
     <p><span class="tag ${tag.cls}">${tag.label}</span>${c.chargebackAmount ? ` <span class="helptext" style="color:var(--red); font-weight:700;">−${fmt(c.chargebackAmount)} charged back ${fmtDate(c.chargebackDate)}</span>` : ''}</p>
     <div class="detail-grid">
       <div class="detail-item"><div class="dlabel">Email</div><div class="dvalue">${c.email||'—'}</div></div>
       <div class="detail-item"><div class="dlabel">Phone</div><div class="dvalue">${c.phone||'—'}</div></div>
-      <div class="detail-item"><div class="dlabel">Annual Premium</div><div class="dvalue">${fmt(annualPremium(c))}</div></div>
+      <div class="detail-item"><div class="dlabel">${c.saleType==='annuity'?'Single Premium':'Annual Premium'}</div><div class="dvalue">${fmt(annualPremium(c))}</div></div>
       <div class="detail-item"><div class="dlabel">Issue Paid FYC</div><div class="dvalue">${fmt(c.issuePaidFYC)}</div></div>
     </div>
     <div class="detail-grid">
       <div><label>Carrier</label><input id="editCarrier" value="${c.carrier}"></div>
       <div><label>Product</label><input id="editProductType" value="${c.product}"></div>
+      <div><label>Sale Type</label><select id="editSaleType">
+        <option value="" ${!c.saleType?'selected':''}>Not set</option>
+        <option value="life" ${c.saleType==='life'?'selected':''}>Life</option>
+        <option value="annuity" ${c.saleType==='annuity'?'selected':''}>Annuity</option>
+      </select></div>
       <div><label>Policy Number</label><input id="editPolicyNumber" value="${c.policyNumber||''}"></div>
       <div><label>Coverage Amount</label><input id="editFaceAmount" type="number" step="0.01" value="${c.faceAmount||''}"></div>
       <div><label>Lead Vendor</label><input id="editLeadVendor" value="${c.leadVendor||''}"></div>
       <div><label>Lead Type</label><input id="editLeadType" value="${c.leadType||''}"></div>
-      <div><label>Monthly Premium</label><input id="editMonthlyPremium" type="number" step="0.01" value="${c.monthlyPremium}"></div>
+      <div id="editMonthlyPremiumField" class="${c.saleType==='annuity'?'section-hidden':''}"><label>Monthly Premium</label><input id="editMonthlyPremium" type="number" step="0.01" value="${c.monthlyPremium||''}"></div>
+      <div id="editSinglePremiumField" class="${c.saleType==='annuity'?'':'section-hidden'}"><label>Single Premium</label><input id="editSinglePremium" type="number" step="0.01" value="${c.singlePremium||''}"></div>
       <div><label>Date Submitted</label><input id="editDateSubmitted" type="date" value="${c.dateSubmitted}"></div>
       <div><label>Approved Date</label><input id="editApprovedDate" type="date" value="${c.approvedDate||''}"></div>
       <div>
         <label>Status</label>
         <select id="clientStatusSel">
           <option value="pending" ${c.status==='pending'?'selected':''}>Pending</option>
-          <option value="issued" ${c.status==='issued'?'selected':''}>Issued — paid</option>
+          <option value="approved_not_paid" ${c.status==='approved_not_paid'?'selected':''}>Approved not paid</option>
+          <option value="active" ${c.status==='active'?'selected':''}>Issue paid</option>
+          <option value="declined" ${c.status==='declined'?'selected':''}>Declined</option>
+          <option value="withdrawn" ${c.status==='withdrawn'?'selected':''}>Withdrew</option>
+          <option value="cancelled" ${c.status==='cancelled'?'selected':''}>Cancelled</option>
           <option value="lapsed" ${c.status==='lapsed'?'selected':''}>Lapsed</option>
         </select>
       </div>
-      <div>
+      <div class="full" style="grid-column:1/-1;">
         <label>Issue / Paid Date</label>
-        <input type="date" id="clientIssueDateInput" value="${c.issueDate || todayISO()}">
+        <input type="date" id="clientIssueDateInput" value="${c.issueDate || ''}">
       </div>
     </div>
     <label>Notes</label>
     <textarea id="clientNotes" rows="3" style="width:100%; padding:9px 11px; border-radius:10px; border:1.5px solid var(--line); background:var(--cream); color:var(--ink); font-family:'Inter'; font-size:.9rem;">${c.notes||''}</textarea>
     <div class="modal-actions">
       <button class="ghost" type="button" id="saveNotesBtn">Save changes</button>
-      ${c.status === 'issued' ? `<button class="danger" type="button" id="chargebackBtn">Chargeback</button>` : ''}
+      ${c.status === 'active' ? `<button class="danger" type="button" id="chargebackBtn">Chargeback</button>` : ''}
       <button class="danger" type="button" id="deleteCaseBtn">Delete case</button>
       <button class="ghost" type="button" onclick="closeModal()">Close</button>
     </div>
@@ -629,25 +690,35 @@ function openClientDetail(id){
     openClientDetail(id);
   });
 
+  const editSaleTypeEl = document.getElementById('editSaleType');
+  editSaleTypeEl.addEventListener('change', (e) => {
+    const isAnnuity = e.target.value === 'annuity';
+    document.getElementById('editMonthlyPremiumField').classList.toggle('section-hidden', isAnnuity);
+    document.getElementById('editSinglePremiumField').classList.toggle('section-hidden', !isAnnuity);
+  });
+
   document.getElementById('saveNotesBtn').onclick = () => {
     const newStatus = document.getElementById('clientStatusSel').value;
-    const wasIssued = c.status === 'issued';
+    const wasIssued = c.status === 'active';
+    const isAnnuity = editSaleTypeEl.value === 'annuity';
     c.notes = document.getElementById('clientNotes').value;
-    c.issueDate = document.getElementById('clientIssueDateInput').value;
+    c.issueDate = document.getElementById('clientIssueDateInput').value || null;
     c.status = newStatus;
     c.carrier = document.getElementById('editCarrier').value;
     c.product = document.getElementById('editProductType').value;
+    c.saleType = editSaleTypeEl.value || null;
     c.policyNumber = document.getElementById('editPolicyNumber').value || null;
     c.faceAmount = Number(document.getElementById('editFaceAmount').value) || 0;
     c.leadVendor = document.getElementById('editLeadVendor').value || null;
     c.leadType = document.getElementById('editLeadType').value || null;
-    c.monthlyPremium = Number(document.getElementById('editMonthlyPremium').value);
+    c.monthlyPremium = isAnnuity ? 0 : Number(document.getElementById('editMonthlyPremium').value);
+    c.singlePremium = isAnnuity ? Number(document.getElementById('editSinglePremium').value) || 0 : null;
     c.dateSubmitted = document.getElementById('editDateSubmitted').value;
     c.approvedDate = document.getElementById('editApprovedDate').value || null;
-    if (newStatus === 'issued' && !wasIssued) {
+    if (newStatus === 'active' && !wasIssued) {
       if (!c.approvedDate) c.approvedDate = c.issueDate;
       if (!(c.commissionEntries||[]).length) {
-        c.commissionEntries = [{ id: uid('ce'), type: 'Initial', amount: Math.round(c.monthlyPremium * 12 * 0.75), date: c.issueDate }];
+        c.commissionEntries = [{ id: uid('ce'), type: 'Initial', amount: Math.round(annualPremium(c) * 0.75), date: c.issueDate }];
         recalcIssuePaidFYC(c);
       }
     }
@@ -868,7 +939,7 @@ function renderBook(filterText, statusFilter){
   filterText = (filterText||'').toLowerCase();
   const range = computeDateRange(dateFilterState.book.key, dateFilterState.book.from, dateFilterState.book.to);
   const inRange = clientsSubmittedInRange(range.from, range.to);
-  const placedAll = store.clients.filter(c=>c.status==='issued'||c.status==='lapsed');
+  const placedAll = store.clients.filter(c=>c.status==='active'||c.status==='lapsed');
   const lapsedCount = store.clients.filter(c=>c.status==='lapsed').length;
   const persistency = (placedAll.length) ? Math.round((placedAll.length-lapsedCount)/placedAll.length*100) : 100;
   const st = statement(range.from, range.to);
@@ -895,12 +966,16 @@ function renderBook(filterText, statusFilter){
       <input id="bookSearch" placeholder="Search name or email" value="${filterText}">
       <select id="bookStatus">
         <option value="">All statuses</option>
-        <option value="issued" ${statusFilter==='issued'?'selected':''}>Issued</option>
         <option value="pending" ${statusFilter==='pending'?'selected':''}>Pending</option>
+        <option value="approved_not_paid" ${statusFilter==='approved_not_paid'?'selected':''}>Approved not paid</option>
+        <option value="active" ${statusFilter==='active'?'selected':''}>Issue paid</option>
+        <option value="declined" ${statusFilter==='declined'?'selected':''}>Declined</option>
+        <option value="withdrawn" ${statusFilter==='withdrawn'?'selected':''}>Withdrew</option>
+        <option value="cancelled" ${statusFilter==='cancelled'?'selected':''}>Cancelled</option>
         <option value="lapsed" ${statusFilter==='lapsed'?'selected':''}>Lapsed</option>
       </select>
     </div>
-    <div>${filtered.map(c => `
+    <div>${filtered.map(c => { const tag = STATUS_TAG[c.status] || STATUS_TAG.pending; return `
       <div class="case-card">
         <div>
           <button class="case-name-link" onclick="openClientDetail('${c.id}')">${c.name}</button>
@@ -910,11 +985,11 @@ function renderBook(filterText, statusFilter){
         </div>
         <div class="case-right">
           <div class="case-sub">${fmtDateShort(c.dateSubmitted)}</div>
-          <div class="case-amount">${fmt(c.monthlyPremium)}/mo</div>
-          <div class="case-sub">AP ${fmt(annualPremium(c))}</div>
-          <div style="margin-top:4px;"><span class="tag ${c.status==='issued'?'active-pol':c.status==='lapsed'?'lapsed':'pending'}">${c.status==='issued'?'Issued':c.status==='lapsed'?'Lapsed':'Pending'}</span>${c.chargebackAmount?` <span class="helptext" style="color:var(--red);">−${fmt(c.chargebackAmount)} CB</span>`:''}</div>
+          <div class="case-amount">${c.saleType==='annuity' ? fmt(c.singlePremium) : fmt(c.monthlyPremium)+'/mo'}</div>
+          <div class="case-sub">${c.saleType==='annuity'?'SP':'AP'} ${fmt(annualPremium(c))}</div>
+          <div style="margin-top:4px;"><span class="tag ${tag.cls}">${tag.label}</span>${c.chargebackAmount?` <span class="helptext" style="color:var(--red);">−${fmt(c.chargebackAmount)} CB</span>`:''}</div>
         </div>
-      </div>`).join('') || '<p class="helptext">No cases match in this range.</p>'}
+      </div>`; }).join('') || '<p class="helptext">No cases match in this range.</p>'}
     </div>
   `;
   wireDateFilter('book', () => renderBook(filterText, statusFilter));
@@ -1116,8 +1191,8 @@ function renderProfit(){
   const profitMargin = allGross ? (allNet/allGross*100) : 0;
   const chargebackRatio = allGross ? (allCB/allGross*100) : 0;
   const oneYearAgo = daysAgoISO(365);
-  const matured = store.clients.filter(c => (c.status==='issued'||c.status==='lapsed') && c.issueDate <= oneYearAgo);
-  const maturedRetained = matured.filter(c => c.status==='issued').length;
+  const matured = store.clients.filter(c => (c.status==='active'||c.status==='lapsed') && c.issueDate <= oneYearAgo);
+  const maturedRetained = matured.filter(c => c.status==='active').length;
   const persistency = matured.length ? Math.round(maturedRetained/matured.length*100) : 100;
 
   const stats = monthlyStats(trendMonths);
@@ -1335,7 +1410,7 @@ function renderAnalytics(){
     const key = vendorKey(c.leadVendor);
     clientsByVendor[key] ??= { label: c.leadVendor || 'Unclassified', total: 0, placed: 0 };
     clientsByVendor[key].total += 1;
-    if (c.status === 'issued' || c.status === 'lapsed') clientsByVendor[key].placed += 1;
+    if (c.status === 'active' || c.status === 'lapsed') clientsByVendor[key].placed += 1;
   });
   const vendorKeys = [...new Set([...Object.keys(spendByVendor), ...Object.keys(clientsByVendor)])];
   const vendorRows = vendorKeys.map(key => {
