@@ -30,6 +30,7 @@
       <button data-page="costs"><span class="ic">🧾</span>Costs</button>
       <button data-page="profit"><span class="ic">📈</span>Profit</button>
       <button data-page="goals"><span class="ic">🎯</span>Goals</button>
+      <button data-page="analytics" id="analyticsNavBtn" style="display:none;"><span class="ic">📊</span>Analytics</button>
       <button data-page="calculator" id="calculatorNavBtn" style="display:none;"><span class="ic">🧮</span>Commission Calculator</button>
     </div>
     <div class="sidebar-footer">
@@ -56,7 +57,7 @@ let me = null;
 let policiesCache = [];
 let clientsCache = [];
 const COST_CATEGORIES = [
-  { key:'Lead flow',      color:'#7A3B4A' },
+  { key:'Leads',          color:'#7A3B4A' },
   { key:'Marketing',      color:'#A63D40' },
   { key:'E&O insurance',  color:'#D8CBB8' },
   { key:'Licenses',       color:'#9A8F7C' },
@@ -103,6 +104,12 @@ function fmt(n){ return '$'+Number(n||0).toLocaleString(undefined,{maximumFracti
 // Annuities are typically one lump-sum deposit, not a recurring premium — this is the one
 // place that should read "whichever amount actually applies" instead of assuming monthlyPremium.
 function premiumSize(p){ return p.saleType==='annuity' ? Number(p.singlePremium||0) : Number(p.monthlyPremium||0)*12; }
+function sumActivity(rows){
+  return rows.reduce((s,r) => ({
+    dials: s.dials+r.dials, contacts: s.contacts+r.contacts, appointments: s.appointments+r.appointments,
+    presentations: s.presentations+r.presentations, sales: s.sales+r.sales,
+  }), { dials:0, contacts:0, appointments:0, presentations:0, sales:0 });
+}
 function wireCopyButton(btnId, inputId){
   const btn = document.getElementById(btnId);
   btn.onclick = async () => {
@@ -134,6 +141,7 @@ const dateFilterState = {
   book: { key: 'ytd', from: '', to: '' },
   costs: { key: 'this_month', from: '', to: '' },
   profit: { key: 'this_month', from: '', to: '' },
+  analytics: { key: 'this_month', from: '', to: '' },
 };
 function computeDateRange(key, customFrom, customTo){
   const now = new Date();
@@ -208,7 +216,7 @@ const say = wireMascot('navMascot', ["Hi, I'm Bob!","Bump your dials — I'll do
 
 /* ---- sidebar nav ---- */
 const mainInner = document.getElementById('mainInner');
-const PAGES = { desk: renderDesk, activity: renderActivity, book: () => renderBook('',''), costs: renderCosts, profit: renderProfit, goals: renderGoals, subscribe: renderSubscribe, team: renderTeam, calculator: renderCalculator, feedback: renderFeedback, settings: renderSettings };
+const PAGES = { desk: renderDesk, activity: renderActivity, book: () => renderBook('',''), costs: renderCosts, profit: renderProfit, goals: renderGoals, subscribe: renderSubscribe, team: renderTeam, calculator: renderCalculator, analytics: renderAnalytics, feedback: renderFeedback, settings: renderSettings };
 let currentPage = 'desk';
 function renderCurrentPage(){ PAGES[currentPage](); }
 function go(page){
@@ -236,6 +244,7 @@ document.getElementById('logoutBtn').onclick = async () => { await supabaseClien
   statusPill.className = 'pill ' + me.subscriptionStatus;
   if (me.subscriptionTier === 'agency_owner') document.getElementById('teamNavBtn').style.display = '';
   if (hasCalculatorAccess(me.subscriptionTier)) document.getElementById('calculatorNavBtn').style.display = '';
+  if (hasCalculatorAccess(me.subscriptionTier)) document.getElementById('analyticsNavBtn').style.display = '';
 
   setTimeout(()=>say("Hi, I'm Bob!"), 900);
   go(me.trialExpired ? 'subscribe' : 'desk');
@@ -257,14 +266,10 @@ async function renderDesk(){
   ]);
   policiesCache = policies;
 
-  const funnel = activityRange.reduce((s,r) => ({
-    dials: s.dials + r.dials, contacts: s.contacts + r.contacts, appointments: s.appointments + r.appointments,
-    presentations: s.presentations + r.presentations, sales: s.sales + r.sales,
-  }), { dials:0, contacts:0, appointments:0, presentations:0, sales:0 });
+  const funnel = sumActivity(activityRange);
 
   const monthKey = todayISO().slice(0,7);
-  const monthActivity = activityAll.filter(r => r.date.slice(0,7) === monthKey)
-    .reduce((s,r) => ({ dials:s.dials+r.dials, contacts:s.contacts+r.contacts, appointments:s.appointments+r.appointments, presentations:s.presentations+r.presentations, sales:s.sales+r.sales }), {dials:0,contacts:0,appointments:0,presentations:0,sales:0});
+  const monthActivity = sumActivity(activityAll.filter(r => r.date.slice(0,7) === monthKey));
 
   const t = todayRow(activityAll);
 
@@ -785,7 +790,7 @@ async function renderActivity(){
   const t = todayRow(rowsAll);
   const sortedRows = [...rowsRange].sort((a,b)=>new Date(a.date)-new Date(b.date));
   activityRowsCache = sortedRows;
-  const totals = sortedRows.reduce((s,r) => ({ dials:s.dials+r.dials, contacts:s.contacts+r.contacts, appointments:s.appointments+r.appointments, presentations:s.presentations+r.presentations, sales:s.sales+r.sales }), {dials:0,contacts:0,appointments:0,presentations:0,sales:0});
+  const totals = sumActivity(sortedRows);
   const todayLabel = new Date().toLocaleDateString(undefined,{weekday:'short', month:'short', day:'numeric', year:'numeric'});
 
   mainInner.innerHTML = `
@@ -1106,6 +1111,7 @@ function openEditCostModal(id){
       <div class="detail-grid">
         <div><label>Category</label><select name="category">${COST_CATEGORIES.map(c=>`<option value="${c.key}" ${c.key===e.category?'selected':''}>${c.key}</option>`).join('')}</select></div>
         <div><label>Amount ($)</label><input required type="number" step="0.01" name="amount" value="${e.amount}"></div>
+        <div class="full ${e.category==='Leads'?'':'section-hidden'}" id="editLeadVendorField" style="grid-column:1/-1;"><label>Lead Vendor</label><input name="vendor" value="${escapeHtml(e.vendor||'')}" placeholder="e.g. Facebook Leads"></div>
         <div class="full" style="grid-column:1/-1;"><label>Frequency</label><select name="frequency" ${e.isRecurring ? 'disabled' : ''}>
           <option value="onetime" ${!e.isRecurring?'selected':''}>One-time charge</option>
           <option value="recurring" ${e.isRecurring?'selected':''}>Recurring monthly charge</option>
@@ -1124,6 +1130,11 @@ function openEditCostModal(id){
       <div class="errortext" id="editCostError"></div>
     </form>
   `);
+  const editCategorySelect = document.querySelector('#editCostForm [name="category"]');
+  const editLeadVendorField = document.getElementById('editLeadVendorField');
+  editCategorySelect.addEventListener('change', () => {
+    editLeadVendorField.classList.toggle('section-hidden', editCategorySelect.value !== 'Leads');
+  });
   document.getElementById('editCostForm').addEventListener('submit', async (ev) => {
     ev.preventDefault();
     const errEl = document.getElementById('editCostError');
@@ -1131,6 +1142,7 @@ function openEditCostModal(id){
     try {
       await apiFetch(`/api/expenses/${id}`, { method:'PUT', body:{
         category: f.get('category'), description: f.get('description') || null,
+        vendor: f.get('category') === 'Leads' ? (f.get('vendor') || null) : null,
         amount: Number(f.get('amount')), expenseDate: f.get('date'),
         // A disabled <select> (already-recurring cost) submits no value at all — omitting
         // isRecurring here leaves it untouched, which is correct: see the server-side
@@ -1171,6 +1183,7 @@ function openAddCostModal(){
       <div class="detail-grid">
         <div><label>Category</label><select name="category">${COST_CATEGORIES.map(c=>`<option value="${c.key}">${c.key}</option>`).join('')}</select></div>
         <div><label>Amount ($)</label><input required type="number" step="0.01" name="amount" placeholder="150"></div>
+        <div class="full" id="addLeadVendorField" style="grid-column:1/-1;"><label>Lead Vendor</label><input name="vendor" placeholder="e.g. Facebook Leads"></div>
         <div class="full" style="grid-column:1/-1;"><label>Frequency</label><select name="frequency">
           <option value="onetime">One-time charge</option>
           <option value="recurring">Recurring monthly charge</option>
@@ -1189,6 +1202,11 @@ function openAddCostModal(){
     document.getElementById('recurringNote').style.display = recurring ? '' : 'none';
     document.getElementById('addCostDateLabel').textContent = recurring ? 'Starting date' : 'Date';
   });
+  const addCategorySelect = document.querySelector('#addCostForm [name="category"]');
+  const addLeadVendorField = document.getElementById('addLeadVendorField');
+  function syncAddLeadVendorField(){ addLeadVendorField.classList.toggle('section-hidden', addCategorySelect.value !== 'Leads'); }
+  addCategorySelect.addEventListener('change', syncAddLeadVendorField);
+  syncAddLeadVendorField();
   document.getElementById('addCostForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const errEl = document.getElementById('addCostError');
@@ -1196,6 +1214,7 @@ function openAddCostModal(){
     try {
       await apiFetch('/api/expenses', { method:'POST', body:{
         ownerType: 'producer', category: f.get('category'), description: f.get('description') || null,
+        vendor: f.get('category') === 'Leads' ? (f.get('vendor') || null) : null,
         amount: Number(f.get('amount')), expenseDate: f.get('date'),
         isRecurring: f.get('frequency') === 'recurring',
       }});
@@ -1580,6 +1599,211 @@ async function renderGoals(){
       } catch (err) { errEl.textContent = err.message; }
     });
   }
+}
+
+/* ================= ANALYTICS (Producer Plus / Agency Owner) ================= */
+function vendorKey(s){ return (s||'Unclassified').trim().toLowerCase() || 'unclassified'; }
+
+// Trailing 3 FULL calendar months, excluding the current in-progress month — smooths a
+// solo producer's small monthly sample, and skips this month specifically because recent
+// presentations haven't had time to convert into paid commission yet (would understate
+// close ratio and avg commission/sale).
+function baselineWindow(){
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth()-3, 1);
+  const end = new Date(now.getFullYear(), now.getMonth(), 0); // day 0 of this month = last day of last month
+  return { from: toISO(start), to: toISO(end) };
+}
+
+// Back-solves the funnel from a target monthly commission figure down to required daily
+// activity, using baseline historical conversion rates. Returns null if there isn't yet
+// enough history to compute meaningful rates (any baseline stage at zero).
+function computeBlueprint(baseline, targetCommission){
+  if (!baseline.dials || !baseline.contacts || !baseline.presentations || !baseline.sales || !baseline.placedCount || !baseline.grossCommission) return null;
+
+  const avgCommissionPerSale = baseline.grossCommission / baseline.placedCount;
+  if (!avgCommissionPerSale) return null;
+  const contactRate = baseline.contacts / baseline.dials;
+  const presentationRate = baseline.presentations / baseline.contacts;
+  const closeRatio = baseline.sales / baseline.presentations;
+
+  const requiredSales = Math.ceil(targetCommission / avgCommissionPerSale);
+  const requiredPresentations = Math.ceil(requiredSales / closeRatio);
+  const requiredContacts = Math.ceil(requiredPresentations / presentationRate);
+  const requiredDials = Math.ceil(requiredContacts / contactRate);
+  const M = requiredSales / baseline.sales;
+
+  const paths = [{
+    key: 'volume', label: 'Do more',
+    sub: 'Same conversion rates, more activity',
+    dials: requiredDials, contacts: requiredContacts, presentations: requiredPresentations, sales: requiredSales,
+  }];
+
+  const lift = Math.cbrt(M);
+  const convContactRate = Math.min(1, contactRate*lift);
+  const convPresentationRate = Math.min(1, presentationRate*lift);
+  const convCloseRatio = Math.min(1, closeRatio*lift);
+  paths.push({
+    key: 'conversion', label: 'Convert better',
+    sub: 'Same dial volume, raise every conversion rate',
+    dials: baseline.dials,
+    contacts: Math.round(baseline.dials*convContactRate),
+    presentations: Math.round(baseline.dials*convContactRate*convPresentationRate),
+    sales: requiredSales,
+    rates: { contactRate: convContactRate, presentationRate: convPresentationRate, closeRatio: convCloseRatio },
+  });
+
+  const volumeMultiplier = 1.25;
+  const remainingM = M/volumeMultiplier;
+  if (remainingM > 1) {
+    const blendedDials = Math.ceil(baseline.dials*volumeMultiplier);
+    const blLift = Math.cbrt(remainingM);
+    const blContactRate = Math.min(1, contactRate*blLift);
+    const blPresentationRate = Math.min(1, presentationRate*blLift);
+    const blCloseRatio = Math.min(1, closeRatio*blLift);
+    paths.push({
+      key: 'blended', label: 'Blend both',
+      sub: '+25% dials, plus a smaller rate increase',
+      dials: blendedDials,
+      contacts: Math.round(blendedDials*blContactRate),
+      presentations: Math.round(blendedDials*blContactRate*blPresentationRate),
+      sales: requiredSales,
+      rates: { contactRate: blContactRate, presentationRate: blPresentationRate, closeRatio: blCloseRatio },
+    });
+  }
+
+  return { baseline, targetCommission, avgCommissionPerSale, contactRate, presentationRate, closeRatio, requiredSales, paths };
+}
+
+function comparisonBar(label, baseVal, targetVal){
+  const max = Math.max(baseVal, targetVal, 1);
+  const deltaPct = baseVal ? Math.round((targetVal-baseVal)/baseVal*100) : 0;
+  const deltaStr = deltaPct > 0 ? `+${deltaPct}%` : `${deltaPct}%`;
+  return `<div class="funnel-row">
+    <div class="row-top"><span>${label}</span><span>${Math.round(baseVal)} → ${Math.round(targetVal)} <span class="conv">(${deltaStr})</span></span></div>
+    <div class="bar-track"><div class="bar-fill" style="width:${Math.min(100, baseVal/max*100)}%; opacity:.45;"></div></div>
+    <div class="bar-track" style="margin-top:4px;"><div class="bar-fill bar-fill--target" style="width:${Math.min(100, targetVal/max*100)}%"></div></div>
+  </div>`;
+}
+
+let analyticsCache = null;
+let analyticsTarget = 0;
+let analyticsPathKey = 'volume';
+
+function renderBlueprintResult(){
+  const el = document.getElementById('blueprintResult');
+  if (!el || !analyticsCache) return;
+  const blueprint = computeBlueprint(analyticsCache.baseline, analyticsTarget);
+  if (!blueprint) {
+    el.innerHTML = `<p class="helptext">Not enough activity history yet in the trailing 3 months (need at least some dials, contacts, presentations, and sales all logged, plus a placed case with commission) — log some production and check back.</p>`;
+    return;
+  }
+  const path = blueprint.paths.find(p => p.key === analyticsPathKey) || blueprint.paths[0];
+  el.innerHTML = `
+    <div class="path-row" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px;">
+      ${blueprint.paths.map(p => `<button type="button" class="path-btn ${p.key===path.key?'selected':''}" data-path-key="${p.key}">${escapeHtml(p.label)}<div class="path-sub">${escapeHtml(p.sub)}</div></button>`).join('')}
+    </div>
+    <p class="helptext" style="margin-top:-6px;">To reach ${fmt(blueprint.targetCommission)}/mo (${blueprint.requiredSales} sales/mo at your baseline ${fmt(blueprint.avgCommissionPerSale)}/sale), here's what ${path.label.toLowerCase()} looks like:</p>
+    ${comparisonBar('Dials/mo', blueprint.baseline.dials, path.dials)}
+    ${comparisonBar('Contacts/mo', blueprint.baseline.contacts, path.contacts)}
+    ${comparisonBar('Presentations/mo', blueprint.baseline.presentations, path.presentations)}
+    ${comparisonBar('Sales/mo', blueprint.baseline.sales, path.sales)}
+    ${path.rates ? `<p class="helptext">Conversion rates in this path: contact ${(path.rates.contactRate*100).toFixed(1)}%, presentation ${(path.rates.presentationRate*100).toFixed(1)}%, close ${(path.rates.closeRatio*100).toFixed(1)}% (baseline: ${(blueprint.contactRate*100).toFixed(1)}% / ${(blueprint.presentationRate*100).toFixed(1)}% / ${(blueprint.closeRatio*100).toFixed(1)}%).</p>` : ''}
+  `;
+  el.querySelectorAll('.path-btn').forEach(btn => btn.onclick = () => { analyticsPathKey = btn.dataset.pathKey; renderBlueprintResult(); });
+}
+
+async function renderAnalytics(){
+  mainInner.innerHTML = `<div class="page-header"><div><div class="page-eyebrow">Analytics</div><h1>Grow your book</h1></div></div><p class="helptext">Loading…</p>`;
+  const range = computeDateRange(dateFilterState.analytics.key, dateFilterState.analytics.from, dateFilterState.analytics.to);
+  const baseline = baselineWindow();
+  const [policies, activityRange, expensesRange, baselineActivity, baselineDash] = await Promise.all([
+    apiFetch('/api/policies'),
+    apiFetch(`/api/activity?from=${range.from}&to=${range.to}`),
+    apiFetch(`/api/expenses?from=${range.from}&to=${range.to}`),
+    apiFetch(`/api/activity?from=${baseline.from}&to=${baseline.to}`),
+    apiFetch(`/api/dashboard?from=${baseline.from}&to=${baseline.to}`),
+  ]);
+
+  const funnel = sumActivity(activityRange);
+  const placedRange = policies.filter(p => (p.status==='active'||p.status==='lapsed')
+    && p.issueDate.slice(0,10) >= range.from && p.issueDate.slice(0,10) <= range.to);
+  const avgAP = placedRange.length ? placedRange.reduce((s,p)=>s+premiumSize(p),0)/placedRange.length : 0;
+
+  // Vendor performance — Expense.vendor and Policy.leadVendor are both free text typed
+  // independently, so normalize before grouping or "Facebook Leads" and "facebook leads"
+  // silently split into two rows (see vendorKey()).
+  const spendByVendor = {};
+  expensesRange.filter(e => e.category === 'Leads').forEach(e => {
+    const key = vendorKey(e.vendor);
+    spendByVendor[key] ??= { label: e.vendor || 'Unclassified', spend: 0 };
+    spendByVendor[key].spend += Number(e.amount);
+  });
+  const policiesByVendor = {};
+  policies.filter(p => p.issueDate.slice(0,10) >= range.from && p.issueDate.slice(0,10) <= range.to).forEach(p => {
+    const key = vendorKey(p.leadVendor);
+    policiesByVendor[key] ??= { label: p.leadVendor || 'Unclassified', total: 0, placed: 0 };
+    policiesByVendor[key].total += 1;
+    if (p.status === 'active' || p.status === 'lapsed') policiesByVendor[key].placed += 1;
+  });
+  const vendorKeys = [...new Set([...Object.keys(spendByVendor), ...Object.keys(policiesByVendor)])];
+  const vendorRows = vendorKeys.map(key => {
+    const spend = spendByVendor[key]?.spend || 0;
+    const cases = policiesByVendor[key] || { total: 0, placed: 0 };
+    const label = spendByVendor[key]?.label || policiesByVendor[key]?.label || 'Unclassified';
+    return { label, spend, total: cases.total, placed: cases.placed };
+  }).sort((a,b) => b.spend - a.spend || b.total - a.total);
+
+  const baselineFunnel = sumActivity(baselineActivity);
+  const baselinePlacedCount = policies.filter(p => (p.status==='active'||p.status==='lapsed')
+    && p.issueDate.slice(0,10) >= baseline.from && p.issueDate.slice(0,10) <= baseline.to).length;
+  analyticsCache = {
+    baseline: { ...baselineFunnel, grossCommission: baselineDash.grossCommission, placedCount: baselinePlacedCount },
+  };
+  if (!analyticsTarget) {
+    const baselineMonthlyAvg = baselineDash.grossCommission / 3;
+    analyticsTarget = Math.ceil((baselineMonthlyAvg * 1.5) / 1000) * 1000 || 10000;
+  }
+
+  mainInner.innerHTML = `
+    <div class="page-header"><div><div class="page-eyebrow">Analytics</div><h1>Grow your book</h1></div></div>
+    ${dateFilterHTML('analytics')}
+
+    <div class="panel">
+      <h2>Conversion rates</h2>
+      <p class="helptext" style="margin:-8px 0 14px;">${fmtDateRangeLabel(range.from)}–${fmtDateRangeLabel(range.to)}</p>
+      <div class="grid grid-5">
+        <div class="card"><div class="stat-label">Contact Rate</div><div class="stat-value">${pct(funnel.contacts, funnel.dials)}</div><div class="stat-sub">${funnel.contacts} of ${funnel.dials} dials</div></div>
+        <div class="card"><div class="stat-label">Presentation Rate</div><div class="stat-value">${pct(funnel.presentations, funnel.contacts)}</div><div class="stat-sub">${funnel.presentations} of ${funnel.contacts} contacts</div></div>
+        <div class="card"><div class="stat-label">Close Ratio</div><div class="stat-value">${pct(funnel.sales, funnel.presentations)}</div><div class="stat-sub">${funnel.sales} of ${funnel.presentations} presentations</div></div>
+        <div class="card"><div class="stat-label">Average AP</div><div class="stat-value">${fmt(avgAP)}</div><div class="stat-sub">${placedRange.length} placed case${placedRange.length===1?'':'s'}</div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Lead vendor performance</h2>
+      <p class="helptext" style="margin:-8px 0 14px;">Spend is from Costs logged under "Leads" in this range; conversion is the share of that vendor's clients who became a placed case — not a true lead→policy rate, since BOB doesn't track raw lead counts.</p>
+      ${vendorRows.length ? `
+      <table><thead><tr><th>Vendor</th><th>Spend</th><th>Clients</th><th>Placed</th><th>Conversion</th></tr></thead>
+      <tbody>${vendorRows.map(v => `<tr><td>${escapeHtml(v.label)}</td><td>${fmt(v.spend)}</td><td>${v.total}</td><td>${v.placed}</td><td>${pct(v.placed, v.total)}</td></tr>`).join('')}</tbody></table>
+      ` : '<p class="helptext">No clients or lead costs logged in this range yet.</p>'}
+    </div>
+
+    <div class="panel">
+      <h2>Goal blueprint</h2>
+      <p class="helptext" style="margin:-8px 0 14px;">Based on your trailing 3 full months (${fmtDateRangeLabel(baseline.from)}–${fmtDateRangeLabel(baseline.to)}), independent of the date range above.</p>
+      <div style="max-width:260px; margin-bottom:16px;">
+        <label>Target monthly commission ($)</label><input type="number" step="100" id="blueprintTargetInput" value="${analyticsTarget}">
+      </div>
+      <div id="blueprintResult"></div>
+    </div>
+  `;
+  wireDateFilter('analytics', renderAnalytics);
+  document.getElementById('blueprintTargetInput').addEventListener('input', (e) => {
+    analyticsTarget = Number(e.target.value) || 0;
+    renderBlueprintResult();
+  });
+  renderBlueprintResult();
 }
 
 /* ================= CALCULATOR (Producer Plus / Agency Owner) ================= */

@@ -7,7 +7,7 @@ const { expandRecurringExpense, parseExpenseId } = require('../lib/recurring');
 const router = express.Router();
 
 const VALID_CATEGORIES = [
-  'Lead flow', 'Marketing', 'E&O insurance', 'Licenses', 'CRM/Tools',
+  'Leads', 'Marketing', 'E&O insurance', 'Licenses', 'CRM/Tools',
   'Office', 'Travel', 'Staff', 'Insurance', 'Other',
 ];
 
@@ -102,7 +102,7 @@ router.put('/:id', asyncHandler(async (req, res) => {
   });
   if (!expense) return res.status(404).json({ error: 'Cost not found.' });
 
-  const { category, description, amount, expenseDate, stopRecurringAsOf, isRecurring } = req.body;
+  const { category, description, amount, expenseDate, stopRecurringAsOf, isRecurring, vendor } = req.body;
   if (category !== undefined && !VALID_CATEGORIES.includes(category)) {
     return res.status(400).json({ error: `category must be one of: ${VALID_CATEGORIES.join(', ')}` });
   }
@@ -112,6 +112,7 @@ router.put('/:id', asyncHandler(async (req, res) => {
     data: {
       category: category ?? expense.category,
       description: description !== undefined ? (description || null) : expense.description,
+      vendor: vendor !== undefined ? (vendor || null) : expense.vendor,
       amount: amount ?? expense.amount,
       expenseDate: expenseDate ? new Date(expenseDate) : expense.expenseDate,
       // One-time -> recurring is a safe upgrade (starts recurring from expenseDate

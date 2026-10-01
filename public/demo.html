@@ -76,7 +76,7 @@ function uid(prefix){ return prefix+'_'+Math.random().toString(36).slice(2,9); }
    ============================================================ */
 const STORE_KEY = 'bob_demo_store_v5';
 const COST_CATEGORIES = [
-  { key:'Lead flow',      color:'#7A3B4A' },
+  { key:'Leads',      color:'#7A3B4A' },
   { key:'Marketing',      color:'#A63D40' },
   { key:'E&O insurance',  color:'#D8CBB8' },
   { key:'Licenses',       color:'#9A8F7C' },
@@ -148,7 +148,7 @@ function seedStore(){
     COST_CATEGORIES.forEach((cat, ci) => {
       if (cat.key === 'CRM/Tools') return; // CRM/Tools is the recurring example added below instead
       if (Math.random() < 0.12) return; // not every category every month
-      const base = { 'Lead flow':320,'Marketing':110,'E&O insurance':45,'Licenses':35,'CRM/Tools':85,'Office':55,'Travel':65,'Staff':60,'Insurance':50,'Other':30 }[cat.key] || 40;
+      const base = { 'Leads':320,'Marketing':110,'E&O insurance':45,'Licenses':35,'CRM/Tools':85,'Office':55,'Travel':65,'Staff':60,'Insurance':50,'Other':30 }[cat.key] || 40;
       const amount = Math.round(base * (0.7 + Math.random()*0.7));
       costs.push({ id: uid('e'), date: monthsAgoISO(m, 5 + ci*2), amount, category: cat.key, description: '', isRecurring: false, recurringEndDate: null });
     });

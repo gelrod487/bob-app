@@ -278,6 +278,10 @@ footer.home-footer a{display:block; color:var(--ink-soft); text-decoration:none;
 .funnel-row .row-top .conv{color:var(--ink-soft); font-size:.78rem;}
 .bar-track{background:var(--panel-alt); border-radius:999px; height:8px; overflow:hidden;}
 .bar-fill{background:var(--maroon); height:100%; border-radius:999px;}
+.bar-fill--target{background:var(--accent);}
+.path-btn{background:var(--panel-alt); border:1.5px solid var(--line); border-radius:12px; padding:10px 14px; cursor:pointer; font-family:'Inter'; font-weight:700; font-size:.82rem; color:var(--ink); text-align:left;}
+.path-btn.selected{border-color:var(--maroon); background:var(--panel);}
+.path-btn .path-sub{font-weight:500; color:var(--ink-soft); font-size:.74rem; margin-top:2px;}
 .goal-grid{display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-top:16px; padding-top:14px; border-top:1px solid var(--line);}
 @media(max-width:700px){.goal-grid{grid-template-columns:repeat(2,1fr);}}
 .goal-cell .glabel{font-size:.68rem; text-transform:uppercase; color:var(--ink-soft); letter-spacing:.04em;}
