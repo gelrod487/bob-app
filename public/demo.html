@@ -1010,6 +1010,20 @@ function renderBook(filterText, statusFilter){
       <div class="card"><div class="stat-label">Chargebacks</div><div class="stat-value neg">−${fmt(st.cb)}</div></div>
       <div class="card"><div class="stat-label">Persistency</div><div class="stat-value">${persistency}%</div></div>
     </div>
+
+    <div class="panel">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+        <h2 style="margin:0;">Import from a spreadsheet</h2>
+        <button class="ghost" id="toggleImport" type="button">Show</button>
+      </div>
+      <div id="importArea" class="section-hidden">
+        <p class="helptext">Upload a CSV export of your current tracker. BOB reads the columns so you can map them — nothing gets added until you confirm. (This tour reads CSV files; the full app also reads Excel workbooks.)</p>
+        <div class="dropzone" id="dropzone">Drop a CSV file here, or click to choose one</div>
+        <input type="file" id="fileInput" accept=".csv" style="display:none;">
+        <div id="mapArea" style="margin-top:16px;"></div>
+      </div>
+    </div>
+
     <div class="book-filters">
       <input id="bookSearch" placeholder="Search client or carrier" value="${filterText}">
       <select id="bookStatus">
@@ -1044,6 +1058,320 @@ function renderBook(filterText, statusFilter){
   document.getElementById('addClientBtn2').onclick = openAddClientModal;
   document.getElementById('bookSearch').oninput = (e) => renderBook(e.target.value, statusFilter);
   document.getElementById('bookStatus').onchange = (e) => renderBook(filterText, e.target.value);
+  document.getElementById('toggleImport').onclick = () => {
+    const area = document.getElementById('importArea');
+    area.classList.toggle('section-hidden');
+    document.getElementById('toggleImport').textContent = area.classList.contains('section-hidden') ? 'Show' : 'Hide';
+  };
+  wireImport();
+}
+
+/* ---- Import from a spreadsheet ----
+   Client-side only (no backend) — mirrors src/routes/import.js's column-synonym
+   guessing and row validation/defaulting, and app.html's wireImport() UX, but parses
+   CSV natively (FileReader + a small hand-rolled parser) instead of calling
+   /api/import/suggest-mapping or /api/import/commit. Scope note: CSV only, not
+   .xlsx/.xls — the real app also reads Excel via SheetJS, which would mean adding a
+   CDN parsing dependency to an otherwise fully offline-capable tour page; a visitor
+   can export any spreadsheet app's sheet as .csv and get the identical flow below. */
+const IMPORT_FIELDS = [
+  ['clientName','Client Name'], ['phone','Phone'], ['email','Email'], ['carrier','Carrier'],
+  ['policyNumber','Policy Number'], ['productType','Product Type'], ['faceAmount','Face Amount'],
+  ['monthlyPremium','Monthly Premium'], ['issueDate','Issue Date'], ['status','Status'],
+  ['leadType','Lead Type'], ['leadVendor','Lead Vendor'],
+  ['advanceCommission','Initial Commission'], ['additionalCommission','Additional Commission'], ['chargeback','Chargeback'],
+];
+// Synonym table + status keywords mirrored from src/routes/import.js's FIELD_SYNONYMS /
+// STATUS_KEYWORDS, so the tour's column-mapping guesses behave like the real import.
+const IMPORT_FIELD_SYNONYMS = {
+  clientName: ['client', 'client name', 'customer', 'insured', 'policyholder', 'name', 'full name'],
+  phone: ['phone', 'phone number', 'cell', 'mobile'],
+  email: ['email', 'email address'],
+  carrier: ['carrier', 'company', 'insurer', 'ins co'],
+  policyNumber: ['app #', 'policy #', 'app #/ policy #', 'app #/policy #', 'policy number', 'app number'],
+  productType: ['product', 'product type', 'plan', 'plan type', 'policy type'],
+  faceAmount: ['face amount', 'face', 'coverage', 'coverage amount', 'death benefit'],
+  monthlyPremium: ['monthly premium', 'premium/mo', 'premium (monthly)', 'monthly prem'],
+  issueDate: ['issue date', 'issued', 'effective date', 'policy date', 'start date', 'approved date', 'submit date'],
+  status: ['status', 'policy status'],
+  leadType: ['lead type', 'lead source'],
+  leadVendor: ['lead vendor'],
+  advanceCommission: ['commission', 'advance', 'comp', 'commission paid', 'initial commission', 'advance commission'],
+  additionalCommission: ['final commission', 'additional commission', 'renewal'],
+  chargeback: ['chargeback', 'charge back', 'charge back amount'],
+};
+const IMPORT_STATUS_KEYWORDS = {
+  active: ['issued', 'paid'],
+  approved_not_paid: ['approved'],
+  declined: ['declined', 'denied', 'refused'],
+  withdrawn: ['withdrew', 'withdrawn'],
+  cancelled: ['cancelled', 'canceled'],
+  lapsed: ['lapsed'],
+  pending: ['pending'],
+};
+let importRows = [];
+// Small hand-rolled CSV parser: handles quoted fields, embedded commas/newlines,
+// and escaped "" quotes, without pulling in a CDN library.
+function parseCSVText(text){
+  const table = [];
+  let row = [], field = '', inQuotes = false;
+  for (let i = 0; i < text.length; i++){
+    const ch = text[i];
+    if (inQuotes){
+      if (ch === '"'){
+        if (text[i+1] === '"'){ field += '"'; i++; } else { inQuotes = false; }
+      } else field += ch;
+    } else if (ch === '"'){ inQuotes = true; }
+    else if (ch === ','){ row.push(field); field = ''; }
+    else if (ch === '\n'){ row.push(field); table.push(row); row = []; field = ''; }
+    else if (ch === '\r'){ /* no-op — \n handles the line break */ }
+    else field += ch;
+  }
+  if (field.length || row.length) { row.push(field); table.push(row); }
+  return table;
+}
+function guessImportColumn(headers, fieldKey){
+  const synonyms = IMPORT_FIELD_SYNONYMS[fieldKey] || [];
+  const normalized = headers.map(h => String(h).toLowerCase().trim());
+  for (const syn of synonyms){
+    const idx = normalized.indexOf(syn);
+    if (idx !== -1) return headers[idx];
+  }
+  for (const syn of synonyms){
+    const idx = normalized.findIndex(h => h.includes(syn));
+    if (idx !== -1) return headers[idx];
+  }
+  return null;
+}
+// Parses whatever numeric-looking text is in a cell; if it fails, checks it against
+// the status keyword list — mirrors import.js's recovery logic for disposition text
+// that lands in a numeric column (an application that never issued has nowhere else
+// to note why).
+function parseNumericOrRecoverStatus(rawValue){
+  if (rawValue === null || rawValue === undefined || String(rawValue).trim() === ''){
+    return { value: null, recoveredStatus: null };
+  }
+  const asString = String(rawValue).trim();
+  const asNumber = Number(asString.replace(/[$,]/g, ''));
+  if (!Number.isNaN(asNumber) && asString !== '') return { value: asNumber, recoveredStatus: null };
+  const lower = asString.toLowerCase();
+  for (const [status, keywords] of Object.entries(IMPORT_STATUS_KEYWORDS)){
+    if (keywords.some(kw => lower.includes(kw))) return { value: null, recoveredStatus: status };
+  }
+  return { value: null, recoveredStatus: 'UNRECOGNIZED' };
+}
+// Parses a spreadsheet date cell into a store-shaped YYYY-MM-DD string without the
+// timezone rollback `new Date('YYYY-MM-DD')` causes: that form parses as UTC midnight,
+// and reading it back with local-time getters (as toISO does) can land on the prior
+// calendar day west of UTC. Handles the two common export shapes directly; anything
+// else (e.g. "March 10, 2024") falls back to the Date constructor, which parses
+// non-ISO strings in local time and so doesn't have the same rollback risk.
+function parseImportDate(raw){
+  if (raw === null || raw === undefined) return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+  let m = s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})(?:[T ].*)?$/);
+  if (m) {
+    const d = new Date(+m[1], +m[2]-1, +m[3]);
+    return Number.isNaN(d.getTime()) ? null : toISO(d);
+  }
+  m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+  if (m) {
+    const d = new Date(+m[3], +m[1]-1, +m[2]);
+    return Number.isNaN(d.getTime()) ? null : toISO(d);
+  }
+  const generic = new Date(s);
+  return Number.isNaN(generic.getTime()) ? null : toISO(generic);
+}
+function wireImport(){
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('fileInput');
+  if (!dropzone) return;
+  dropzone.onclick = () => fileInput.click();
+  ['dragover','dragenter'].forEach(ev => dropzone.addEventListener(ev, e => { e.preventDefault(); dropzone.classList.add('drag'); }));
+  ['dragleave','drop'].forEach(ev => dropzone.addEventListener(ev, e => { e.preventDefault(); dropzone.classList.remove('drag'); }));
+  dropzone.addEventListener('drop', e => { if (e.dataTransfer.files[0]) handleImportFile(e.dataTransfer.files[0]); });
+  fileInput.addEventListener('change', e => { if (e.target.files[0]) handleImportFile(e.target.files[0]); });
+}
+function handleImportFile(file){
+  const area = document.getElementById('mapArea');
+  if (/\.xlsx?$/i.test(file.name)){
+    area.innerHTML = `<p class="errortext">This tour only reads CSV files — export your spreadsheet as .csv and try again. (The full app also reads Excel workbooks.)</p>`;
+    return;
+  }
+  if (!/\.csv$/i.test(file.name)){
+    area.innerHTML = `<p class="errortext">Unrecognized file type — please choose a .csv file.</p>`;
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    let table = [];
+    try { table = parseCSVText(String(e.target.result)); } catch(err){ table = []; }
+    table = table.filter(r => r.some(cell => String(cell||'').trim() !== ''));
+    if (!table.length){
+      area.innerHTML = `<p class="errortext">Couldn't read any rows from that file. Make sure it's a CSV with a header row.</p>`;
+      return;
+    }
+    const rawHeaders = table[0];
+    const headers = rawHeaders.map(h => String(h).trim()).filter(h => h !== '');
+    if (!headers.length){
+      area.innerHTML = `<p class="errortext">No header row found — the first row should list your column names.</p>`;
+      return;
+    }
+    const rows = table.slice(1).map(r => {
+      const obj = {};
+      rawHeaders.forEach((h,i) => { obj[String(h).trim()] = r[i] !== undefined ? r[i] : ''; });
+      return obj;
+    });
+    if (!rows.length){
+      area.innerHTML = `<p class="errortext">That file has a header row but no data rows to import.</p>`;
+      return;
+    }
+    importRows = rows;
+    const suggestedMapping = {};
+    Object.keys(IMPORT_FIELD_SYNONYMS).forEach(key => { suggestedMapping[key] = guessImportColumn(headers, key); });
+    renderImportMapper(headers, suggestedMapping, rows.length);
+  };
+  reader.onerror = () => { area.innerHTML = `<p class="errortext">Couldn't read that file — please try again.</p>`; };
+  reader.readAsText(file);
+}
+function renderImportMapper(headers, suggestedMapping, totalRows){
+  const area = document.getElementById('mapArea');
+  area.innerHTML = `<h3 style="margin-top:0;">Map your columns</h3>
+    <p class="helptext">${totalRows} row${totalRows===1?'':'s'} found. Match each field below to a column from your file, or leave it skipped.</p>
+    <div class="grid" style="grid-template-columns:repeat(2,1fr);">
+    ${IMPORT_FIELDS.map(([key,label]) => `
+      <div><label>${label}</label><select data-key="${key}">
+        <option value="">— skip —</option>
+        ${headers.map(h => `<option value="${h}" ${suggestedMapping[key]===h?'selected':''}>${h}</option>`).join('')}
+      </select></div>`).join('')}
+    </div>
+    <div style="margin-top:16px;"><button class="primary" id="confirmImport" type="button">Import ${totalRows} Row${totalRows===1?'':'s'}</button>
+    <button class="ghost" id="cancelImport" type="button" style="margin-left:8px;">Cancel</button></div>
+    <div id="importResult" style="margin-top:14px;"></div>`;
+
+  document.getElementById('confirmImport').onclick = () => {
+    const mapping = {};
+    area.querySelectorAll('select').forEach(s => { if (s.value) mapping[s.dataset.key] = s.value; });
+    const summary = commitImportRows(importRows, mapping);
+    document.getElementById('importResult').innerHTML = `<p class="helptext">
+      Imported ${summary.clientsCreated} case${summary.clientsCreated===1?'':'s'}, ${summary.commissionEntries} commission entries.
+      ${summary.skipped.length ? `${summary.skipped.length} row(s) skipped.` : ''}</p>
+      ${summary.skipped.length ? `<ul class="helptext">${summary.skipped.slice(0,5).map(s => `<li>Row ${s.row}: ${s.reason}</li>`).join('')}${summary.skipped.length > 5 ? `<li>…and ${summary.skipped.length - 5} more.</li>` : ''}</ul>` : ''}`;
+    say(summary.clientsCreated ? `Imported ${summary.clientsCreated} case${summary.clientsCreated===1?'':'s'}!` : 'No rows were imported — see the details below.');
+    renderBook('', '');
+  };
+  document.getElementById('cancelImport').onclick = () => { area.innerHTML = ''; };
+}
+// Row-by-row commit given a confirmed mapping — mirrors import.js's /commit handler's
+// validation/defaulting (required-field skip reasons, status recovery/inference, default
+// carrier/product), adapted to demo's client+commissionEntries shape instead of
+// Client/Policy/CommissionEntry tables. Every created client gets the same shape
+// openAddClientModal's submit handler produces, including a seeded "Initial" commission
+// entry when the row's status is placed (active/lapsed) — unless the sheet itself mapped
+// an Initial Commission figure, which takes precedence over the computed 75% default.
+function commitImportRows(rows, mapping){
+  const summary = { clientsCreated: 0, commissionEntries: 0, skipped: [] };
+  rows.forEach((row, i) => {
+    const rowNumber = i + 2; // +1 for header row, +1 for 1-indexing
+    try {
+      const clientName = mapping.clientName ? String(row[mapping.clientName]||'').trim() : '';
+      const carrier = mapping.carrier ? String(row[mapping.carrier]||'').trim() : '';
+
+      let { value: monthlyPremium, recoveredStatus } = mapping.monthlyPremium
+        ? parseNumericOrRecoverStatus(row[mapping.monthlyPremium])
+        : { value: null, recoveredStatus: null };
+
+      if (!clientName){
+        summary.skipped.push({ row: rowNumber, reason: 'Missing client name — not imported.' });
+        return;
+      }
+      // Sparse application-only records (no carrier, no premium, no recognizable status)
+      // aren't imported — same as import.js finding #4.
+      if (!carrier && monthlyPremium === null && !recoveredStatus){
+        summary.skipped.push({ row: rowNumber, reason: 'Incomplete record (no carrier or premium) — not imported.' });
+        return;
+      }
+      if (recoveredStatus === 'UNRECOGNIZED'){
+        summary.skipped.push({ row: rowNumber, reason: `Unparsable premium value, no recognizable status keyword: "${row[mapping.monthlyPremium]}"` });
+        return;
+      }
+
+      const statusRaw = mapping.status ? String(row[mapping.status]||'').toLowerCase() : '';
+      let status = recoveredStatus && recoveredStatus !== 'UNRECOGNIZED' ? recoveredStatus : null;
+      if (!status){
+        if (statusRaw.includes('issu') || statusRaw.includes('paid')) status = 'active';
+        else if (statusRaw.includes('approv')) status = 'approved_not_paid';
+        else if (statusRaw.includes('declin') || statusRaw.includes('refus')) status = 'declined';
+        else if (statusRaw.includes('withdr')) status = 'withdrawn';
+        else if (statusRaw.includes('cancel')) status = 'cancelled';
+        else if (statusRaw.includes('laps')) status = 'lapsed';
+        else if (statusRaw.includes('pending')) status = 'pending';
+        else status = monthlyPremium ? 'active' : 'pending';
+      }
+      const isPlaced = status === 'active' || status === 'lapsed';
+
+      const dateRaw = mapping.issueDate ? row[mapping.issueDate] : null;
+      const parsedDate = parseImportDate(dateRaw);
+      const dateSubmitted = parsedDate || todayISO();
+      const issueDate = isPlaced ? (parsedDate || todayISO()) : null;
+      const approvedDate = isPlaced ? dateSubmitted : null;
+
+      const client = {
+        id: uid('c'), name: clientName,
+        email: mapping.email ? String(row[mapping.email]||'').trim() : '',
+        phone: mapping.phone ? String(row[mapping.phone]||'').trim() : '',
+        carrier: carrier || 'Unknown',
+        product: mapping.productType ? (String(row[mapping.productType]||'').trim() || 'Unknown') : 'Unknown',
+        saleType: 'life', singlePremium: null,
+        policyNumber: mapping.policyNumber ? (String(row[mapping.policyNumber]||'').trim() || null) : null,
+        faceAmount: mapping.faceAmount ? (Number(String(row[mapping.faceAmount]||'').replace(/[$,]/g,'')) || null) : null,
+        monthlyPremium: monthlyPremium || 0,
+        status,
+        leadVendor: mapping.leadVendor ? String(row[mapping.leadVendor]||'').trim() : '',
+        leadType: mapping.leadType ? String(row[mapping.leadType]||'').trim() : '',
+        dateSubmitted, approvedDate, issueDate, issuePaidFYC: 0, commissionEntries: [],
+        chargebackAmount: 0, chargebackDate: null,
+        notes: 'Imported from spreadsheet',
+      };
+
+      let initialAmount = null;
+      if (mapping.advanceCommission){
+        const { value } = parseNumericOrRecoverStatus(row[mapping.advanceCommission]);
+        if (value !== null && value !== 0) initialAmount = value;
+      }
+      if (isPlaced){
+        const amount = initialAmount !== null ? initialAmount : Math.round(annualPremium(client) * 0.75);
+        client.commissionEntries.push({ id: uid('ce'), type: 'Initial', amount, date: issueDate });
+      } else if (initialAmount !== null){
+        client.commissionEntries.push({ id: uid('ce'), type: 'Initial', amount: initialAmount, date: dateSubmitted });
+      }
+
+      [
+        { key: 'additionalCommission', type: 'Renewal' },
+        { key: 'chargeback', type: 'Chargeback' },
+      ].forEach(({ key, type }) => {
+        if (!mapping[key]) return;
+        const { value } = parseNumericOrRecoverStatus(row[mapping[key]]);
+        if (value === null || value === 0) return;
+        const amount = type === 'Chargeback' ? -Math.abs(value) : value;
+        client.commissionEntries.push({ id: uid('ce'), type, amount, date: issueDate || dateSubmitted });
+        if (type === 'Chargeback'){
+          client.chargebackAmount = Math.abs(value);
+          client.chargebackDate = issueDate || dateSubmitted;
+        }
+      });
+
+      recalcIssuePaidFYC(client);
+      summary.commissionEntries += client.commissionEntries.length;
+      store.clients.unshift(client);
+      summary.clientsCreated += 1;
+    } catch (err){
+      summary.skipped.push({ row: rowNumber, reason: `Import error: ${err.message}` });
+    }
+  });
+  if (summary.clientsCreated) saveStore();
+  return summary;
 }
 
 /* ================= COSTS ================= */
