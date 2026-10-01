@@ -164,7 +164,7 @@ function seedStore(){
     });
   }
   // One recurring example so the "recurring vs one-time" feature is visible out of the box.
-  costs.push({ id: uid('e'), date: monthsAgoISO(10, 3), amount: 79, category: 'CRM/Tools', description: 'CRM subscription', isRecurring: true, recurringEndDate: null });
+  costs.push({ id: uid('e'), date: monthsAgoISO(10, 3), amount: 79, category: 'CRM/Tools', description: 'CRM subscription', isRecurring: true, recurringFrequency: 'monthly', recurringEndDate: null });
 
   const goals = { dialsTarget: 4000, appointmentsTarget: 160, sitsTarget: 120, salesTarget: 20, fycTarget: 15000 };
 
@@ -196,22 +196,14 @@ const STATUS_TAG = {
 // derived from the commission entries ledger — call this after any add/edit/delete so it
 // never drifts from the entries actually logged.
 function recalcIssuePaidFYC(c){ c.issuePaidFYC = (c.commissionEntries||[]).reduce((s,e)=>s+Number(e.amount),0); }
-function clientsSubmittedInRange(from,to){ return store.clients.filter(c => c.dateSubmitted >= from && c.dateSubmitted <= to); }
 function activityInRange(from,to){ return store.activity.filter(a => a.date >= from && a.date <= to); }
 // A recurring cost is a TEMPLATE (isRecurring:true), expanded here into one virtual
 // instance per calendar month it applies to — mirrors the real app's src/lib/recurring.js
 // so the demo behaves exactly like production: set it once, it shows up every month
 // after, until stopped or deleted, with no re-entry.
 function lastDayOfMonth(year, monthIndex){ return new Date(year, monthIndex+1, 0).getDate(); }
-function expandRecurringCost(template, from, to){
-  const anchor = new Date(template.date+'T00:00:00');
+function expandMonthlyCost(template, anchor, rangeStart, seriesEnd){
   const anchorDay = anchor.getDate();
-  const today = new Date();
-  const rangeStart = from ? new Date(from+'T00:00:00') : anchor;
-  const rangeEnd = to ? new Date(to+'T00:00:00') : today;
-  const seriesEnd = (template.recurringEndDate && new Date(template.recurringEndDate+'T00:00:00') < rangeEnd)
-    ? new Date(template.recurringEndDate+'T00:00:00') : rangeEnd;
-
   let cursor = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
   const windowStart = new Date(rangeStart.getFullYear(), rangeStart.getMonth(), 1);
   if (cursor < windowStart) cursor = windowStart;
@@ -226,6 +218,39 @@ function expandRecurringCost(template, from, to){
     cursor = new Date(year, monthIndex+1, 1);
   }
   return instances;
+}
+// Steps forward in real 7-day increments from the anchor date — a weekly template
+// contributes its full amount on EVERY occurrence, so a calendar month picks up 4 or 5
+// charges depending on how many weekly dates land inside it, mirroring a real bill hitting
+// a bank statement rather than an averaged/prorated monthly figure.
+function expandWeeklyCost(template, anchor, rangeStart, seriesEnd){
+  const WEEK_MS = 7*24*60*60*1000;
+  let cursor = anchor.getTime();
+  const rangeStartMs = rangeStart.getTime();
+  const seriesEndMs = seriesEnd.getTime();
+  if (cursor < rangeStartMs) {
+    cursor += Math.floor((rangeStartMs - cursor) / WEEK_MS) * WEEK_MS;
+    while (cursor < rangeStartMs) cursor += WEEK_MS;
+  }
+  const instances = [];
+  while (cursor <= seriesEndMs) {
+    const d = new Date(cursor);
+    const dateKey = toISO(d);
+    instances.push({ ...template, id: `${template.id}::${dateKey}`, date: dateKey });
+    cursor += WEEK_MS;
+  }
+  return instances;
+}
+function expandRecurringCost(template, from, to){
+  const anchor = new Date(template.date+'T00:00:00');
+  const today = new Date();
+  const rangeStart = from ? new Date(from+'T00:00:00') : anchor;
+  const rangeEnd = to ? new Date(to+'T00:00:00') : today;
+  const seriesEnd = (template.recurringEndDate && new Date(template.recurringEndDate+'T00:00:00') < rangeEnd)
+    ? new Date(template.recurringEndDate+'T00:00:00') : rangeEnd;
+  return template.recurringFrequency === 'weekly'
+    ? expandWeeklyCost(template, anchor, rangeStart, seriesEnd)
+    : expandMonthlyCost(template, anchor, rangeStart, seriesEnd);
 }
 function parseCostId(id){ const [realId, monthKey] = id.split('::'); return { realId, monthKey: monthKey||null }; }
 function costsInRange(from,to){
@@ -664,6 +689,8 @@ function openClientDetail(id){
             <option value="Initial">Initial</option>
             <option value="Installment">Installment</option>
             <option value="Renewal">Renewal</option>
+            <option value="Override">Override</option>
+            <option value="Chargeback">Chargeback</option>
           </select></div>
           <div><label>Amount ($)</label><input required type="number" step="0.01" name="amount" placeholder="850"></div>
           <div class="full" style="grid-column:1/-1;"><label>Date</label><input required type="date" name="date" value="${todayISO()}"></div>
@@ -683,7 +710,9 @@ function openClientDetail(id){
     ev.preventDefault();
     const f = new FormData(ev.target);
     c.commissionEntries = c.commissionEntries || [];
-    c.commissionEntries.push({ id: uid('ce'), type: f.get('type'), amount: Number(f.get('amount')), date: f.get('date') });
+    const type = f.get('type');
+    const amount = type === 'Chargeback' ? -Math.abs(Number(f.get('amount'))) : Number(f.get('amount'));
+    c.commissionEntries.push({ id: uid('ce'), type, amount, date: f.get('date') });
     recalcIssuePaidFYC(c);
     saveStore();
     say('Commission logged!');
@@ -756,8 +785,10 @@ function openEditCommEntryModal(entry, clientId){
           <option value="Initial" ${entry.type==='Initial'?'selected':''}>Initial</option>
           <option value="Installment" ${entry.type==='Installment'?'selected':''}>Installment</option>
           <option value="Renewal" ${entry.type==='Renewal'?'selected':''}>Renewal</option>
+          <option value="Override" ${entry.type==='Override'?'selected':''}>Override</option>
+          <option value="Chargeback" ${entry.type==='Chargeback'?'selected':''}>Chargeback</option>
         </select></div>
-        <div><label>Amount ($)</label><input required type="number" step="0.01" name="amount" value="${entry.amount}"></div>
+        <div><label>Amount ($)</label><input required type="number" step="0.01" name="amount" value="${Math.abs(entry.amount)}"></div>
         <div class="full" style="grid-column:1/-1;"><label>Date</label><input required type="date" name="date" value="${entry.date}"></div>
       </div>
       <div class="modal-actions">
@@ -771,7 +802,9 @@ function openEditCommEntryModal(entry, clientId){
   document.getElementById('editCommEntryForm').addEventListener('submit', (ev) => {
     ev.preventDefault();
     const f = new FormData(ev.target);
-    entry.type = f.get('type'); entry.amount = Number(f.get('amount')); entry.date = f.get('date');
+    entry.type = f.get('type');
+    entry.amount = entry.type === 'Chargeback' ? -Math.abs(Number(f.get('amount'))) : Number(f.get('amount'));
+    entry.date = f.get('date');
     const c = store.clients.find(x => x.id === clientId);
     recalcIssuePaidFYC(c);
     saveStore();
@@ -938,16 +971,19 @@ function openLogDayModal(){
 function renderBook(filterText, statusFilter){
   filterText = (filterText||'').toLowerCase();
   const range = computeDateRange(dateFilterState.book.key, dateFilterState.book.from, dateFilterState.book.to);
-  const inRange = clientsSubmittedInRange(range.from, range.to);
   const placedAll = store.clients.filter(c=>c.status==='active'||c.status==='lapsed');
   const lapsedCount = store.clients.filter(c=>c.status==='lapsed').length;
   const persistency = (placedAll.length) ? Math.round((placedAll.length-lapsedCount)/placedAll.length*100) : 100;
   const st = statement(range.from, range.to);
 
-  const filtered = inRange.filter(c => {
-    const matchesText = !filterText || c.name.toLowerCase().includes(filterText) || (c.email||'').includes(filterText);
+  const filtered = store.clients.filter(c => {
+    // A name/carrier search means "find this specific case," not "browse this range" —
+    // scoping it to the date filter too would make an existing client silently invisible.
+    // Only apply the date range when browsing without a search term.
+    const inRange = filterText || (c.dateSubmitted >= range.from && c.dateSubmitted <= range.to);
+    const matchesText = !filterText || c.name.toLowerCase().includes(filterText) || c.carrier.toLowerCase().includes(filterText);
     const matchesStatus = !statusFilter || c.status === statusFilter;
-    return matchesText && matchesStatus;
+    return inRange && matchesText && matchesStatus;
   }).sort((a,b)=>new Date(b.dateSubmitted)-new Date(a.dateSubmitted));
 
   mainInner.innerHTML = `
@@ -963,7 +999,7 @@ function renderBook(filterText, statusFilter){
       <div class="card"><div class="stat-label">Persistency</div><div class="stat-value">${persistency}%</div></div>
     </div>
     <div class="book-filters">
-      <input id="bookSearch" placeholder="Search name or email" value="${filterText}">
+      <input id="bookSearch" placeholder="Search client or carrier" value="${filterText}">
       <select id="bookStatus">
         <option value="">All statuses</option>
         <option value="pending" ${statusFilter==='pending'?'selected':''}>Pending</option>
@@ -1015,7 +1051,7 @@ function renderCosts(){
       <h2>All cost lines</h2>
       <p class="helptext" style="margin:-8px 0 14px;">Click a row to edit or delete it.</p>
       <table><thead><tr><th>Category</th><th>Description</th><th>Amount</th><th>Date</th></tr></thead>
-      <tbody>${[...rangeCosts].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(e=>`<tr class="row-clickable" onclick="openEditCostModal('${e.id}')"><td>${e.category}${e.isRecurring?' <span class="pill" style="margin-left:4px;" title="Recurring monthly">🔁</span>':''}</td><td>${e.description||''}</td><td>${fmt(e.amount)}</td><td>${fmtDateShort(e.date)}</td></tr>`).join('') || '<tr><td colspan="4" class="helptext">No costs logged in this range.</td></tr>'}</tbody></table>
+      <tbody>${[...rangeCosts].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(e=>`<tr class="row-clickable" onclick="openEditCostModal('${e.id}')"><td>${e.category}${e.isRecurring?` <span class="pill" style="margin-left:4px;" title="Recurring ${e.recurringFrequency==='weekly'?'weekly':'monthly'}">🔁</span>`:''}</td><td>${e.description||''}</td><td>${fmt(e.amount)}</td><td>${fmtDateShort(e.date)}</td></tr>`).join('') || '<tr><td colspan="4" class="helptext">No costs logged in this range.</td></tr>'}</tbody></table>
     </div>
   `;
   wireDateFilter('costs', renderCosts);
@@ -1028,10 +1064,12 @@ function openEditCostModal(id){
   const { realId } = parseCostId(id);
   const e = store.costs.find(x => x.id === realId); // the real template row we actually mutate
   if (!e) return;
-  const monthLabel = new Date(cached.date+'T00:00:00').toLocaleString(undefined, { month:'long', year:'numeric' });
+  const isWeekly = e.recurringFrequency === 'weekly';
+  const occurrenceLabel = isWeekly ? fmtDate(cached.date) : new Date(cached.date+'T00:00:00').toLocaleString(undefined, { month:'long', year:'numeric' });
+  const freqNoun = isWeekly ? 'weekly' : 'monthly';
   openModal(`
     <div class="modal-head"><h2>Edit cost</h2><button class="modal-close" onclick="closeModal()">×</button></div>
-    ${e.isRecurring ? `<p class="helptext" style="margin-top:-4px;">🔁 Recurring monthly — changes here apply to every month of this series, past and future. This is the ${monthLabel} instance.</p>` : ''}
+    ${e.isRecurring ? `<p class="helptext" style="margin-top:-4px;">🔁 Recurring ${freqNoun} — changes here apply to every occurrence of this series, past and future. This is the ${occurrenceLabel} instance.</p>` : ''}
     <form id="editCostForm">
       <div class="detail-grid">
         <div><label>Category</label><select name="category">${COST_CATEGORIES.map(c=>`<option value="${c.key}" ${c.key===e.category?'selected':''}>${c.key}</option>`).join('')}</select></div>
@@ -1039,7 +1077,8 @@ function openEditCostModal(id){
         <div class="full ${e.category==='Leads'?'':'section-hidden'}" id="editLeadVendorField" style="grid-column:1/-1;"><label>Lead Vendor</label><input name="vendor" value="${e.vendor||''}" placeholder="e.g. Facebook Leads"></div>
         <div class="full" style="grid-column:1/-1;"><label>Frequency</label><select name="frequency" ${e.isRecurring ? 'disabled' : ''}>
           <option value="onetime" ${!e.isRecurring?'selected':''}>One-time charge</option>
-          <option value="recurring" ${e.isRecurring?'selected':''}>Recurring monthly charge</option>
+          <option value="recurring_monthly" ${e.isRecurring && !isWeekly?'selected':''}>Recurring monthly charge</option>
+          <option value="recurring_weekly" ${e.isRecurring && isWeekly?'selected':''}>Recurring weekly charge</option>
         </select>
         ${e.isRecurring ? `<p class="helptext" style="margin:4px 0 0;">To stop or remove this recurring series, use the buttons below instead.</p>` : ''}
         </div>
@@ -1048,7 +1087,7 @@ function openEditCostModal(id){
       </div>
       <div class="modal-actions">
         <button class="primary" type="submit">Save</button>
-        ${e.isRecurring ? `<button class="ghost" type="button" id="stopRecurringBtn">Stop recurring after ${monthLabel}</button>` : ''}
+        ${e.isRecurring ? `<button class="ghost" type="button" id="stopRecurringBtn">Stop recurring after ${occurrenceLabel}</button>` : ''}
         <button class="danger" type="button" id="deleteCostBtn">${e.isRecurring ? 'Delete entire series' : 'Delete'}</button>
         <button class="ghost" type="button" onclick="closeModal()">Cancel</button>
       </div>
@@ -1065,7 +1104,10 @@ function openEditCostModal(id){
     e.category = f.get('category'); e.amount = Number(f.get('amount'));
     e.vendor = f.get('category') === 'Leads' ? (f.get('vendor') || null) : null;
     e.date = f.get('date'); e.description = f.get('description') || '';
-    if (f.get('frequency') && !e.isRecurring) e.isRecurring = f.get('frequency') === 'recurring';
+    if (f.get('frequency') && !e.isRecurring) {
+      e.isRecurring = f.get('frequency') !== 'onetime';
+      e.recurringFrequency = f.get('frequency') === 'recurring_weekly' ? 'weekly' : 'monthly';
+    }
     saveStore();
     closeModal();
     say("Cost updated.");
@@ -1073,7 +1115,7 @@ function openEditCostModal(id){
   });
   const stopBtn = document.getElementById('stopRecurringBtn');
   if (stopBtn) stopBtn.onclick = () => {
-    if (!confirm(`Stop this recurring cost after ${monthLabel}? Past months (including this one) keep showing it; ${monthLabel} is the last month it'll be included.`)) return;
+    if (!confirm(`Stop this recurring cost after ${occurrenceLabel}? Past occurrences (including this one) keep showing it; ${occurrenceLabel} is the last one it'll be included.`)) return;
     e.recurringEndDate = cached.date;
     saveStore();
     closeModal();
@@ -1082,7 +1124,7 @@ function openEditCostModal(id){
   };
   document.getElementById('deleteCostBtn').onclick = () => {
     const msg = e.isRecurring
-      ? 'Delete this ENTIRE recurring series? This removes it from every month, including past ones — not just going forward.'
+      ? 'Delete this ENTIRE recurring series? This removes it from every occurrence, including past ones — not just going forward.'
       : 'Delete this cost line?';
     if (!confirm(msg)) return;
     store.costs = store.costs.filter(x => x.id !== realId);
@@ -1102,18 +1144,19 @@ function openAddCostModal(){
         <div class="full" id="addLeadVendorField" style="grid-column:1/-1;"><label>Lead Vendor</label><input name="vendor" placeholder="e.g. Facebook Leads"></div>
         <div class="full" style="grid-column:1/-1;"><label>Frequency</label><select name="frequency">
           <option value="onetime">One-time charge</option>
-          <option value="recurring">Recurring monthly charge</option>
+          <option value="recurring_monthly">Recurring monthly charge</option>
+          <option value="recurring_weekly">Recurring weekly charge</option>
         </select></div>
         <div class="full" style="grid-column:1/-1;"><label id="addCostDateLabel">Date</label><input required type="date" name="date" value="${todayISO()}"></div>
         <div class="full" style="grid-column:1/-1;"><label>Description</label><input name="description" placeholder="Optional"></div>
       </div>
-      <p class="helptext full" id="recurringNote" style="display:none; grid-column:1/-1; margin:-4px 0 0;">This amount will automatically be included in every month's costs from this date forward, until you stop it — no need to re-enter it each month.</p>
+      <p class="helptext full" id="recurringNote" style="display:none; grid-column:1/-1; margin:-4px 0 0;">This amount will automatically be included every time it recurs from this date forward, until you stop it — no need to re-enter it each time.</p>
       <div class="modal-actions"><button class="primary" type="submit">Add Cost</button><button class="ghost" type="button" onclick="closeModal()">Cancel</button></div>
     </form>
   `);
   const freqSelect = document.querySelector('#addCostForm [name="frequency"]');
   freqSelect.addEventListener('change', () => {
-    const recurring = freqSelect.value === 'recurring';
+    const recurring = freqSelect.value !== 'onetime';
     document.getElementById('recurringNote').style.display = recurring ? '' : 'none';
     document.getElementById('addCostDateLabel').textContent = recurring ? 'Starting date' : 'Date';
   });
@@ -1128,7 +1171,9 @@ function openAddCostModal(){
     store.costs.unshift({
       id: uid('e'), date: f.get('date'), amount: Number(f.get('amount')), category: f.get('category'),
       vendor: f.get('category') === 'Leads' ? (f.get('vendor') || null) : null,
-      description: f.get('description')||'', isRecurring: f.get('frequency') === 'recurring', recurringEndDate: null,
+      description: f.get('description')||'', isRecurring: f.get('frequency') !== 'onetime',
+      recurringFrequency: f.get('frequency') === 'recurring_weekly' ? 'weekly' : 'monthly',
+      recurringEndDate: null,
     });
     saveStore();
     closeModal();
