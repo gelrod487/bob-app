@@ -76,7 +76,7 @@ function uid(prefix){ return prefix+'_'+Math.random().toString(36).slice(2,9); }
    local to this browser, seeded once with ~14 months of sample
    history so every report/filter has something real to show.
    ============================================================ */
-const STORE_KEY = 'bob_demo_store_v9';
+const STORE_KEY = 'bob_demo_store_v10';
 const COST_CATEGORIES = [
   { key:'Leads',      color:'#7A3B4A' },
   { key:'Marketing',      color:'#A63D40' },
@@ -172,7 +172,14 @@ function seedStore(){
   // plausible defaults to show what that panel looks like.
   const teamGoals = { issuedPaidTarget: 85000, newWritersTarget: 3, headcountTarget: 12 };
 
-  return { clients, activity, costs, goals, teamGoals, suggestions: [], calcContractLevel: 100, calcAnnuityTier: 'green' };
+  // A few example draws so the Owner Draws panel isn't empty on first look — cash taken
+  // out of already-earned profit, never netted against Net Profit (see bob-schema.md).
+  const ownerDraws = [
+    { id: uid('od'), amount: 2000, drawDate: monthsAgoISO(2, 1), notes: '' },
+    { id: uid('od'), amount: 1500, drawDate: monthsAgoISO(1, 1), notes: '' },
+  ];
+
+  return { clients, activity, costs, goals, teamGoals, ownerDraws, suggestions: [], calcContractLevel: 100, calcAnnuityTier: 'green' };
 }
 function loadStore(){
   try {
@@ -1606,6 +1613,8 @@ function renderProfit(){
 
   const stats = monthlyStats(trendMonths);
   const commEntries = allCommissionEntriesInRange(range.from, range.to);
+  const drawsRange = (store.ownerDraws||[]).filter(d => d.drawDate >= range.from && d.drawDate <= range.to);
+  const drawsTotal = drawsRange.reduce((s,d)=>s+Number(d.amount),0);
 
   mainInner.innerHTML = `
     <div class="page-header"><div><div class="page-eyebrow">Profit</div><h1>Financial reporting</h1></div></div>
@@ -1623,6 +1632,23 @@ function renderProfit(){
           <tr class="statement-total"><td>Net Profit</td><td class="${st.netProfit>=0?'pos':'neg'}">${fmt(st.netProfit)}</td></tr>
           <tr><td>Pending (not yet paid)</td><td style="color:var(--gold);">${fmt(st.pending)}</td></tr>
         </tbody>
+      </table>
+    </div>
+
+    <div class="panel">
+      <h2>Owner Draws</h2>
+      <p class="helptext" style="margin:-8px 0 14px;">Cash you've taken out of already-earned profit — not a business expense, and never subtracted from Net Profit above. Tracked here purely for your own visibility into what's actually left in the business.</p>
+      <div class="grid" style="margin-bottom:18px;">
+        <div class="card"><div class="stat-label">Draws this period</div><div class="stat-value">${fmt(drawsTotal)}</div></div>
+      </div>
+      <form class="entry" id="drawForm">
+        <div><label>Amount ($)</label><input required type="number" step="0.01" name="amount" placeholder="1500"></div>
+        <div><label>Date</label><input required type="date" name="date"></div>
+        <div class="full"><label>Notes</label><input name="notes" placeholder="Optional"></div>
+        <div class="full"><button class="primary" type="submit">Log Draw</button></div>
+      </form>
+      <table style="margin-top:18px;"><thead><tr><th>Amount</th><th>Date</th><th>Notes</th></tr></thead>
+        <tbody>${[...drawsRange].sort((a,b)=>new Date(b.drawDate)-new Date(a.drawDate)).map(d=>`<tr class="row-clickable" data-draw-id="${d.id}"><td>${fmt(d.amount)}</td><td>${fmtDate(d.drawDate)}</td><td>${d.notes||''}</td></tr>`).join('') || '<tr><td colspan="3" class="helptext">No draws in this range.</td></tr>'}</tbody>
       </table>
     </div>
 
@@ -1721,6 +1747,55 @@ function renderProfit(){
     say('Commission logged!');
     renderProfit();
   });
+
+  document.querySelectorAll('[data-draw-id]').forEach(row => {
+    row.onclick = () => openEditDrawModal(row.dataset.drawId);
+  });
+  document.getElementById('drawForm').addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    const f = new FormData(ev.target);
+    store.ownerDraws = store.ownerDraws || [];
+    store.ownerDraws.push({ id: uid('od'), amount: Number(f.get('amount')), drawDate: f.get('date'), notes: f.get('notes') || '' });
+    saveStore();
+    say('Draw logged!');
+    renderProfit();
+  });
+}
+function openEditDrawModal(id){
+  const d = (store.ownerDraws||[]).find(x => x.id === id);
+  if (!d) return;
+  openModal(`
+    <div class="modal-head"><h2>Edit owner draw</h2><button class="modal-close" onclick="closeModal()">×</button></div>
+    <form id="editDrawForm">
+      <div class="detail-grid">
+        <div><label>Amount ($)</label><input required type="number" step="0.01" name="amount" value="${d.amount}"></div>
+        <div><label>Date</label><input required type="date" name="date" value="${d.drawDate}"></div>
+        <div class="full" style="grid-column:1/-1;"><label>Notes</label><input name="notes" value="${d.notes||''}" placeholder="Optional"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="primary" type="submit">Save</button>
+        <button class="danger" type="button" id="deleteDrawBtn">Delete</button>
+        <button class="ghost" type="button" onclick="closeModal()">Cancel</button>
+      </div>
+    </form>
+  `);
+  document.getElementById('editDrawForm').addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    const f = new FormData(ev.target);
+    d.amount = Number(f.get('amount')); d.drawDate = f.get('date'); d.notes = f.get('notes') || '';
+    saveStore();
+    closeModal();
+    say('Owner draw updated.');
+    renderProfit();
+  });
+  document.getElementById('deleteDrawBtn').onclick = () => {
+    if (!confirm('Delete this owner draw? This can\'t be undone.')) return;
+    store.ownerDraws = store.ownerDraws.filter(x => x.id !== id);
+    saveStore();
+    closeModal();
+    say('Owner draw deleted.');
+    renderProfit();
+  };
 }
 
 /* ================= COMMISSION CALCULATOR ================= */
