@@ -1,4 +1,7 @@
-require('dotenv').config();
+// BOB_ENV_FILE is set only by `npm run dev` (-> .env.dev). Production (Render) never sets
+// it and keeps reading real environment variables, with .env as the plain-local fallback.
+require('dotenv').config({ path: process.env.BOB_ENV_FILE || '.env' });
+if (process.env.BOB_ENV_FILE) require('./lib/devGuard').assertDevEnv();
 const path = require('path');
 const express = require('express');
 
@@ -10,6 +13,19 @@ const handleStripeWebhook = require('./routes/billingWebhook');
 const asyncHandler = require('./middleware/asyncHandler');
 
 const app = express();
+
+// Dev only: the browser's Supabase client normally has the production project's URL/key
+// baked into public/js/supabaseClient.js. When running against the dev project, serve a
+// version pointed at the dev project instead (registered before express.static so it wins).
+if (process.env.BOB_ENV_FILE) {
+  app.get('/js/supabaseClient.js', (req, res) => {
+    res.type('application/javascript').send(
+      `const SUPABASE_URL = ${JSON.stringify(process.env.SUPABASE_URL.trim())};\n` +
+      `const SUPABASE_PUBLISHABLE_KEY = ${JSON.stringify(process.env.SUPABASE_PUBLISHABLE_KEY.trim())};\n` +
+      'const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);\n',
+    );
+  });
+}
 
 // Stripe needs the exact raw request body to verify its signature, so this is registered
 // BEFORE express.json() below and matched first — it never goes through the JSON parser
@@ -69,6 +85,11 @@ app.get('/api/dashboard', requireProducer, requireActiveOrTrial, asyncHandler(as
 // crashing the process (this is what a bad Stripe/Prisma call used to do — see
 // src/middleware/asyncHandler.js).
 app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
+  // A deliberate client error (e.g. an admin-route conflict) opts in with status < 500 +
+  // expose=true, so its message reaches the caller instead of the generic 500 below.
+  if (err.expose === true && err.status && err.status < 500) {
+    return res.status(err.status).json({ error: err.message });
+  }
   console.error(err);
   res.status(500).json({ error: 'Something went wrong on our end.' });
 });

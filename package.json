@@ -1,18 +1,20 @@
 {
   "name": "bob-backend",
   "version": "0.1.0",
-  "description": "BOB — Book of Business. Backend API scaffold generated from bob-schema.md (v6).",
+  "description": "BOB \u2014 Book of Business. Backend API scaffold generated from bob-schema.md (v6).",
   "main": "src/server.js",
   "type": "commonjs",
   "engines": {
     "node": ">=20"
   },
   "scripts": {
-    "dev": "node src/server.js",
+    "dev": "BOB_ENV_FILE=.env.dev node src/server.js",
     "start": "node src/server.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev --name init",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "dev:migrate": "BOB_ENV_FILE=.env.dev node scripts/assert-dev-env.js && node --env-file=.env.dev node_modules/.bin/prisma migrate deploy",
+    "dev:password": "node scripts/set-dev-db-password.js"
   },
   "dependencies": {
     "@prisma/client": "^5.19.0",

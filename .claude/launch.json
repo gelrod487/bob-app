@@ -4,7 +4,10 @@
     {
       "name": "bob-dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["start"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "port": 4000
     }
   ]
