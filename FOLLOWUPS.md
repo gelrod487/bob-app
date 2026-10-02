@@ -18,3 +18,8 @@ Running list of deferred action items — things that are deliberate "not now" d
 
 - [x] Add `sslmode=require` to Render's environment variables for `DATABASE_URL` and
       `DIRECT_URL` — confirmed live in production 2026-09-30.
+- [x] **Prisma migrations couldn't rebuild the database from scratch** — fixed 2026-10-02 with
+      `20260928999999_prereq_hand_made_indexes`, which creates production's hand-made `idx_*`
+      indexes only where they're missing (a no-op in production). Verified by replaying all 21
+      migrations into an empty schema: no errors, and the result diffed clean against
+      `schema.prisma`. Takes effect in production on the next deploy (it will do nothing there).
