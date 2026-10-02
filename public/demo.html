@@ -547,7 +547,8 @@ function monthlyStats(count){
     const gross = grossFYCInRange(m.start,m.end);
     const cb = chargebacksInRange(m.start,m.end);
     const cost = costsTotalInRange(m.start,m.end);
-    return { label:m.label, dials:act.dials, sales:act.sales, gross, cb, cost, net: gross-cb-cost };
+    const draw = (store.ownerDraws||[]).filter(d=>d.drawDate>=m.start && d.drawDate<=m.end).reduce((s,d)=>s+Number(d.amount),0);
+    return { label:m.label, dials:act.dials, sales:act.sales, gross, cb, cost, net: gross-cb-cost, draw };
   });
 }
 
@@ -1650,7 +1651,9 @@ function renderProfit(){
       <p class="helptext" style="margin:-8px 0 14px;">Cash you've taken out of already-earned profit — not a business expense, and never subtracted from Net Profit above. Tracked here purely for your own visibility into what's actually left in the business.</p>
       <div class="grid" style="margin-bottom:18px;">
         <div class="card"><div class="stat-label">Draws this period</div><div class="stat-value">${fmt(drawsTotal)}</div></div>
+        <div class="card"><div class="stat-label">Recommended tax set-aside (30%)</div><div class="stat-value" style="color:var(--gold)">${fmt(drawsTotal*0.3)}</div></div>
       </div>
+      <p class="helptext" style="margin:-8px 0 14px;">A draw is personal income to you, and taxes aren't withheld from it the way a paycheck would — a common rule of thumb is to set aside 25–35% for federal/state taxes so it's not a surprise later. This isn't tax advice; check with your accountant for your actual rate.</p>
       <form class="entry" id="drawForm">
         <div><label>Amount ($)</label><input required type="number" step="0.01" name="amount" placeholder="1500"></div>
         <div><label>Date</label><input required type="date" name="date"></div>
@@ -1659,6 +1662,10 @@ function renderProfit(){
       </form>
       <table style="margin-top:18px;"><thead><tr><th>Amount</th><th>Date</th><th>Notes</th></tr></thead>
         <tbody>${[...drawsRange].sort((a,b)=>new Date(b.drawDate)-new Date(a.drawDate)).map(d=>`<tr class="row-clickable" data-draw-id="${d.id}"><td>${fmt(d.amount)}</td><td>${fmtDate(d.drawDate)}</td><td>${d.notes||''}</td></tr>`).join('') || '<tr><td colspan="3" class="helptext">No draws in this range.</td></tr>'}</tbody>
+      </table>
+      <h3 style="margin:22px 0 10px; font-size:.92rem;">Draws by month</h3>
+      <table><thead><tr><th>Month</th><th>Draws</th><th>Recommended tax set-aside (30%)</th></tr></thead>
+        <tbody>${stats.slice().reverse().map(m=>`<tr><td>${m.label}</td><td>${fmt(m.draw)}</td><td style="color:var(--gold)">${fmt(m.draw*0.3)}</td></tr>`).join('')}</tbody>
       </table>
     </div>
 

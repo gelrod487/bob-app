@@ -451,7 +451,11 @@ async function monthlySeries(){
     const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
     months.push({ key: `${d.getFullYear()}-${d.getMonth()}`, label: d.toLocaleString(undefined,{month:'short'}) });
   }
-  const monthKey = (dateStr) => { const d = new Date(dateStr); return `${d.getFullYear()}-${d.getMonth()}`; };
+  // Reads the Y/M straight off the ISO string instead of going through a local-timezone
+  // Date object — a UTC-midnight timestamp (e.g. "2026-10-01T00:00:00.000Z") rolls back
+  // to the previous day, and therefore the previous MONTH on the 1st, in any negative-UTC
+  // timezone (all of the Americas) once `new Date(...).getMonth()` re-localizes it.
+  const monthKey = (dateStr) => { const [y,m] = dateStr.slice(0,7).split('-'); return `${y}-${Number(m)-1}`; };
   const data = months.map(m => {
     const rev = commissions.filter(c => monthKey(c.entryDate) === m.key).reduce((s,c)=>s+Number(c.amount),0);
     const exp = expenses.filter(e => monthKey(e.expenseDate) === m.key).reduce((s,e)=>s+Number(e.amount),0);
@@ -1344,8 +1348,8 @@ function openEditCommissionModal(id){
   };
 }
 async function monthlyStatsReal(count){
-  const [activity, expenses, commissions] = await Promise.all([
-    apiFetch('/api/activity'), apiFetch('/api/expenses'), apiFetch('/api/commission-entries'),
+  const [activity, expenses, commissions, draws] = await Promise.all([
+    apiFetch('/api/activity'), apiFetch('/api/expenses'), apiFetch('/api/commission-entries'), apiFetch('/api/owner-draws'),
   ]);
   const months = [];
   const now = new Date();
@@ -1353,7 +1357,8 @@ async function monthlyStatsReal(count){
     const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
     months.push({ key: `${d.getFullYear()}-${d.getMonth()}`, label: d.toLocaleString(undefined,{month:'short', year: count>12?'2-digit':undefined}) });
   }
-  const monthKey = (dateStr) => { const d = new Date(dateStr); return `${d.getFullYear()}-${d.getMonth()}`; };
+  // See monthlySeries's identical monthKey for why this avoids `new Date(...).getMonth()`.
+  const monthKey = (dateStr) => { const [y,m] = dateStr.slice(0,7).split('-'); return `${y}-${Number(m)-1}`; };
   return months.map(m => {
     const rows = activity.filter(a => monthKey(a.date) === m.key);
     const dials = rows.reduce((s,a)=>s+a.dials,0);
@@ -1362,7 +1367,8 @@ async function monthlyStatsReal(count){
     const gross = monthCommissions.filter(c=>['advance','installment','additional','other'].includes(c.entryType)).reduce((s,c)=>s+Number(c.amount),0);
     const cb = Math.abs(monthCommissions.filter(c=>c.entryType==='chargeback').reduce((s,c)=>s+Number(c.amount),0));
     const cost = expenses.filter(e => monthKey(e.expenseDate) === m.key).reduce((s,e)=>s+Number(e.amount),0);
-    return { label: m.label, dials, sales, gross, cb, cost, net: gross - cb - cost };
+    const draw = draws.filter(d2 => monthKey(d2.drawDate) === m.key).reduce((s,d2)=>s+Number(d2.amount),0);
+    return { label: m.label, dials, sales, gross, cb, cost, net: gross - cb - cost, draw };
   });
 }
 async function renderProfit(){
@@ -1436,7 +1442,9 @@ async function renderProfit(){
       <p class="helptext" style="margin:-8px 0 14px;">Cash you've taken out of already-earned profit — not a business expense, and never subtracted from Net Profit above. Tracked here purely for your own visibility into what's actually left in the business.</p>
       <div class="grid" style="margin-bottom:18px;">
         <div class="card"><div class="stat-label">Draws this period</div><div class="stat-value">${fmt(drawsTotal)}</div></div>
+        <div class="card"><div class="stat-label">Recommended tax set-aside (30%)</div><div class="stat-value" style="color:var(--gold)">${fmt(drawsTotal*0.3)}</div></div>
       </div>
+      <p class="helptext" style="margin:-8px 0 14px;">A draw is personal income to you, and taxes aren't withheld from it the way a paycheck would — a common rule of thumb is to set aside 25–35% for federal/state taxes so it's not a surprise later. This isn't tax advice; check with your accountant for your actual rate.</p>
       <form class="entry" id="drawForm">
         <div><label>Amount ($)</label><input required type="number" step="0.01" name="amount" placeholder="1500"></div>
         <div><label>Date</label><input required type="date" name="date"></div>
@@ -1446,6 +1454,10 @@ async function renderProfit(){
       </form>
       <table style="margin-top:18px;"><thead><tr><th>Amount</th><th>Date</th><th>Notes</th></tr></thead>
         <tbody>${draws.map(d=>`<tr class="row-clickable" onclick="openEditDrawModal('${d.id}')"><td>${fmt(d.amount)}</td><td>${fmtDate(d.drawDate)}</td><td>${escapeHtml(d.notes||'')}</td></tr>`).join('') || '<tr><td colspan="3" class="helptext">No draws in this range.</td></tr>'}</tbody>
+      </table>
+      <h3 style="margin:22px 0 10px; font-size:.92rem;">Draws by month</h3>
+      <table><thead><tr><th>Month</th><th>Draws</th><th>Recommended tax set-aside (30%)</th></tr></thead>
+        <tbody>${stats.slice().reverse().map(m=>`<tr><td>${m.label}</td><td>${fmt(m.draw)}</td><td style="color:var(--gold)">${fmt(m.draw*0.3)}</td></tr>`).join('')}</tbody>
       </table>
     </div>
 
