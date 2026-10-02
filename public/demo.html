@@ -1604,8 +1604,11 @@ function renderProfit(){
   const allCB = chargebacksInRange('2000-01-01', todayISO());
   const allCosts = costsTotalInRange('2000-01-01', todayISO());
   const allNet = (allGross - allCB) - allCosts;
-  const profitMargin = allGross ? (allNet/allGross*100) : 0;
+  const netProfitPct = allGross ? (allNet/allGross*100) : 0;
   const chargebackRatio = allGross ? (allCB/allGross*100) : 0;
+  const leadSpendAllTime = costsInRange('2000-01-01', todayISO()).filter(c=>c.category==='Leads').reduce((s,c)=>s+Number(c.amount),0);
+  const grossMarginDollar = allGross - leadSpendAllTime;
+  const grossMarginPct = allGross ? (grossMarginDollar/allGross*100) : 0;
   const oneYearAgo = daysAgoISO(365);
   const matured = store.clients.filter(c => (c.status==='active'||c.status==='lapsed') && c.issueDate <= oneYearAgo);
   const maturedRetained = matured.filter(c => c.status==='active').length;
@@ -1683,7 +1686,9 @@ function renderProfit(){
       <p class="helptext" style="margin:-8px 0 14px;">Whole book, all time — not affected by the date filter above</p>
       <table class="statement-table">
         <tbody>
-          <tr><td>Profit margin on gross FYC</td><td>${profitMargin.toFixed(1)}%</td></tr>
+          <tr><td>Gross Margin</td><td class="${grossMarginDollar>=0?'pos':'neg'}">${fmt(grossMarginDollar)}</td></tr>
+          <tr><td>Gross Margin %</td><td>${grossMarginPct.toFixed(1)}%</td></tr>
+          <tr><td>Net Profit %</td><td>${netProfitPct.toFixed(1)}%</td></tr>
           <tr><td>Chargeback ratio</td><td class="${chargebackRatio>10?'neg':''}">${chargebackRatio.toFixed(1)}%</td></tr>
           <tr><td>Persistency (12+ months on the books)</td><td class="pos">${persistency}%</td></tr>
         </tbody>
