@@ -14,7 +14,9 @@ router.get('/', asyncHandler(async (req, res) => {
 
   const producer = await prisma.producer.findUnique({ where: { id: req.producerId } });
   const endsAt = trialEndsAt(producer);
-  const isAdmin = isAdminEmail(req.supabaseUser.email);
+  // In support view the admin is looking at someone else's account, so report that
+  // producer's real state: not-an-admin, and their true trial status.
+  const isAdmin = isAdminEmail(req.supabaseUser.email) && !req.supportView;
   // Admin (internal team) accounts are exempt from the trial/subscription gate entirely —
   // see requireActiveOrTrial. Computed here too so this field is self-consistent on its own,
   // not just correct because the frontend happens to also check isAdmin separately.
@@ -27,7 +29,21 @@ router.get('/', asyncHandler(async (req, res) => {
     ? await prisma.agency.findUnique({ where: { ownerId: producer.id } })
     : null;
 
+  // The one site-wide announcement to show right now, if any (newest active one whose
+  // optional start/end window includes this moment). Managed in the admin console.
+  const now = new Date();
+  const announcement = await prisma.announcement.findFirst({
+    where: {
+      active: true,
+      AND: [{ OR: [{ startsAt: null }, { startsAt: { lte: now } }] }, { OR: [{ endsAt: null }, { endsAt: { gte: now } }] }],
+    },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true, message: true, level: true },
+  });
+
   res.json({
+    announcement,
+    supportView: !!req.supportView,
     producer: {
       id: producer.id,
       name: producer.name,

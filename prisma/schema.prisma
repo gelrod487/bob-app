@@ -110,6 +110,21 @@ model AuditLog {
   @@map("audit_log")
 }
 
+// A site-wide message shown as a dismissible banner at the top of the app (see
+// GET /api/me and the notice bar in app.html). At most one shows at a time: the newest
+// active announcement whose start/end window (both optional) includes right now.
+model Announcement {
+  id        String    @id @default(uuid())
+  message   String
+  level     String    @default("info") // 'info' | 'warning'
+  active    Boolean   @default(true)
+  startsAt  DateTime? @map("starts_at")
+  endsAt    DateTime? @map("ends_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@map("announcement")
+}
+
 // A producer's feature request / bug report / general feedback — private between the
 // submitting producer and BOB's own team (gated by requireAdmin, not visible to other
 // producers). See the Feedback tab in app.html and the Suggestions panel in admin.html.

@@ -433,3 +433,11 @@ footer.home-footer a{display:block; color:var(--ink-soft); text-decoration:none;
   .bobjr-panel{ right:16px; left:16px; width:auto; bottom:84px; }
   .bobjr-toggle{ right:16px; bottom:16px; }
 }
+
+/* Site-wide notices above the page (announcements, and the admin read-only support view) */
+.notice-bar{display:flex; align-items:center; gap:12px; padding:10px 18px; font-size:.88rem; font-weight:600;}
+.notice-bar .notice-text{flex:1;}
+.notice-bar button{background:none; border:1px solid currentColor; color:inherit; border-radius:8px; padding:4px 12px; font-weight:700; cursor:pointer; font-size:.8rem;}
+.notice-bar.info{background:var(--panel-alt); color:var(--ink); border-bottom:1px solid var(--line);}
+.notice-bar.warning{background:var(--amber-bg); color:var(--amber);}
+.notice-bar.support{background:var(--red-bg); color:var(--red);}

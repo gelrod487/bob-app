@@ -44,6 +44,7 @@
   </div>
 
   <div class="main-area">
+    <div id="noticeBar"></div>
     <div class="main-inner" id="mainInner"></div>
   </div>
 </div>
@@ -283,12 +284,44 @@ document.querySelectorAll('#sidebarNav button, .sidebar-footer button[data-page]
 document.getElementById('logoutBtn').onclick = async () => { await supabaseClient.auth.signOut(); window.location.href = '/login.html'; };
 
 /* ---- boot ---- */
+// Banners above every page: the admin read-only support view, and site-wide announcements
+// (managed in the admin console, delivered by GET /api/me).
+function renderNotices(meRes){
+  const bar = document.getElementById('noticeBar');
+  const parts = [];
+  if (meRes.supportView) {
+    parts.push(`<div class="notice-bar support"><span class="notice-text">Support view — read-only. You're looking at ${escapeHtml(meRes.producer.name)}'s account (${escapeHtml(meRes.producer.email)}). Nothing done here can change their data.</span><button type="button" id="exitSupportBtn">Exit</button></div>`);
+  }
+  const a = meRes.announcement;
+  let dismissed = null;
+  try { dismissed = localStorage.getItem('bobDismissedAnnouncement'); } catch (e) { /* storage blocked */ }
+  if (a && a.id !== dismissed) {
+    parts.push(`<div class="notice-bar ${a.level === 'warning' ? 'warning' : 'info'}" id="announcementBar"><span class="notice-text">${escapeHtml(a.message)}</span><button type="button" id="dismissAnnouncementBtn">Dismiss</button></div>`);
+  }
+  bar.innerHTML = parts.join('');
+  const exit = document.getElementById('exitSupportBtn');
+  if (exit) exit.onclick = () => { try { sessionStorage.removeItem('supportAs'); } catch (e) {} window.location.href = '/admin.html'; };
+  const dismiss = document.getElementById('dismissAnnouncementBtn');
+  if (dismiss) dismiss.onclick = () => {
+    // In support view the admin isn't the one reading it, so don't record a dismissal for them.
+    if (!meRes.supportView) { try { localStorage.setItem('bobDismissedAnnouncement', a.id); } catch (e) {} }
+    document.getElementById('announcementBar').remove();
+  };
+}
+
 (async function init(){
+  // "View as user" from the admin console opens /app.html?supportAs=<producerId> in a new tab.
+  const supportParam = new URLSearchParams(location.search).get('supportAs');
+  if (supportParam) {
+    try { sessionStorage.setItem('supportAs', supportParam); } catch (e) {}
+    history.replaceState(null, '', '/app.html');
+  }
   const { data: { session } } = await supabaseClient.auth.getSession();
   if (!session) { window.location.href = '/login.html'; return; }
   const meRes = await apiFetch('/api/me');
   if (!meRes.producer) { window.location.href = '/login.html'; return; }
   me = meRes.producer;
+  renderNotices(meRes);
 
   const statusPill = document.getElementById('sidebarStatusPill');
   statusPill.textContent = me.subscriptionStatus;

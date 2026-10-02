@@ -7,11 +7,18 @@ async function apiFetch(path, { method = 'GET', body } = {}) {
     throw new Error('No active session.');
   }
 
+  // Set only in a tab opened from the admin console's "View as user" (sessionStorage is
+  // per-tab, so the admin's other tabs are unaffected). The server honors it for admin
+  // accounts only and refuses every non-GET request while it's present.
+  let supportAs = null;
+  try { supportAs = sessionStorage.getItem('supportAs'); } catch (e) { /* storage blocked */ }
+
   const res = await fetch(path, {
     method,
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${session.access_token}`,
+      ...(supportAs ? { 'X-Support-Producer-Id': supportAs } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
   });

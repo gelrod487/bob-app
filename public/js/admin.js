@@ -125,12 +125,23 @@ async function openCustomer(id){
         <textarea id="custNotes" rows="3" style="width:100%;">${escapeHtml(p.adminNotes)}</textarea>
       </div>
     </div>
+    <h3 style="margin:18px 0 10px; font-size:.95rem;">Billing (live from Stripe)</h3>
+    <div id="custBilling"><button class="ghost" type="button" id="loadBilling">Check Stripe</button></div>
+
     <div class="modal-actions">
       <button class="primary" type="button" id="saveCust">Save changes</button>
+      <button class="ghost" type="button" id="viewAsCust" title="Opens their account in a new tab, read-only">View as this user (read-only)</button>
       <button class="ghost" type="button" id="cancelCust">Close</button>
     </div>
     <div class="errortext" id="custError"></div>
   `, { wide: true });
+  document.getElementById('viewAsCust').onclick = () => window.open(`/app.html?supportAs=${encodeURIComponent(id)}`, '_blank');
+  document.getElementById('loadBilling').onclick = async () => {
+    const box = document.getElementById('custBilling');
+    box.innerHTML = '<p class="helptext">Asking Stripe…</p>';
+    try { box.innerHTML = renderBillingSummary(await apiFetch(`/api/admin/billing/producer/${encodeURIComponent(id)}`)); }
+    catch (err) { box.innerHTML = `<p class="errortext">${escapeHtml(err.message)}</p>`; }
+  };
 
   const errEl = document.getElementById('custError');
   const send = async (body) => {
@@ -306,8 +317,151 @@ async function renderAudit(){
   document.getElementById('auditNext').onclick = () => { auditState.page++; renderAudit(); };
 }
 
+/* ================= OVERVIEW ================= */
+function statCard(label, value, sub){
+  return `<div class="card"><div class="stat-label">${escapeHtml(label)}</div><div class="stat-value">${escapeHtml(value)}</div>${sub ? `<div class="stat-sub">${escapeHtml(sub)}</div>` : ''}</div>`;
+}
+function customerLink(p){
+  return `<a href="#" data-open="${escapeHtml(p.id)}">${escapeHtml(p.name)}</a><br><span class="helptext">${escapeHtml(p.email)}</span>`;
+}
+async function renderOverview(){
+  const o = await apiFetch('/api/admin/overview');
+  const t = o.totals;
+  const maxWeek = Math.max(1, ...o.signupsByWeek.map((w) => w.count));
+  tabBody.innerHTML = `
+    <div class="grid" style="margin-bottom:18px;">
+      ${statCard('Customers', t.customers, `${o.byTier.individual} Producer · ${o.byTier.producer_plus} Plus · ${o.byTier.agency_owner} Agency`)}
+      ${statCard('Paying', t.paid, t.pastDue ? `${t.pastDue} past due` : 'all current')}
+      ${statCard('In free trial', t.trialing)}
+      ${statCard('Trial ended, not paying', t.expiredUnconverted)}
+      ${statCard('Trial → paid', o.conversion.rate === null ? '—' : o.conversion.rate + '%', `${o.conversion.paid} of ${o.conversion.decided} decided`)}
+      ${statCard('Active last 7 days', o.activity.active7, `${o.activity.active30} in the last 30`)}
+    </div>
+    <p class="helptext" style="margin:-6px 0 18px;">"Trial → paid" is a snapshot: of customers whose trial is over (or who already pay), how many pay now. BOB doesn't keep a history of status changes, so it can't show how long conversion took. ${t.comped ? `${t.comped} comped account(s) are left out of it.` : ''}
+    ${o.activityTrackedSince ? `Activity tracking began ${fmtDate(o.activityTrackedSince)} — anyone who hasn't used the app since then shows as "never".` : 'Activity tracking records the first time each customer uses the app after it was turned on, so these numbers fill in over the coming days.'}</p>
+
+    <div class="panel">
+      <h2>Signups per week</h2>
+      <table><tbody>${o.signupsByWeek.map((w) => `
+        <tr><td style="white-space:nowrap;">Week of ${fmtDate(w.weekStart + 'T12:00:00')}</td>
+        <td><div style="background:var(--maroon,#8a3b3b); height:12px; border-radius:6px; width:${Math.round((w.count / maxWeek) * 100)}%; min-width:${w.count ? 6 : 0}px;"></div></td>
+        <td style="width:40px; text-align:right;">${w.count}</td></tr>`).join('')}</tbody></table>
+    </div>
+
+    <div class="panel">
+      <h2>Trials ending within 7 days</h2>
+      <table><thead><tr><th>Customer</th><th>Trial ends</th><th>Days left</th></tr></thead>
+      <tbody>${o.expiringSoon.map((p) => `<tr><td>${customerLink(p)}</td><td>${fmtDate(p.trialEndsAt)}</td><td>${p.daysLeft}</td></tr>`).join('') || '<tr><td colspan="3" class="helptext">None.</td></tr>'}</tbody></table>
+    </div>
+
+    <div class="panel">
+      <h2>Gone quiet</h2>
+      <p class="helptext" style="margin:-8px 0 14px;">Joined over a week ago, still have access, but haven't been in for 7+ days — worth a nudge.</p>
+      <table><thead><tr><th>Customer</th><th>Last seen</th></tr></thead>
+      <tbody>${o.quiet.map((p) => `<tr><td>${customerLink(p)}</td><td>${p.lastSeenAt ? `${p.daysSilent} days ago` : 'not since tracking began'}</td></tr>`).join('') || '<tr><td colspan="2" class="helptext">Nobody — everyone with access has been in this week.</td></tr>'}</tbody></table>
+    </div>
+
+    ${o.pastDue.length ? `<div class="panel"><h2>Payment past due</h2><table><tbody>${o.pastDue.map((p) => `<tr><td>${customerLink(p)}</td></tr>`).join('')}</tbody></table></div>` : ''}`;
+  tabBody.querySelectorAll('[data-open]').forEach((a) => { a.onclick = (e) => { e.preventDefault(); openCustomer(a.dataset.open); }; });
+}
+
+/* ================= BILLING ================= */
+function renderBillingSummary(b){
+  if (!b.linked) return `<p class="helptext">${escapeHtml(b.note || 'Not linked to Stripe.')}</p>`;
+  if (b.customerDeleted) return `<p class="errortext">${escapeHtml(b.mismatches[0])}</p><p><a href="${escapeHtml(b.dashboardUrl)}" target="_blank" rel="noopener">Open in Stripe</a></p>`;
+  const sub = b.subscription;
+  const money = (cents, cur) => (cents / 100).toLocaleString(undefined, { style: 'currency', currency: (cur || 'usd').toUpperCase() });
+  return `
+    <p class="helptext">${b.mode === 'test' ? 'Stripe TEST mode · ' : ''}${escapeHtml(b.customer?.email || '')} · <a href="${escapeHtml(b.dashboardUrl)}" target="_blank" rel="noopener">Open in Stripe</a>${b.comped ? ' · comped account (differences from Stripe are expected)' : ''}</p>
+    ${b.mismatches.length ? `<div style="background:var(--red-bg); color:var(--red); padding:10px 14px; border-radius:10px; margin-bottom:10px;"><strong>Doesn't match BOB:</strong><ul style="margin:6px 0 0 18px;">${b.mismatches.map((m) => `<li>${escapeHtml(m)}</li>`).join('')}</ul></div>` : '<p class="helptext" style="color:var(--green);">Stripe and BOB agree.</p>'}
+    ${sub ? `<p class="helptext">Subscription ${escapeHtml(sub.status)}${sub.cancelAtPeriodEnd ? ' (cancels at period end)' : ''} · ${sub.tierFromPrice ? escapeHtml(PLAN_LABEL[sub.tierFromPrice]) + ' price' : 'price not recognised'} · current period ends ${fmtDate(sub.currentPeriodEnd)}</p>` : '<p class="helptext">No subscription in Stripe.</p>'}
+    <table><thead><tr><th>Invoice</th><th>Date</th><th>Amount</th><th>Status</th></tr></thead><tbody>${(b.invoices || []).map((i) => `
+      <tr><td>${i.hostedInvoiceUrl ? `<a href="${escapeHtml(i.hostedInvoiceUrl)}" target="_blank" rel="noopener">${escapeHtml(i.number || i.id)}</a>` : escapeHtml(i.number || i.id)}</td>
+      <td>${fmtDate(i.created)}</td><td>${money(i.amountDue, i.currency)}</td><td>${escapeHtml(i.status)}</td></tr>`).join('') || '<tr><td colspan="4" class="helptext">No invoices.</td></tr>'}</tbody></table>`;
+}
+
+async function renderBilling(){
+  const d = await apiFetch('/api/admin/billing');
+  const group = (title, note, rows) => `
+    <div class="panel">
+      <h2>${escapeHtml(title)} <span class="helptext">(${rows.length})</span></h2>
+      <p class="helptext" style="margin:-8px 0 14px;">${escapeHtml(note)}</p>
+      <table><thead><tr><th>Customer</th><th>Plan</th><th>Status</th><th>Stripe</th></tr></thead><tbody>${rows.map((p) => `
+        <tr><td>${customerLink(p)}</td><td>${escapeHtml(PLAN_LABEL[p.subscriptionTier] || p.subscriptionTier)}</td>
+        <td><span class="tag ${p.subscriptionStatus === 'active' ? 'active-pol' : 'pending'}">${escapeHtml(p.subscriptionStatus)}</span></td>
+        <td>${p.dashboardUrl ? `<a href="${escapeHtml(p.dashboardUrl)}" target="_blank" rel="noopener">Open</a>` : '—'}</td></tr>`).join('') || '<tr><td colspan="4" class="helptext">None.</td></tr>'}</tbody></table>
+    </div>`;
+  tabBody.innerHTML = `
+    <p class="helptext">Stripe is in <strong>${d.mode === 'test' ? 'TEST' : 'LIVE'}</strong> mode. Open a customer and use "Check Stripe" to compare their live subscription against what BOB has stored.</p>
+    ${group('Payment past due', 'Their card failed — Stripe is retrying; BOB still gives access while past due.', d.pastDue)}
+    ${group('Canceled', 'Subscription ended.', d.canceled)}
+    ${group('Started checkout, never subscribed', 'Reached the Stripe checkout page but no active subscription.', d.startedCheckout)}
+    ${group('Comped', 'Free accounts you set up by hand — skipped by Stripe events.', d.comped)}`;
+  tabBody.querySelectorAll('[data-open]').forEach((a) => { a.onclick = (e) => { e.preventDefault(); openCustomer(a.dataset.open); }; });
+}
+
+/* ================= ANNOUNCEMENTS ================= */
+function announcementState(a){
+  const now = Date.now();
+  if (!a.active) return 'inactive';
+  if (a.startsAt && new Date(a.startsAt).getTime() > now) return 'scheduled';
+  if (a.endsAt && new Date(a.endsAt).getTime() < now) return 'expired';
+  return 'live';
+}
+async function renderAnnouncements(){
+  const list = await apiFetch('/api/admin/announcements');
+  tabBody.innerHTML = `
+    <div class="panel">
+      <h2>New announcement</h2>
+      <p class="helptext" style="margin:-8px 0 14px;">Shown as a dismissible banner at the top of the app for every customer. Only the newest live one shows at a time.</p>
+      <form class="entry" id="annForm">
+        <div class="full"><label>Message (500 characters max)</label><textarea name="message" rows="2" maxlength="500" required style="width:100%;"></textarea></div>
+        <div><label>Style</label><select name="level"><option value="info">Info</option><option value="warning">Warning</option></select></div>
+        <div></div>
+        <div><label>Show from (optional)</label><input type="datetime-local" name="startsAt"></div>
+        <div><label>Hide after (optional)</label><input type="datetime-local" name="endsAt"></div>
+        <div class="full"><button class="primary" type="submit">Publish</button></div>
+        <div class="full errortext" id="annError"></div>
+      </form>
+    </div>
+    <div class="panel">
+      <h2>All announcements</h2>
+      <table><thead><tr><th>Message</th><th>Style</th><th>Window</th><th>Status</th><th></th></tr></thead><tbody>${list.map((a) => {
+        const st = announcementState(a);
+        return `<tr><td>${escapeHtml(a.message)}</td><td>${escapeHtml(a.level)}</td>
+          <td class="helptext">${a.startsAt ? fmtDateTime(a.startsAt) : 'now'} → ${a.endsAt ? fmtDateTime(a.endsAt) : 'no end'}</td>
+          <td><span class="tag ${st === 'live' ? 'active-pol' : 'pending'}">${st}</span></td>
+          <td style="white-space:nowrap;"><button class="ghost" type="button" data-toggle="${escapeHtml(a.id)}" data-active="${a.active}">${a.active ? 'Deactivate' : 'Activate'}</button>
+          <button class="danger" type="button" data-del="${escapeHtml(a.id)}">Delete</button></td></tr>`;
+      }).join('') || '<tr><td colspan="5" class="helptext">No announcements yet.</td></tr>'}</tbody></table>
+    </div>`;
+  const toIso = (v) => (v ? new Date(v).toISOString() : null);
+  document.getElementById('annForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    document.getElementById('annError').textContent = '';
+    try {
+      await apiFetch('/api/admin/announcements', { method: 'POST', body: { message: f.get('message'), level: f.get('level'), startsAt: toIso(f.get('startsAt')), endsAt: toIso(f.get('endsAt')) } });
+      renderAnnouncements();
+    } catch (err) { document.getElementById('annError').textContent = err.message; }
+  });
+  tabBody.querySelectorAll('[data-toggle]').forEach((b) => {
+    b.onclick = async () => {
+      try { await apiFetch(`/api/admin/announcements/${encodeURIComponent(b.dataset.toggle)}`, { method: 'PUT', body: { active: b.dataset.active !== 'true' } }); renderAnnouncements(); }
+      catch (err) { alert(err.message); }
+    };
+  });
+  tabBody.querySelectorAll('[data-del]').forEach((b) => {
+    b.onclick = async () => {
+      if (!confirm('Delete this announcement?')) return;
+      try { await apiFetch(`/api/admin/announcements/${encodeURIComponent(b.dataset.del)}`, { method: 'DELETE' }); renderAnnouncements(); }
+      catch (err) { alert(err.message); }
+    };
+  });
+}
+
 /* ================= shell ================= */
-const TABS = { customers: renderCustomers, imos: renderImos, suggestions: renderSuggestions, audit: renderAudit };
+const TABS = { overview: renderOverview, customers: renderCustomers, billing: renderBilling, imos: renderImos, announcements: renderAnnouncements, suggestions: renderSuggestions, audit: renderAudit };
 async function showTab(name){
   document.querySelectorAll('#adminTabs .auth-tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
   try { await TABS[name](); } catch (err) { tabBody.innerHTML = `<p class="errortext">${escapeHtml(err.message)}</p>`; }
@@ -326,7 +480,7 @@ async function init(){
   }
   document.getElementById('adminBody').style.display = '';
   document.querySelectorAll('#adminTabs .auth-tab').forEach((b) => { b.onclick = () => showTab(b.dataset.tab); });
-  showTab('customers');
+  showTab('overview');
 }
 document.getElementById('logoutBtn').onclick = async () => { await supabaseClient.auth.signOut(); window.location.href = '/login.html'; };
 init();

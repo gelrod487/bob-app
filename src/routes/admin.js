@@ -5,6 +5,7 @@ const asyncHandler = require('../middleware/asyncHandler');
 const { trialEndsAt } = require('../middleware/auth');
 const { logAdminAction } = require('../lib/audit');
 const { httpError } = require('../lib/httpError');
+const { computeOverview } = require('../lib/adminOverview');
 
 // Everything under /api/admin is gated by requireAdmin in server.js — this is BOB's own
 // team operating on its customers, not a customer-facing feature. Every write below also
@@ -12,6 +13,17 @@ const { httpError } = require('../lib/httpError');
 const router = express.Router();
 
 router.use('/imos', require('./adminImos'));
+router.use('/billing', require('./adminBilling'));
+router.use('/announcements', require('./adminAnnouncements'));
+
+// GET /api/admin/overview — business-health numbers (see lib/adminOverview.js for definitions
+// and the caveats on conversion and last-seen tracking).
+router.get('/overview', asyncHandler(async (req, res) => {
+  const producers = await prisma.producer.findMany({
+    select: { id: true, name: true, email: true, createdAt: true, subscriptionTier: true, subscriptionStatus: true, isComped: true, lastSeenAt: true, trialEndsAtOverride: true },
+  });
+  res.json(computeOverview(producers));
+}));
 
 const VALID_TIERS = ['individual', 'producer_plus', 'agency_owner'];
 const MAX_PAGE_SIZE = 100;

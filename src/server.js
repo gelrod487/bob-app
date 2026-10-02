@@ -37,6 +37,8 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // Every remaining /api/* route requires a valid Supabase session.
 app.use('/api', requireAuth);
+// Admin-only read-only "view as user" (header-driven; see the middleware's doc comment).
+app.use('/api', require('./middleware/supportView').applySupportView);
 
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/me', require('./routes/me'));
@@ -85,9 +87,11 @@ app.get('/api/dashboard', requireProducer, requireActiveOrTrial, asyncHandler(as
 // crashing the process (this is what a bad Stripe/Prisma call used to do — see
 // src/middleware/asyncHandler.js).
 app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
-  // A deliberate client error (e.g. an admin-route conflict) opts in with status < 500 +
-  // expose=true, so its message reaches the caller instead of the generic 500 below.
-  if (err.expose === true && err.status && err.status < 500) {
+  // A deliberate error (httpError(): an admin-route conflict, a Stripe outage reported as
+  // 502, ...) opts in with expose=true so its message reaches the caller instead of the
+  // generic 500 below. Server-side (5xx) ones are still logged.
+  if (err.expose === true && err.status >= 400 && err.status < 600) {
+    if (err.status >= 500) console.error(err);
     return res.status(err.status).json({ error: err.message });
   }
   console.error(err);
