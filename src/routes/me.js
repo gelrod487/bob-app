@@ -3,6 +3,7 @@ const prisma = require('../lib/db');
 const asyncHandler = require('../middleware/asyncHandler');
 const { trialEndsAt, isAdminEmail, isTrialing } = require('../middleware/auth');
 const { getKnownImoNames, findTypoMatch } = require('../lib/knownImos');
+const { resolveFlags } = require('../lib/flags');
 
 const router = express.Router();
 
@@ -43,6 +44,7 @@ router.get('/', asyncHandler(async (req, res) => {
 
   res.json({
     announcement,
+    flags: await resolveFlags(producer.id),
     supportView: !!req.supportView,
     producer: {
       id: producer.id,

@@ -110,6 +110,21 @@ model AuditLog {
   @@map("audit_log")
 }
 
+// A named on/off switch the app can check (GET /api/me returns the resolved map). `enabled`
+// turns it on for everyone; `allowlist` (producer ids) turns it on for just those producers
+// while `enabled` is off — for trying something with a few people first. Nothing reads a flag
+// until a feature is written to check one.
+model FeatureFlag {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  description String?
+  enabled     Boolean  @default(false)
+  allowlist   String[]
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("feature_flag")
+}
+
 // A site-wide message shown as a dismissible banner at the top of the app (see
 // GET /api/me and the notice bar in app.html). At most one shows at a time: the newest
 // active announcement whose start/end window (both optional) includes right now.

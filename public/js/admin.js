@@ -131,10 +131,20 @@ async function openCustomer(id){
     <div class="modal-actions">
       <button class="primary" type="button" id="saveCust">Save changes</button>
       <button class="ghost" type="button" id="viewAsCust" title="Opens their account in a new tab, read-only">View as this user (read-only)</button>
+      <button class="ghost" type="button" id="exportCust" title="Everything BOB stores for this customer, as a JSON file">Download their data</button>
       <button class="ghost" type="button" id="cancelCust">Close</button>
+    </div>
+    <div style="margin-top:14px; padding-top:14px; border-top:1px dashed var(--line);">
+      <button class="danger" type="button" id="deleteCust">Delete this account permanently…</button>
     </div>
     <div class="errortext" id="custError"></div>
   `, { wide: true });
+  document.getElementById('exportCust').onclick = async () => {
+    const errEl = document.getElementById('custError');
+    errEl.textContent = '';
+    try { await downloadExport(id); } catch (err) { errEl.textContent = err.message; }
+  };
+  document.getElementById('deleteCust').onclick = () => deleteCustomer(p);
   document.getElementById('viewAsCust').onclick = () => window.open(`/app.html?supportAs=${encodeURIComponent(id)}`, '_blank');
   document.getElementById('loadBilling').onclick = async () => {
     const box = document.getElementById('custBilling');
@@ -317,6 +327,36 @@ async function renderAudit(){
   document.getElementById('auditNext').onclick = () => { auditState.page++; renderAudit(); };
 }
 
+/* ---- export + delete (customer panel) ---- */
+async function downloadExport(id){
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  const res = await fetch(`/api/admin/producers/${encodeURIComponent(id)}/export`, { headers: { Authorization: `Bearer ${session.access_token}` } });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Export failed (${res.status})`);
+  const blob = await res.blob();
+  const name = (/filename="([^"]+)"/.exec(res.headers.get('content-disposition') || '') || [])[1] || 'bob-export.json';
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+async function deleteCustomer(p){
+  const c = p.counts;
+  const summary = `${c.clients} clients, ${c.policies} policies, ${c.commissionEntries} commission entries, ${c.expenses} costs`;
+  if (!confirm(`Permanently delete ${p.name} (${p.email})?\n\nThis removes their login and everything they entered (${summary}). It cannot be undone.${p.stripeSubscriptionId ? '\n\nTheir Stripe subscription will be cancelled first.' : ''}\n\nTip: use "Download their data" first if you might need a copy.`)) return;
+  const typed = prompt(`To confirm, type this customer's exact email:\n${p.email}`);
+  if (typed === null) return;
+  const errEl = document.getElementById('custError');
+  errEl.textContent = '';
+  try {
+    const r = await apiFetch(`/api/admin/producers/${encodeURIComponent(p.id)}/delete`, { method: 'POST', body: { confirmEmail: typed } });
+    closeAdminModal();
+    alert(`Deleted ${p.name}.${r.stripeCanceled ? ' Their Stripe subscription was cancelled.' : ''}${r.warning ? '\n\nHeads up: ' + r.warning : ''}`);
+    loadCustomers();
+  } catch (err) { errEl.textContent = err.message; }
+}
+
 /* ================= OVERVIEW ================= */
 function statCard(label, value, sub){
   return `<div class="card"><div class="stat-label">${escapeHtml(label)}</div><div class="stat-value">${escapeHtml(value)}</div>${sub ? `<div class="stat-sub">${escapeHtml(sub)}</div>` : ''}</div>`;
@@ -460,8 +500,193 @@ async function renderAnnouncements(){
   });
 }
 
+/* ================= RATES ================= */
+const ratesState = { imo: '', type: 'life', importRows: null, importName: '' };
+const ANNUITY_TIER_NAMES = ['green','yellow','blue','silver','gold','platinum','black','royal','red'];
+
+// Spreadsheet headers vary ("Carrier", "carrierName", "Contract Level"…) — match loosely.
+const HEADER_ALIASES = {
+  carrierName: ['carrier', 'carriername', 'company'],
+  productName: ['product', 'productname', 'plan', 'planname'],
+  contractLevel: ['contractlevel', 'level', 'contract', 'contractpct'],
+  tier: ['tier', 'annuitytier', 'level'],
+  payoutRate: ['payoutrate', 'payout', 'rate', 'commission', 'commissionrate', 'percent', 'pct'],
+};
+function mapCsvRows(parsed, type){
+  const headers = parsed.meta.fields || [];
+  const norm = (h) => h.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const wanted = type === 'annuity' ? ['carrierName', 'productName', 'tier', 'payoutRate'] : ['carrierName', 'productName', 'contractLevel', 'payoutRate'];
+  const pick = {}; const missing = [];
+  for (const field of wanted) {
+    const header = headers.find((h) => HEADER_ALIASES[field].includes(norm(h)));
+    if (header) pick[field] = header; else missing.push(field);
+  }
+  const rows = parsed.data.map((r) => Object.fromEntries(wanted.map((f) => [f, pick[f] ? r[pick[f]] : ''])));
+  return { rows, pick, missing };
+}
+
+async function renderRates(){
+  const directory = await apiFetch('/api/admin/imos');
+  if (!directory.length) { tabBody.innerHTML = '<p class="helptext">Add an IMO on the IMOs tab first.</p>'; return; }
+  if (!directory.some((d) => d.name === ratesState.imo)) ratesState.imo = directory[0].name;
+  const data = await apiFetch(`/api/admin/rates?type=${ratesState.type}&imo=${encodeURIComponent(ratesState.imo)}`);
+  const isAnnuity = ratesState.type === 'annuity';
+
+  tabBody.innerHTML = `
+    <div class="panel">
+      <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:end;">
+        <div><label>IMO</label><select id="rateImo">${directory.map((d) => `<option value="${escapeHtml(d.name)}" ${d.name === ratesState.imo ? 'selected' : ''}>${escapeHtml(d.name)}</option>`).join('')}</select></div>
+        <div><label>Products</label><select id="rateType"><option value="life" ${!isAnnuity ? 'selected' : ''}>Life / term</option><option value="annuity" ${isAnnuity ? 'selected' : ''}>Annuities</option></select></div>
+        <span class="helptext">${data.rates.length} rate${data.rates.length === 1 ? '' : 's'} on file</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Import from a CSV</h2>
+      <p class="helptext" style="margin:-8px 0 14px;">Columns: carrier, product, ${isAnnuity ? 'tier (green … red)' : 'contract level (e.g. 95)'}, payout rate. Existing rows with the same ${isAnnuity ? 'carrier, product and tier' : 'carrier, product and level'} are updated; new ones are added. You'll see a preview first, and nothing changes unless every row is valid.</p>
+      <input type="file" id="rateCsv" accept=".csv,text/csv">
+      <div id="rateImportBody" style="margin-top:12px;"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Add or correct one rate</h2>
+      <form class="entry" id="rateForm">
+        <div><label>Carrier</label><input name="carrierName" required></div>
+        <div><label>Product</label><input name="productName" required></div>
+        ${isAnnuity
+          ? `<div><label>Tier</label><select name="tier">${ANNUITY_TIER_NAMES.map((t) => `<option value="${t}">${t}</option>`).join('')}</select></div>`
+          : '<div><label>Contract level</label><input name="contractLevel" type="number" min="1" max="300" required placeholder="e.g. 95"></div>'}
+        <div><label>Payout rate (%)</label><input name="payoutRate" type="number" step="0.001" required></div>
+        <div class="full"><button class="primary" type="submit">Save rate</button></div>
+        <div class="full errortext" id="rateError"></div>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h2>Rates on file</h2>
+      <table><thead><tr><th>Carrier</th><th>Product</th><th>${isAnnuity ? 'Tier' : 'Level'}</th><th>Payout %</th><th></th></tr></thead>
+      <tbody>${data.rates.map((r) => `
+        <tr><td>${escapeHtml(r.carrierName)}</td><td>${escapeHtml(r.productName)}</td><td>${escapeHtml(isAnnuity ? r.tier : r.contractLevel)}</td><td>${Number(r.payoutRate)}</td>
+        <td style="white-space:nowrap;"><button class="ghost" type="button" data-edit="${escapeHtml(r.id)}" data-rate="${Number(r.payoutRate)}">Edit</button>
+        <button class="danger" type="button" data-del="${escapeHtml(r.id)}">Delete</button></td></tr>`).join('') || '<tr><td colspan="5" class="helptext">No rates on file for this IMO yet.</td></tr>'}</tbody></table>
+    </div>`;
+
+  document.getElementById('rateImo').onchange = (e) => { ratesState.imo = e.target.value; ratesState.importRows = null; renderRates(); };
+  document.getElementById('rateType').onchange = (e) => { ratesState.type = e.target.value; ratesState.importRows = null; renderRates(); };
+
+  document.getElementById('rateForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const f = Object.fromEntries(new FormData(e.target));
+    document.getElementById('rateError').textContent = '';
+    try { await apiFetch('/api/admin/rates', { method: 'POST', body: { type: ratesState.type, imoName: ratesState.imo, ...f } }); renderRates(); }
+    catch (err) { document.getElementById('rateError').textContent = err.message; }
+  });
+  tabBody.querySelectorAll('[data-edit]').forEach((b) => {
+    b.onclick = async () => {
+      const next = prompt('New payout rate (%):', b.dataset.rate);
+      if (next === null || next.trim() === '') return;
+      try { await apiFetch(`/api/admin/rates/${encodeURIComponent(b.dataset.edit)}`, { method: 'PUT', body: { type: ratesState.type, payoutRate: next } }); renderRates(); }
+      catch (err) { alert(err.message); }
+    };
+  });
+  tabBody.querySelectorAll('[data-del]').forEach((b) => {
+    b.onclick = async () => {
+      if (!confirm('Delete this rate?')) return;
+      try { await apiFetch(`/api/admin/rates/${encodeURIComponent(b.dataset.del)}?type=${ratesState.type}`, { method: 'DELETE' }); renderRates(); }
+      catch (err) { alert(err.message); }
+    };
+  });
+
+  // ---- CSV import: parse in the browser, preview on the server, apply only if clean ----
+  const body = document.getElementById('rateImportBody');
+  document.getElementById('rateCsv').onchange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    body.innerHTML = '<p class="helptext">Reading…</p>';
+    Papa.parse(file, {
+      header: true, skipEmptyLines: true,
+      complete: async (parsed) => {
+        const { rows, pick, missing } = mapCsvRows(parsed, ratesState.type);
+        if (missing.length) { body.innerHTML = `<p class="errortext">Couldn't find a column for: ${missing.map(escapeHtml).join(', ')}. Found headers: ${(parsed.meta.fields || []).map(escapeHtml).join(', ') || '(none)'}.</p>`; return; }
+        if (!rows.length) { body.innerHTML = '<p class="errortext">The file has no data rows.</p>'; return; }
+        ratesState.importRows = rows; ratesState.importName = file.name;
+        try {
+          const pv = await apiFetch('/api/admin/rates/import/preview', { method: 'POST', body: { type: ratesState.type, imoName: ratesState.imo, rows } });
+          const clean = pv.errorCount === 0 && pv.creates + pv.updates > 0;
+          body.innerHTML = `
+            <p><strong>${escapeHtml(file.name)}</strong> → ${escapeHtml(ratesState.imo)}: <strong>${pv.creates}</strong> new, <strong>${pv.updates}</strong> changed, ${pv.unchanged} already the same${pv.errorCount ? `, <span style="color:var(--red);"><strong>${pv.errorCount}</strong> with problems</span>` : ''}.</p>
+            ${pv.sampleUpdates.length ? `<p class="helptext">Changes include: ${pv.sampleUpdates.map((u) => `${escapeHtml(u.carrierName)} ${escapeHtml(u.productName)} ${escapeHtml(u.tier || u.contractLevel)}: ${u.oldRate} → ${u.payoutRate}`).join('; ')}${pv.updates > pv.sampleUpdates.length ? '…' : ''}</p>` : ''}
+            ${pv.errors.length ? `<ul class="errortext" style="margin-left:18px;">${pv.errors.map((er) => `<li>Line ${er.line}: ${escapeHtml(er.error)}</li>`).join('')}</ul>` : ''}
+            ${clean ? '<button class="primary" type="button" id="applyImport">Apply import</button>' : '<p class="helptext">Fix the file and choose it again. Nothing is imported while any row has a problem.</p>'}
+            <div class="errortext" id="importError"></div>`;
+          const apply = document.getElementById('applyImport');
+          if (apply) apply.onclick = async () => {
+            apply.disabled = true;
+            try {
+              const r = await apiFetch('/api/admin/rates/import/commit', { method: 'POST', body: { type: ratesState.type, imoName: ratesState.imo, rows: ratesState.importRows } });
+              ratesState.importRows = null;
+              await renderRates();
+              alert(`Imported: ${r.created} added, ${r.updated} updated, ${r.unchanged} unchanged.`);
+            } catch (err) { apply.disabled = false; document.getElementById('importError').textContent = err.message; }
+          };
+        } catch (err) { body.innerHTML = `<p class="errortext">${escapeHtml(err.message)}</p>`; }
+      },
+      error: (err) => { body.innerHTML = `<p class="errortext">Couldn't read that file: ${escapeHtml(err.message)}</p>`; },
+    });
+  };
+}
+
+/* ================= FLAGS ================= */
+function parseEmails(text){ return text.split(/[\s,;]+/).map((e) => e.trim()).filter(Boolean); }
+async function renderFlags(){
+  const flags = await apiFetch('/api/admin/flags');
+  tabBody.innerHTML = `
+    <div class="panel">
+      <h2>New feature flag</h2>
+      <p class="helptext" style="margin:-8px 0 14px;">A named on/off switch the app can check. Turn it on for everyone, or just for specific customers to try something with a few people first. Flags don't change anything by themselves — a feature has to be written to look at one.</p>
+      <form class="entry" id="flagForm">
+        <div><label>Key (lowercase_with_underscores)</label><input name="key" required pattern="[a-z][a-z0-9_]{1,48}" placeholder="new_dashboard"></div>
+        <div><label>Description</label><input name="description" placeholder="What it controls"></div>
+        <div class="full"><label>Customers it's on for (emails, optional)</label><textarea name="emails" rows="2" style="width:100%;" placeholder="alice@example.com, bob@example.com"></textarea></div>
+        <div class="full"><label><input type="checkbox" name="enabled" style="width:auto;"> On for everyone</label></div>
+        <div class="full"><button class="primary" type="submit">Create flag</button></div>
+        <div class="full errortext" id="flagError"></div>
+      </form>
+    </div>
+    <div class="panel">
+      <h2>Flags</h2>
+      <table><thead><tr><th>Flag</th><th>On for</th><th></th></tr></thead><tbody>${flags.map((f) => `
+        <tr><td><strong>${escapeHtml(f.key)}</strong><br><span class="helptext">${escapeHtml(f.description) || ''}</span></td>
+        <td>${f.enabled ? '<span class="tag active-pol">everyone</span>' : (f.allowlist.length ? f.allowlist.map((a) => `<span class="tag approved">${escapeHtml(a.email || a.name)}</span>`).join(' ') : '<span class="tag pending">no one</span>')}</td>
+        <td style="white-space:nowrap;">
+          <button class="ghost" type="button" data-toggle="${escapeHtml(f.id)}" data-enabled="${f.enabled}">${f.enabled ? 'Turn off for everyone' : 'Turn on for everyone'}</button>
+          <button class="ghost" type="button" data-allow="${escapeHtml(f.id)}" data-emails="${escapeHtml(f.allowlist.map((a) => a.email).filter(Boolean).join(', '))}">Edit customers</button>
+          <button class="danger" type="button" data-del="${escapeHtml(f.id)}" data-key="${escapeHtml(f.key)}">Delete</button></td></tr>`).join('') || '<tr><td colspan="3" class="helptext">No flags yet.</td></tr>'}</tbody></table>
+    </div>`;
+  document.getElementById('flagForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    document.getElementById('flagError').textContent = '';
+    try {
+      await apiFetch('/api/admin/flags', { method: 'POST', body: { key: f.get('key'), description: f.get('description'), enabled: f.get('enabled') === 'on', allowlistEmails: parseEmails(f.get('emails') || '') } });
+      renderFlags();
+    } catch (err) { document.getElementById('flagError').textContent = err.message; }
+  });
+  const update = async (id, body) => { try { await apiFetch(`/api/admin/flags/${encodeURIComponent(id)}`, { method: 'PUT', body }); renderFlags(); } catch (err) { alert(err.message); } };
+  tabBody.querySelectorAll('[data-toggle]').forEach((b) => { b.onclick = () => update(b.dataset.toggle, { enabled: b.dataset.enabled !== 'true' }); });
+  tabBody.querySelectorAll('[data-allow]').forEach((b) => {
+    b.onclick = () => { const next = prompt('Customers this flag is on for (emails, separated by commas):', b.dataset.emails); if (next !== null) update(b.dataset.allow, { allowlistEmails: parseEmails(next) }); };
+  });
+  tabBody.querySelectorAll('[data-del]').forEach((b) => {
+    b.onclick = async () => {
+      if (!confirm(`Delete the "${b.dataset.key}" flag?`)) return;
+      try { await apiFetch(`/api/admin/flags/${encodeURIComponent(b.dataset.del)}`, { method: 'DELETE' }); renderFlags(); } catch (err) { alert(err.message); }
+    };
+  });
+}
+
 /* ================= shell ================= */
-const TABS = { overview: renderOverview, customers: renderCustomers, billing: renderBilling, imos: renderImos, announcements: renderAnnouncements, suggestions: renderSuggestions, audit: renderAudit };
+const TABS = { overview: renderOverview, customers: renderCustomers, billing: renderBilling, imos: renderImos, rates: renderRates, flags: renderFlags, announcements: renderAnnouncements, suggestions: renderSuggestions, audit: renderAudit };
 async function showTab(name){
   document.querySelectorAll('#adminTabs .auth-tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
   try { await TABS[name](); } catch (err) { tabBody.innerHTML = `<p class="errortext">${escapeHtml(err.message)}</p>`; }

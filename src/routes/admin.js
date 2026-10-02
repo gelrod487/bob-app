@@ -6,6 +6,10 @@ const { trialEndsAt } = require('../middleware/auth');
 const { logAdminAction } = require('../lib/audit');
 const { httpError } = require('../lib/httpError');
 const { computeOverview } = require('../lib/adminOverview');
+const stripe = require('../lib/stripe');
+const { isAdminEmail } = require('../middleware/auth');
+const { buildExport } = require('../lib/accountExport');
+const { deleteProducerAccount } = require('../lib/accountDeletion');
 
 // Everything under /api/admin is gated by requireAdmin in server.js — this is BOB's own
 // team operating on its customers, not a customer-facing feature. Every write below also
@@ -15,6 +19,8 @@ const router = express.Router();
 router.use('/imos', require('./adminImos'));
 router.use('/billing', require('./adminBilling'));
 router.use('/announcements', require('./adminAnnouncements'));
+router.use('/rates', require('./adminRates'));
+router.use('/flags', require('./adminFlags'));
 
 // GET /api/admin/overview — business-health numbers (see lib/adminOverview.js for definitions
 // and the caveats on conversion and last-seen tracking).
@@ -169,6 +175,31 @@ router.put('/producers/:id', asyncHandler(async (req, res) => {
   for (const key of Object.keys(data)) { before[key] = p[key]; after[key] = updated[key]; }
   await logAdminAction(req, 'producer.update', p.id, { before, after });
   res.json(summarize(updated));
+}));
+
+// GET /api/admin/producers/:id/export — everything BOB stores for this customer, as a JSON
+// download. Audit-logged because it's a bulk read of someone's financial data.
+router.get('/producers/:id/export', asyncHandler(async (req, res) => {
+  const p = await prisma.producer.findUnique({ where: { id: req.params.id } });
+  if (!p) throw httpError(404, 'Producer not found.');
+  const data = await buildExport(prisma, p);
+  await logAdminAction(req, 'producer.export', p.id, { rows: { clients: data.clients.length, policies: data.policies.length, commissionEntries: data.commissionEntries.length } });
+  const safeName = p.email.replace(/[^a-z0-9@._-]/gi, '_');
+  res.setHeader('Content-Disposition', `attachment; filename="bob-export-${safeName}.json"`);
+  res.json(data);
+}));
+
+// POST /api/admin/producers/:id/delete { confirmEmail } — permanent. See lib/accountDeletion.js
+// for the order of operations and why. The caller must re-type the customer's email, and
+// admin accounts (including your own) can't be deleted from here.
+router.post('/producers/:id/delete', asyncHandler(async (req, res) => {
+  const p = await prisma.producer.findUnique({ where: { id: req.params.id } });
+  if (!p) throw httpError(404, 'Producer not found.');
+  if (isAdminEmail(p.email)) throw httpError(403, 'Admin accounts can\'t be deleted from the console.');
+  if (String(req.body.confirmEmail || '').trim().toLowerCase() !== p.email.toLowerCase()) {
+    throw httpError(400, 'Type the customer\'s exact email to confirm.');
+  }
+  res.json(await deleteProducerAccount({ prisma, stripe, supabaseAdmin, producer: p, adminEmail: req.supabaseUser.email }));
 }));
 
 // GET /api/admin/audit?action=&target=&page= — newest first.
