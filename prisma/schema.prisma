@@ -181,6 +181,20 @@ model ImoCommissionRate {
   @@map("imo_commission_rate")
 }
 
+// A small seed directory of well-known IMO names, so the typo-match check in PUT
+// /api/me (see knownImos.js) has real names to compare against from day one instead of
+// only whatever producers happen to have typed in already. Deliberately just a name —
+// no rate data, since we don't have anyone's real comp guide for these. getKnownImoNames
+// merges this in alongside Producer.imo and ImoCommissionRate.imoName, so the directory
+// keeps growing from real usage on top of this starting list.
+model KnownImo {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("known_imo")
+}
+
 // Annuity commissions use a completely different axis than everything else in
 // ImoCommissionRate: a named PRODUCTION TIER (green/yellow/blue/silver/gold/platinum/
 // black/royal/red) based on the producer's own lifetime annuity production, not a 65-145%

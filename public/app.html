@@ -190,6 +190,7 @@ const dateFilterState = {
   book: { key: 'ytd', from: '', to: '' },
   costs: { key: 'this_month', from: '', to: '' },
   profit: { key: 'this_month', from: '', to: '' },
+  healthOfBook: { key: 'all_time', from: '', to: '' },
   analytics: { key: 'this_month', from: '', to: '' },
 };
 function computeDateRange(key, customFrom, customTo){
@@ -1367,14 +1368,15 @@ async function monthlyStatsReal(count){
 async function renderProfit(){
   mainInner.innerHTML = `<div class="page-header"><div><div class="page-eyebrow">Profit</div><h1>Financial reporting</h1></div></div><p class="helptext">Loading…</p>`;
   const range = computeDateRange(dateFilterState.profit.key, dateFilterState.profit.from, dateFilterState.profit.to);
-  const [dash, dashAllTime, entries, policies, activityRange, draws, expensesAllTime] = await Promise.all([
+  const healthRange = computeDateRange(dateFilterState.healthOfBook.key, dateFilterState.healthOfBook.from, dateFilterState.healthOfBook.to);
+  const [dash, dashHealth, entries, policies, activityRange, draws, expensesHealth] = await Promise.all([
     apiFetch(`/api/dashboard?from=${range.from}&to=${range.to}`),
-    apiFetch('/api/dashboard'),
+    apiFetch(`/api/dashboard?from=${healthRange.from}&to=${healthRange.to}`),
     apiFetch(`/api/commission-entries?from=${range.from}&to=${range.to}`),
     apiFetch('/api/policies'),
     apiFetch(`/api/activity?from=${range.from}&to=${range.to}`),
     apiFetch(`/api/owner-draws?from=${range.from}&to=${range.to}`),
-    apiFetch('/api/expenses'),
+    apiFetch(`/api/expenses?from=${healthRange.from}&to=${healthRange.to}`),
   ]);
   policiesCache = policies;
   const isAgency = dash.tier === 'agency_owner';
@@ -1388,18 +1390,23 @@ async function renderProfit(){
   const avgCaseFYC = placedRange.length ? dash.grossCommission/placedRange.length : 0;
   const avgAnnualPremium = placedRange.length ? placedRange.reduce((s,p)=>s+premiumSize(p),0)/placedRange.length : 0;
 
-  const netProfitPct = dashAllTime.grossCommission ? (dashAllTime.netProfit/dashAllTime.grossCommission*100) : 0;
-  const chargebackRatio = dashAllTime.grossCommission ? (dashAllTime.chargebacks/dashAllTime.grossCommission*100) : 0;
+  const netProfitPct = dashHealth.grossCommission ? (dashHealth.netProfit/dashHealth.grossCommission*100) : 0;
+  const chargebackRatio = dashHealth.grossCommission ? (dashHealth.chargebacks/dashHealth.grossCommission*100) : 0;
   // Gross Margin isolates just lead-acquisition cost (unlike Net Profit, which subtracts
   // EVERY operating cost) — the gap between the two shows how much non-lead overhead
-  // (staff, tools, E&O) is eating into profitability. All-time, matching this panel's
-  // other "whole book" stats.
-  const leadSpendAllTime = expensesAllTime.filter(e=>e.category==='Leads').reduce((s,e)=>s+Number(e.amount),0);
-  const grossMarginDollar = dashAllTime.grossCommission - leadSpendAllTime;
-  const grossMarginPct = dashAllTime.grossCommission ? (grossMarginDollar/dashAllTime.grossCommission*100) : 0;
+  // (staff, tools, E&O) is eating into profitability. Scoped to this panel's own date
+  // filter, independent of the page's main one above.
+  const leadSpendHealth = expensesHealth.filter(e=>e.category==='Leads').reduce((s,e)=>s+Number(e.amount),0);
+  const grossMarginDollar = dashHealth.grossCommission - leadSpendHealth;
+  const grossMarginPct = dashHealth.grossCommission ? (grossMarginDollar/dashHealth.grossCommission*100) : 0;
+  // Persistency needs a case to have had a real chance to lapse, so it's "of what was
+  // ISSUED in this range AND has had 12+ months to mature, how much is still active" —
+  // a narrow range (e.g. this month) will naturally show little or nothing yet.
   const oneYearAgo = new Date(); oneYearAgo.setDate(oneYearAgo.getDate()-365);
   const oneYearAgoISO = toISO(oneYearAgo);
-  const matured = policies.filter(p => (p.status==='active'||p.status==='lapsed') && p.issueDate.slice(0,10) <= oneYearAgoISO);
+  const matured = policies.filter(p => (p.status==='active'||p.status==='lapsed')
+    && p.issueDate.slice(0,10) >= healthRange.from && p.issueDate.slice(0,10) <= healthRange.to
+    && p.issueDate.slice(0,10) <= oneYearAgoISO);
   const persistency = matured.length ? Math.round(matured.filter(p=>p.status==='active').length/matured.length*100) : 100;
 
   const stats = await monthlyStatsReal(trendMonths);
@@ -1470,11 +1477,13 @@ async function renderProfit(){
 
     <div class="panel">
       <h2>Health of the book</h2>
-      <p class="helptext" style="margin:-8px 0 14px;">Whole book, all time — not affected by the date filter above</p>
+      <p class="helptext" style="margin:-8px 0 14px;">Has its own date range, independent of the filter above.</p>
+      ${dateFilterHTML('healthOfBook')}
       <table class="statement-table">
         <tbody>
           <tr><td>Gross Margin</td><td class="${grossMarginDollar>=0?'pos':'neg'}">${fmt(grossMarginDollar)}</td></tr>
           <tr><td>Gross Margin %</td><td>${grossMarginPct.toFixed(1)}%</td></tr>
+          <tr><td>Net Profit</td><td class="${dashHealth.netProfit>=0?'pos':'neg'}">${fmt(dashHealth.netProfit)}</td></tr>
           <tr><td>Net Profit %</td><td>${netProfitPct.toFixed(1)}%</td></tr>
           <tr><td>Chargeback ratio</td><td class="${chargebackRatio>10?'neg':''}">${chargebackRatio.toFixed(1)}%</td></tr>
           <tr><td>Persistency (12+ months on the books)</td><td class="pos">${persistency}%</td></tr>
@@ -1510,6 +1519,7 @@ async function renderProfit(){
   `;
   commissionEntriesCache = entries;
   wireDateFilter('profit', renderProfit);
+  wireDateFilter('healthOfBook', renderProfit);
   document.getElementById('trendRangeSelect').onchange = (e) => {
     const v = e.target.value;
     trendMonths = v === 'ytd' ? (new Date().getMonth()+1) : Number(v);

@@ -3,15 +3,19 @@ const { levenshtein } = require('./levenshtein');
 
 // Every IMO name already known to BOB, deduped case-insensitively but keeping whichever
 // exact spelling showed up first — shared by the /api/imos autocomplete and the fuzzy-
-// match check in PUT /api/me, so both agree on the same canonical spelling.
+// match check in PUT /api/me, so both agree on the same canonical spelling. Three
+// sources: the seeded KnownImo directory (a real starting reference, not from any
+// producer's own data), plus whatever's grown organically from Producer.imo and
+// ImoCommissionRate.imoName since.
 async function getKnownImoNames() {
-  const [fromProducers, fromRates] = await Promise.all([
+  const [fromSeed, fromProducers, fromRates] = await Promise.all([
+    prisma.knownImo.findMany({ select: { name: true } }),
     prisma.producer.findMany({ where: { imo: { not: null } }, select: { imo: true }, distinct: ['imo'] }),
     prisma.imoCommissionRate.findMany({ select: { imoName: true }, distinct: ['imoName'] }),
   ]);
 
   const seen = new Map(); // lowercase -> first-seen exact spelling
-  for (const name of [...fromProducers.map((p) => p.imo), ...fromRates.map((r) => r.imoName)]) {
+  for (const name of [...fromSeed.map((s) => s.name), ...fromProducers.map((p) => p.imo), ...fromRates.map((r) => r.imoName)]) {
     const key = name.trim().toLowerCase();
     if (key && !seen.has(key)) seen.set(key, name.trim());
   }
