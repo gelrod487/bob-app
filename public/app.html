@@ -1367,13 +1367,14 @@ async function monthlyStatsReal(count){
 async function renderProfit(){
   mainInner.innerHTML = `<div class="page-header"><div><div class="page-eyebrow">Profit</div><h1>Financial reporting</h1></div></div><p class="helptext">Loading…</p>`;
   const range = computeDateRange(dateFilterState.profit.key, dateFilterState.profit.from, dateFilterState.profit.to);
-  const [dash, dashAllTime, entries, policies, activityRange, draws] = await Promise.all([
+  const [dash, dashAllTime, entries, policies, activityRange, draws, expensesAllTime] = await Promise.all([
     apiFetch(`/api/dashboard?from=${range.from}&to=${range.to}`),
     apiFetch('/api/dashboard'),
     apiFetch(`/api/commission-entries?from=${range.from}&to=${range.to}`),
     apiFetch('/api/policies'),
     apiFetch(`/api/activity?from=${range.from}&to=${range.to}`),
     apiFetch(`/api/owner-draws?from=${range.from}&to=${range.to}`),
+    apiFetch('/api/expenses'),
   ]);
   policiesCache = policies;
   const isAgency = dash.tier === 'agency_owner';
@@ -1387,8 +1388,15 @@ async function renderProfit(){
   const avgCaseFYC = placedRange.length ? dash.grossCommission/placedRange.length : 0;
   const avgAnnualPremium = placedRange.length ? placedRange.reduce((s,p)=>s+premiumSize(p),0)/placedRange.length : 0;
 
-  const profitMargin = dashAllTime.grossCommission ? (dashAllTime.netProfit/dashAllTime.grossCommission*100) : 0;
+  const netProfitPct = dashAllTime.grossCommission ? (dashAllTime.netProfit/dashAllTime.grossCommission*100) : 0;
   const chargebackRatio = dashAllTime.grossCommission ? (dashAllTime.chargebacks/dashAllTime.grossCommission*100) : 0;
+  // Gross Margin isolates just lead-acquisition cost (unlike Net Profit, which subtracts
+  // EVERY operating cost) — the gap between the two shows how much non-lead overhead
+  // (staff, tools, E&O) is eating into profitability. All-time, matching this panel's
+  // other "whole book" stats.
+  const leadSpendAllTime = expensesAllTime.filter(e=>e.category==='Leads').reduce((s,e)=>s+Number(e.amount),0);
+  const grossMarginDollar = dashAllTime.grossCommission - leadSpendAllTime;
+  const grossMarginPct = dashAllTime.grossCommission ? (grossMarginDollar/dashAllTime.grossCommission*100) : 0;
   const oneYearAgo = new Date(); oneYearAgo.setDate(oneYearAgo.getDate()-365);
   const oneYearAgoISO = toISO(oneYearAgo);
   const matured = policies.filter(p => (p.status==='active'||p.status==='lapsed') && p.issueDate.slice(0,10) <= oneYearAgoISO);
@@ -1465,7 +1473,9 @@ async function renderProfit(){
       <p class="helptext" style="margin:-8px 0 14px;">Whole book, all time — not affected by the date filter above</p>
       <table class="statement-table">
         <tbody>
-          <tr><td>Profit margin on gross FYC</td><td>${profitMargin.toFixed(1)}%</td></tr>
+          <tr><td>Gross Margin</td><td class="${grossMarginDollar>=0?'pos':'neg'}">${fmt(grossMarginDollar)}</td></tr>
+          <tr><td>Gross Margin %</td><td>${grossMarginPct.toFixed(1)}%</td></tr>
+          <tr><td>Net Profit %</td><td>${netProfitPct.toFixed(1)}%</td></tr>
           <tr><td>Chargeback ratio</td><td class="${chargebackRatio>10?'neg':''}">${chargebackRatio.toFixed(1)}%</td></tr>
           <tr><td>Persistency (12+ months on the books)</td><td class="pos">${persistency}%</td></tr>
         </tbody>
