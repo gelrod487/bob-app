@@ -305,6 +305,7 @@ const dateFilterState = {
   book: { key: 'ytd', from: '', to: '' },
   costs: { key: 'this_month', from: '', to: '' },
   profit: { key: 'this_month', from: '', to: '' },
+  healthOfBook: { key: 'all_time', from: '', to: '' },
   analytics: { key: 'this_month', from: '', to: '' },
 };
 function computeDateRange(key, customFrom, customTo){
@@ -1599,18 +1600,24 @@ function renderProfit(){
   const avgCaseFYC = placedRange.length ? st.gross/placedRange.length : 0;
   const avgAnnualPremium = placedRange.length ? placedRange.reduce((s,c)=>s+annualPremium(c),0)/placedRange.length : 0;
 
-  // Health of the book — whole-book, not limited to the selected range
-  const allGross = grossFYCInRange('2000-01-01', todayISO());
-  const allCB = chargebacksInRange('2000-01-01', todayISO());
-  const allCosts = costsTotalInRange('2000-01-01', todayISO());
+  // Health of the book — has its own date range, independent of the filter above
+  const healthRange = computeDateRange(dateFilterState.healthOfBook.key, dateFilterState.healthOfBook.from, dateFilterState.healthOfBook.to);
+  const allGross = grossFYCInRange(healthRange.from, healthRange.to);
+  const allCB = chargebacksInRange(healthRange.from, healthRange.to);
+  const allCosts = costsTotalInRange(healthRange.from, healthRange.to);
   const allNet = (allGross - allCB) - allCosts;
   const netProfitPct = allGross ? (allNet/allGross*100) : 0;
   const chargebackRatio = allGross ? (allCB/allGross*100) : 0;
-  const leadSpendAllTime = costsInRange('2000-01-01', todayISO()).filter(c=>c.category==='Leads').reduce((s,c)=>s+Number(c.amount),0);
-  const grossMarginDollar = allGross - leadSpendAllTime;
+  const leadSpendHealth = costsInRange(healthRange.from, healthRange.to).filter(c=>c.category==='Leads').reduce((s,c)=>s+Number(c.amount),0);
+  const grossMarginDollar = allGross - leadSpendHealth;
   const grossMarginPct = allGross ? (grossMarginDollar/allGross*100) : 0;
+  // Persistency needs a case to have had a real chance to lapse, so it's "of what was
+  // ISSUED in this range AND has had 12+ months to mature, how much is still active" —
+  // a narrow range (e.g. this month) will naturally show little or nothing yet.
   const oneYearAgo = daysAgoISO(365);
-  const matured = store.clients.filter(c => (c.status==='active'||c.status==='lapsed') && c.issueDate <= oneYearAgo);
+  const matured = store.clients.filter(c => (c.status==='active'||c.status==='lapsed')
+    && c.issueDate >= healthRange.from && c.issueDate <= healthRange.to
+    && c.issueDate <= oneYearAgo);
   const maturedRetained = matured.filter(c => c.status==='active').length;
   const persistency = matured.length ? Math.round(maturedRetained/matured.length*100) : 100;
 
@@ -1683,11 +1690,13 @@ function renderProfit(){
 
     <div class="panel">
       <h2>Health of the book</h2>
-      <p class="helptext" style="margin:-8px 0 14px;">Whole book, all time — not affected by the date filter above</p>
+      <p class="helptext" style="margin:-8px 0 14px;">Has its own date range, independent of the filter above.</p>
+      ${dateFilterHTML('healthOfBook')}
       <table class="statement-table">
         <tbody>
           <tr><td>Gross Margin</td><td class="${grossMarginDollar>=0?'pos':'neg'}">${fmt(grossMarginDollar)}</td></tr>
           <tr><td>Gross Margin %</td><td>${grossMarginPct.toFixed(1)}%</td></tr>
+          <tr><td>Net Profit</td><td class="${allNet>=0?'pos':'neg'}">${fmt(allNet)}</td></tr>
           <tr><td>Net Profit %</td><td>${netProfitPct.toFixed(1)}%</td></tr>
           <tr><td>Chargeback ratio</td><td class="${chargebackRatio>10?'neg':''}">${chargebackRatio.toFixed(1)}%</td></tr>
           <tr><td>Persistency (12+ months on the books)</td><td class="pos">${persistency}%</td></tr>
@@ -1721,6 +1730,7 @@ function renderProfit(){
     </div>
   `;
   wireDateFilter('profit', renderProfit);
+  wireDateFilter('healthOfBook', renderProfit);
   document.getElementById('trendRangeSelect').onchange = (e) => {
     const v = e.target.value;
     trendMonths = v === 'ytd' ? (new Date().getMonth()+1) : Number(v);
