@@ -12,101 +12,28 @@
 <body>
 <div class="wrap">
   <div class="page-header">
-    <div><div class="page-eyebrow">Admin</div><h1>Customers</h1></div>
+    <div><div class="page-eyebrow">Admin</div><h1>BOB console</h1></div>
     <div style="display:flex; gap:10px;">
-      <a class="ghost" href="/">Back home</a>
+      <a class="ghost" href="/app.html">Back to app</a>
       <button class="ghost" id="logoutBtn" type="button">Log out</button>
     </div>
   </div>
 
   <div id="statusMsg" class="helptext" style="margin-bottom:14px;"></div>
 
-  <div class="panel" id="tablePanel" style="display:none;">
-    <table>
-      <thead><tr><th>Name</th><th>Email</th><th>Agency</th><th>Plan</th><th>Status</th><th>Clients</th><th>Joined</th></tr></thead>
-      <tbody id="producerRows"></tbody>
-    </table>
-  </div>
-
-  <div class="page-header"><div><div class="page-eyebrow">Admin</div><h1>Suggestions &amp; feedback</h1></div></div>
-  <div class="panel" id="suggestionsPanel" style="display:none;">
-    <table>
-      <thead><tr><th>Sent</th><th>Producer</th><th>Message</th><th>Status</th></tr></thead>
-      <tbody id="suggestionRows"></tbody>
-    </table>
+  <div id="adminBody" style="display:none;">
+    <div class="auth-tabs" id="adminTabs" style="flex-wrap:wrap;">
+      <button class="auth-tab active" type="button" data-tab="customers">Customers</button>
+      <button class="auth-tab" type="button" data-tab="imos">IMOs</button>
+      <button class="auth-tab" type="button" data-tab="suggestions">Suggestions</button>
+      <button class="auth-tab" type="button" data-tab="audit">Audit log</button>
+    </div>
+    <div id="tabBody"></div>
   </div>
 </div>
 
 <script src="/js/supabaseClient.js"></script>
 <script src="/js/api.js"></script>
-<script>
-function fmtDate(dateStr){ return new Date(dateStr).toLocaleDateString(undefined,{month:'short', day:'numeric', year:'numeric'}); }
-// This page renders other people's data (producer name/email, free-text feedback
-// messages) into innerHTML — every one of those fields is attacker-controlled by
-// whichever producer entered it, so it must be escaped before insertion.
-function escapeHtml(value){
-  if (value === null || value === undefined) return '';
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-async function init(){
-  const statusEl = document.getElementById('statusMsg');
-  const { data: { session } } = await supabaseClient.auth.getSession();
-  if (!session) { window.location.href = '/login.html?redirect=' + encodeURIComponent('/admin.html'); return; }
-
-  try {
-    const producers = await apiFetch('/api/admin/producers');
-    document.getElementById('tablePanel').style.display = '';
-    document.getElementById('producerRows').innerHTML = producers.map(p => `
-      <tr>
-        <td>${escapeHtml(p.name)}</td>
-        <td>${escapeHtml(p.email)}</td>
-        <td>${escapeHtml(p.agencyName) || '—'}</td>
-        <td>${p.subscriptionTier === 'agency_owner' ? 'Agency' : 'Producer'}</td>
-        <td><span class="tag ${p.subscriptionStatus === 'active' ? 'active-pol' : 'pending'}">${escapeHtml(p.subscriptionStatus)}</span></td>
-        <td>${p.clientCount}</td>
-        <td>${fmtDate(p.createdAt)}</td>
-      </tr>`).join('') || '<tr><td colspan="7" class="helptext">No customers yet.</td></tr>';
-    statusEl.textContent = `${producers.length} customer${producers.length === 1 ? '' : 's'}`;
-  } catch (err) {
-    if (err.message === 'Not authorized.') {
-      statusEl.textContent = "This account isn't set up as an admin.";
-      return;
-    }
-    statusEl.textContent = err.message;
-    return;
-  }
-
-  const STATUSES = ['open', 'planned', 'done', 'declined'];
-  try {
-    const suggestions = await apiFetch('/api/admin/suggestions');
-    document.getElementById('suggestionsPanel').style.display = '';
-    document.getElementById('suggestionRows').innerHTML = suggestions.map(s => `
-      <tr>
-        <td>${fmtDate(s.createdAt)}</td>
-        <td>${escapeHtml(s.producerName)}<br><span class="helptext">${escapeHtml(s.producerEmail)}</span></td>
-        <td>${escapeHtml(s.message)}</td>
-        <td><select data-id="${s.id}" class="suggestionStatusSelect">${STATUSES.map(st => `<option value="${st}" ${st===s.status?'selected':''}>${st}</option>`).join('')}</select></td>
-      </tr>`).join('') || '<tr><td colspan="4" class="helptext">No suggestions yet.</td></tr>';
-
-    document.querySelectorAll('.suggestionStatusSelect').forEach(sel => {
-      sel.addEventListener('change', async () => {
-        try {
-          await apiFetch(`/api/admin/suggestions/${sel.dataset.id}`, { method:'PUT', body:{ status: sel.value } });
-        } catch (err) { alert(err.message); }
-      });
-    });
-  } catch (err) {
-    // Producers table already loaded fine above, so just leave the suggestions panel hidden.
-  }
-}
-document.getElementById('logoutBtn').onclick = async () => { await supabaseClient.auth.signOut(); window.location.href = '/login.html'; };
-init();
-</script>
+<script src="/js/admin.js"></script>
 </body>
 </html>

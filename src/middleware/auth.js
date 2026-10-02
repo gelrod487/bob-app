@@ -42,8 +42,16 @@ async function requireAuth(req, res, next) {
   const producer = await prisma.producer.findUnique({ where: { supabaseUserId: data.user.id } });
   req.producer = producer;
   req.producerId = producer ? producer.id : null;
+
+  // Throttled "last seen" stamp for the admin console — fire-and-forget so a slow write
+  // never delays a request, and skipped unless the last stamp is stale so this isn't a
+  // write on every API call.
+  if (producer && (!producer.lastSeenAt || Date.now() - producer.lastSeenAt.getTime() > LAST_SEEN_THROTTLE_MS)) {
+    prisma.producer.update({ where: { id: producer.id }, data: { lastSeenAt: new Date() } }).catch(() => {});
+  }
   next();
 }
+const LAST_SEEN_THROTTLE_MS = 10 * 60 * 1000;
 
 // Apply after requireAuth on any route that needs req.producerId to already be set —
 // without this, a Prisma `where: { producerId: undefined }` would silently match every
@@ -58,6 +66,8 @@ function requireProducer(req, res, next) {
 const TRIAL_DAYS = 14;
 
 function trialEndsAt(producer) {
+  // An admin-set override (trial extension) wins over the default createdAt + 14 days.
+  if (producer.trialEndsAtOverride) return producer.trialEndsAtOverride;
   return new Date(producer.createdAt.getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
 }
 
@@ -91,7 +101,7 @@ function requireActiveOrTrial(req, res, next) {
   if (isAdminEmail(req.supabaseUser?.email)) return next();
 
   const producer = req.producer;
-  if (producer.subscriptionStatus === 'active' || producer.subscriptionStatus === 'past_due' || isTrialing(producer)) {
+  if (producer.isComped || producer.subscriptionStatus === 'active' || producer.subscriptionStatus === 'past_due' || isTrialing(producer)) {
     return next();
   }
   return res.status(402).json({ error: 'Your 14-day trial has ended. Subscribe to keep using BOB.', trialExpired: true });

@@ -18,7 +18,7 @@ router.get('/', asyncHandler(async (req, res) => {
   // Admin (internal team) accounts are exempt from the trial/subscription gate entirely —
   // see requireActiveOrTrial. Computed here too so this field is self-consistent on its own,
   // not just correct because the frontend happens to also check isAdmin separately.
-  const trialExpired = !isAdmin && !['active', 'past_due'].includes(producer.subscriptionStatus) && new Date() >= endsAt;
+  const trialExpired = !isAdmin && !producer.isComped && !['active', 'past_due'].includes(producer.subscriptionStatus) && new Date() >= endsAt;
 
   // agencyId is MEMBERSHIP (whose team this producer's own personal numbers count
   // toward); ownedAgencyId is OWNERSHIP (the agency this producer manages, if any) — see

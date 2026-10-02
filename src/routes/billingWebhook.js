@@ -2,6 +2,13 @@ const stripe = require('../lib/stripe');
 const prisma = require('../lib/db');
 const asyncHandler = require('../middleware/asyncHandler');
 
+// A comped account (see Producer.isComped) has its tier/status set by hand in the admin
+// console — Stripe events for it are ignored so they can't overwrite that.
+async function isCompedProducer(producerId) {
+  const p = await prisma.producer.findUnique({ where: { id: producerId }, select: { isComped: true } });
+  return !!p?.isComped;
+}
+
 // Mounted in server.js with express.raw() BEFORE the global express.json() middleware —
 // Stripe's signature check needs the exact raw request body, not a parsed/re-serialized one.
 // Not behind requireAuth: Stripe calls this directly, authenticated by the signature below
@@ -19,7 +26,7 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
     case 'checkout.session.completed': {
       const session = event.data.object;
       const { producerId, tier } = session.metadata || {};
-      if (producerId) {
+      if (producerId && !(await isCompedProducer(producerId))) {
         // A producer who signed up as Producer and later subscribes to Agency here
         // (rather than choosing Agency at initial sign-up, where src/routes/auth.js
         // does the equivalent) won't have an Agency row to own yet — create one.
@@ -63,7 +70,7 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
     case 'customer.subscription.updated': {
       const subscription = event.data.object;
       const producerId = subscription.metadata?.producerId;
-      if (producerId) {
+      if (producerId && !(await isCompedProducer(producerId))) {
         const status = subscription.status === 'active' ? 'active'
           : subscription.status === 'past_due' ? 'past_due'
           : subscription.cancel_at_period_end ? 'active'
@@ -78,7 +85,7 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
     case 'customer.subscription.deleted': {
       const subscription = event.data.object;
       const producerId = subscription.metadata?.producerId;
-      if (producerId) {
+      if (producerId && !(await isCompedProducer(producerId))) {
         await prisma.producer.update({
           where: { id: producerId },
           data: { subscriptionStatus: 'canceled' },

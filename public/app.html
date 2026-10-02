@@ -38,6 +38,7 @@
       <button data-page="team" id="teamNavBtn" style="display:none;"><span class="ic">👥</span>Team</button>
       <button data-page="feedback"><span class="ic">💡</span>Feedback</button>
       <button data-page="settings"><span class="ic">⚙️</span>Settings</button>
+      <button type="button" id="adminNavBtn" style="display:none;" onclick="window.location.href='/admin.html'"><span class="ic">🛠️</span>Admin</button>
       <button id="logoutBtn"><span class="ic">↩️</span>Log out</button>
     </div>
   </div>
@@ -293,6 +294,7 @@ document.getElementById('logoutBtn').onclick = async () => { await supabaseClien
   statusPill.textContent = me.subscriptionStatus;
   statusPill.className = 'pill ' + me.subscriptionStatus;
   if (me.subscriptionTier === 'agency_owner') document.getElementById('teamNavBtn').style.display = '';
+  if (me.isAdmin) document.getElementById('adminNavBtn').style.display = '';
   // Calculator and Analytics stay visible to every tier — clicking in as a Producer-only
   // account shows a feature preview instead of the real page (see upgradeRequiredPanel()),
   // same idea as the Team tab staying hidden here since there's truly nothing to show a

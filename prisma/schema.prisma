@@ -70,6 +70,14 @@ model Producer {
   stripeCustomerId     String? @unique @map("stripe_customer_id")
   stripeSubscriptionId String? @unique @map("stripe_subscription_id")
   createdAt         DateTime @default(now()) @map("created_at")
+  // Last time this producer made an authenticated API request (throttled — see requireAuth).
+  lastSeenAt        DateTime? @map("last_seen_at")
+  // Admin-set trial end that replaces the default createdAt + 14 days (see trialEndsAt()).
+  trialEndsAtOverride DateTime? @map("trial_ends_at_override")
+  // An admin-comped account is treated as paid and is skipped by the Stripe webhook, so a
+  // hand-set tier/status can't be overwritten by a later Stripe event.
+  isComped          Boolean  @default(false) @map("is_comped")
+  adminNotes        String?  @map("admin_notes")
 
   agency            Agency?   @relation("AgencyMembers", fields: [agencyId], references: [id])
   ownedAgency       Agency?   @relation("AgencyOwner")
@@ -83,6 +91,23 @@ model Producer {
 
   @@index([agencyId])
   @@map("producer")
+}
+
+// One row per admin write (and support-view session), so there's a durable record of who
+// changed what on whose account. adminEmail comes from the verified session, never the
+// request body. targetProducerId is a plain string, not an FK, so the record survives the
+// producer being deleted.
+model AuditLog {
+  id               String   @id @default(uuid())
+  adminEmail       String   @map("admin_email")
+  action           String
+  targetProducerId String?  @map("target_producer_id")
+  detail           Json?
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@index([targetProducerId])
+  @@map("audit_log")
 }
 
 // A producer's feature request / bug report / general feedback — private between the
