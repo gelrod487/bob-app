@@ -104,10 +104,19 @@ footer.hint{text-align:center; color:var(--ink-soft); font-size:.78rem; margin-t
 .auth-wrap{min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px;}
 .auth-card{background:var(--panel); border-radius:var(--radius); padding:36px 32px; box-shadow:var(--shadow); border:1px solid var(--line); width:100%; max-width:420px;}
 .auth-tabs{display:flex; gap:6px; margin-bottom:22px; border-bottom:2px solid var(--line);}
+.auth-tabs.section-hidden{display:none;}
 .auth-tab{padding:10px 4px; margin-right:18px; border:none; background:transparent; font-family:'Playfair Display',serif; font-weight:700; font-size:1rem; color:var(--ink-soft); cursor:pointer; border-bottom:3px solid transparent; margin-bottom:-2px;}
 .auth-tab.active{color:var(--maroon); border-bottom-color:var(--maroon);}
 .auth-form{display:flex; flex-direction:column; gap:14px;}
 .auth-form.section-hidden{display:none;}
+.check-email{text-align:center;}
+.check-email.section-hidden{display:none;}
+.check-email-badge{width:64px; height:64px; margin:0 auto 14px; border-radius:50%; background:var(--panel-alt); border:2px solid var(--maroon); color:var(--maroon); font-size:1.8rem; line-height:60px;}
+.check-email h2{font-family:'Playfair Display',serif; font-size:1.5rem; margin:0 0 10px; color:var(--ink);}
+.check-email-lead{font-size:.95rem; color:var(--ink-soft); margin:0 0 6px;}
+.check-email-address{font-weight:800; font-size:1.05rem; color:var(--maroon); word-break:break-all; margin:0 0 18px;}
+.check-email-steps{text-align:left; background:var(--panel-alt); border-radius:12px; padding:14px 18px 14px 36px; margin:0 0 14px; font-size:.92rem; line-height:1.7; color:var(--ink);}
+.ghost:disabled{opacity:.55; cursor:not-allowed;}
 .tier-options{display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;}
 .tier-option{border:1.5px solid var(--line); border-radius:12px; padding:12px 6px; cursor:pointer; text-align:center; font-weight:700; font-size:.8rem; background:var(--cream);}
 .tier-option.selected{border-color:var(--maroon); background:var(--panel-alt); color:var(--maroon);}

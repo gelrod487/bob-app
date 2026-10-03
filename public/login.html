@@ -77,6 +77,25 @@
       <div class="helptext" id="signupNotice"></div>
     </form>
 
+    <!-- CHECK YOUR EMAIL (shown after sign-up, and when someone signs in before confirming) -->
+    <div class="check-email section-hidden" id="checkEmailPanel">
+      <div class="check-email-badge">&#9993;</div>
+      <h2>You're almost in &mdash; check your email</h2>
+      <p class="check-email-lead">Your account is created. One last step: we sent a confirmation link to</p>
+      <p class="check-email-address" id="checkEmailAddress"></p>
+      <ol class="check-email-steps">
+        <li>Open the email from <strong>BOB</strong></li>
+        <li>Click <strong>Confirm my email</strong></li>
+        <li>You're in &mdash; your 14-day free trial starts then</li>
+      </ol>
+      <p class="helptext">Don't see it? Check your spam or junk folder. It can take a minute to arrive.</p>
+      <div id="turnstileResend" style="margin-top:10px;"></div>
+      <button class="ghost" type="button" id="resendBtn" style="margin-top:12px;">Resend email</button>
+      <div class="errortext" id="resendError"></div>
+      <div class="helptext" id="resendNotice"></div>
+      <p class="helptext" style="margin-top:14px;"><a class="link-accent" href="#" id="wrongEmailLink">Wrong email? Start over</a></p>
+    </div>
+
     <!-- MFA CHALLENGE (password verified, this account also has 2FA enrolled) -->
     <form class="auth-form section-hidden" id="mfaForm">
       <p class="helptext">Enter the 6-digit code from your authenticator app.</p>
@@ -120,8 +139,10 @@ wireMascot('navMascot', ["Hi, I'm Bob!", "Let's get your book set up.", "One boo
 const TURNSTILE_SITE_KEY = '0x4AAAAAAFKTVtHFDTMrcPUr';
 const turnstileWidgetIds = {};
 function onTurnstileLoad() {
-  ['turnstileSignin', 'turnstileSignup', 'turnstileForgot'].forEach((containerId) => {
-    turnstileWidgetIds[containerId] = turnstile.render(`#${containerId}`, { sitekey: TURNSTILE_SITE_KEY });
+  ['turnstileSignin', 'turnstileSignup', 'turnstileForgot', 'turnstileResend'].forEach((containerId) => {
+    // The resend widget only appears if Cloudflare decides it needs to challenge the visitor.
+    const opts = containerId === 'turnstileResend' ? { sitekey: TURNSTILE_SITE_KEY, appearance: 'interaction-only' } : { sitekey: TURNSTILE_SITE_KEY };
+    turnstileWidgetIds[containerId] = turnstile.render(`#${containerId}`, opts);
   });
 }
 function captchaTokenFor(containerId) {
@@ -316,7 +337,11 @@ signinForm.addEventListener('submit', async (e) => {
     options: { captchaToken: captchaTokenFor('turnstileSignin') },
   });
   resetCaptcha('turnstileSignin');
-  if (error) { errEl.textContent = error.message; return; }
+  if (error) {
+    if (/not confirmed/i.test(error.message)) { showCheckEmail(f.get('email')); return; }
+    errEl.textContent = error.message;
+    return;
+  }
   proceedOrChallengeMfa(data.user.email);
 });
 
@@ -346,9 +371,60 @@ signupForm.addEventListener('submit', async (e) => {
     // Email confirmation is off for this project — we're already logged in.
     completeLoginFlow(email);
   } else {
-    noticeEl.textContent = 'Check your email to confirm your account, then sign in here.';
+    showCheckEmail(email);
   }
 });
+
+/* ---- check-your-email screen ---- */
+const checkEmailPanel = document.getElementById('checkEmailPanel');
+const resendBtn = document.getElementById('resendBtn');
+let checkEmailAddress = '';
+let resendTimer = null;
+function showCheckEmail(email) {
+  checkEmailAddress = email;
+  document.getElementById('checkEmailAddress').textContent = email;
+  document.getElementById('resendError').textContent = '';
+  document.getElementById('resendNotice').textContent = '';
+  document.getElementById('authTabs').classList.add('section-hidden');
+  signinForm.classList.add('section-hidden');
+  signupForm.classList.add('section-hidden');
+  forgotForm.classList.add('section-hidden');
+  checkEmailPanel.classList.remove('section-hidden');
+  startResendCooldown(30);
+  window.scrollTo({ top: 0 });
+}
+function startResendCooldown(seconds) {
+  clearInterval(resendTimer);
+  let left = seconds;
+  resendBtn.disabled = true;
+  const tick = () => {
+    if (left <= 0) { clearInterval(resendTimer); resendBtn.disabled = false; resendBtn.textContent = 'Resend email'; return; }
+    resendBtn.textContent = `Resend email (${left}s)`;
+    left -= 1;
+  };
+  tick();
+  resendTimer = setInterval(tick, 1000);
+}
+resendBtn.addEventListener('click', async () => {
+  const errEl = document.getElementById('resendError');
+  const noticeEl = document.getElementById('resendNotice');
+  errEl.textContent = ''; noticeEl.textContent = '';
+  const { error } = await supabaseClient.auth.resend({
+    type: 'signup', email: checkEmailAddress,
+    options: { captchaToken: captchaTokenFor('turnstileResend') },
+  });
+  resetCaptcha('turnstileResend');
+  if (error) { errEl.textContent = error.message; return; }
+  noticeEl.textContent = `Sent again to ${checkEmailAddress}.`;
+  startResendCooldown(30);
+});
+document.getElementById('wrongEmailLink').onclick = (e) => {
+  e.preventDefault();
+  clearInterval(resendTimer);
+  checkEmailPanel.classList.add('section-hidden');
+  document.getElementById('authTabs').classList.remove('section-hidden');
+  document.querySelector('.auth-tab[data-mode="signup"]').click();
+};
 
 /* ---- complete profile (post email-confirmation, no pending signup found) ---- */
 completeForm.addEventListener('submit', async (e) => {
