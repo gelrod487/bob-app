@@ -366,7 +366,7 @@ async function renderDesk(){
 
   mainInner.innerHTML = `
     <div class="page-header"><div><div class="page-eyebrow">Desk</div><h1>${me.name.split(' ')[0]}'s book</h1></div>
-    <button class="ghost" type="button" id="addClientBtn">+ Add a client</button></div>
+    <button class="primary" type="button" id="addClientBtn">+ Add a client</button></div>
 
     ${dateFilterHTML('desk')}
 
@@ -660,7 +660,7 @@ async function openClientDetail(policyId){
     <label>Notes</label>
     <textarea id="clientNotes" rows="3" style="width:100%; padding:9px 11px; border-radius:10px; border:1.5px solid var(--line); background:var(--cream); color:var(--ink); font-family:'Inter'; font-size:.9rem;">${escapeHtml(p.notes||'')}</textarea>
     <div class="modal-actions">
-      <button class="ghost" type="button" id="saveNotesBtn">Save changes</button>
+      <button class="primary" type="button" id="saveNotesBtn">Save changes</button>
       ${p.status === 'active' ? `<button class="danger" type="button" id="chargebackBtn">Chargeback</button>` : ''}
       <button class="danger" type="button" id="deleteCaseBtn">Delete case</button>
       <button class="ghost" type="button" onclick="closeModal()">Close</button>
