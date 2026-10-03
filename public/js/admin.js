@@ -87,7 +87,7 @@ async function loadCustomers(){
 }
 
 async function openCustomer(id){
-  const p = await apiFetch(`/api/admin/producers/${encodeURIComponent(id)}`);
+  const [p, agencies] = await Promise.all([apiFetch(`/api/admin/producers/${encodeURIComponent(id)}`), apiFetch('/api/admin/agencies')]);
   const c = p.counts;
   openAdminModal(`
     <div class="modal-head"><div><h2>${escapeHtml(p.name)}</h2><span class="helptext">${escapeHtml(p.email)}</span></div><button class="modal-close" id="closeCust" type="button">×</button></div>
@@ -103,6 +103,20 @@ async function openCustomer(id){
       <div class="detail-item"><div class="dlabel">Stripe subscription</div><div class="dvalue" style="word-break:break-all;">${escapeHtml(p.stripeSubscriptionId) || '—'}</div></div>
     </div>
     <p class="helptext">${c.clients} clients · ${c.policies} policies · ${c.commissionEntries} commission entries · ${c.expenses} costs · ${c.activityDays} activity days · ${c.ownerDraws} draws</p>
+
+    <h3 style="margin:18px 0 10px; font-size:.95rem;">Profile</h3>
+    <p class="helptext" style="margin:-4px 0 10px;">Email, subscription status, and Stripe details aren't editable here — they're tied to the customer's login and billing.</p>
+    <div class="detail-grid">
+      <div><label>Name</label><input id="custName" value="${escapeHtml(p.name)}" maxlength="120"></div>
+      <div><label>IMO</label><input id="custImo" value="${escapeHtml(p.imo)}" maxlength="120" placeholder="(none)"></div>
+      <div><label>Contract level</label><input id="custLevel" type="number" min="1" max="300" value="${p.contractLevel ?? ''}" placeholder="e.g. 95"></div>
+      <div><label>Annuity tier</label><select id="custAnnuity"><option value="">(none)</option>
+        ${['green','yellow','blue','silver','gold','platinum','black','royal','red'].map((t) => `<option value="${t}" ${t === p.annuityTier ? 'selected' : ''}>${t}</option>`).join('')}
+      </select></div>
+      <div class="full" style="grid-column:1/-1;"><label>Agency they roll up into</label><select id="custAgency"><option value="">(none)</option>
+        ${agencies.map((a) => `<option value="${escapeHtml(a.id)}" ${a.id === p.agencyId ? 'selected' : ''}>${escapeHtml(a.name)}${a.ownerName ? ' — owner: ' + escapeHtml(a.ownerName) : ''}</option>`).join('')}
+      </select></div>
+    </div>
 
     <h3 style="margin:18px 0 10px; font-size:.95rem;">Account</h3>
     <div class="detail-grid">
@@ -174,6 +188,12 @@ async function openCustomer(id){
     const tier = document.getElementById('custTier').value;
     const comped = document.getElementById('custComped').value === 'true';
     const notes = document.getElementById('custNotes').value;
+    const val = (elId) => document.getElementById(elId).value.trim();
+    if (val('custName') !== p.name) body.name = val('custName');
+    if (val('custImo') !== (p.imo || '')) body.imo = val('custImo');
+    if (val('custLevel') !== String(p.contractLevel ?? '')) body.contractLevel = val('custLevel');
+    if (val('custAnnuity') !== (p.annuityTier || '')) body.annuityTier = val('custAnnuity');
+    if (val('custAgency') !== (p.agencyId || '')) body.agencyId = val('custAgency');
     if (tier !== p.subscriptionTier) body.subscriptionTier = tier;
     if (comped !== p.isComped) body.isComped = comped;
     if (notes !== (p.adminNotes || '')) body.adminNotes = notes;

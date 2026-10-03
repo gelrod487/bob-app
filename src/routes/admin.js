@@ -9,6 +9,7 @@ const { computeOverview } = require('../lib/adminOverview');
 const stripe = require('../lib/stripe');
 const { isAdminEmail } = require('../middleware/auth');
 const { buildExport } = require('../lib/accountExport');
+const { ANNUITY_TIERS } = require('../lib/rateRows');
 const { deleteProducerAccount } = require('../lib/accountDeletion');
 
 // Everything under /api/admin is gated by requireAdmin in server.js — this is BOB's own
@@ -95,6 +96,7 @@ router.get('/producers/:id', asyncHandler(async (req, res) => {
 
   res.json({
     ...summarize(p),
+    agencyId: p.agencyId,
     stripeCustomerId: p.stripeCustomerId,
     stripeSubscriptionId: p.stripeSubscriptionId,
     trialEndsAtOverride: p.trialEndsAtOverride,
@@ -113,9 +115,21 @@ router.get('/producers/:id', asyncHandler(async (req, res) => {
   });
 }));
 
+// GET /api/admin/agencies — for the "which agency does this producer belong to" picker.
+router.get('/agencies', asyncHandler(async (req, res) => {
+  const agencies = await prisma.agency.findMany({ include: { owner: { select: { name: true } } }, orderBy: { name: 'asc' } });
+  res.json(agencies.map((a) => ({ id: a.id, name: a.name, ownerName: a.owner?.name || null })));
+}));
+
 // PUT /api/admin/producers/:id — account management. Accepts any subset of:
 //   subscriptionTier, isComped, trialEndsAt (ISO date, or null to clear the override),
-//   extendTrialDays (adds to whichever is later: the current trial end or now), adminNotes.
+//   extendTrialDays (adds to whichever is later: the current trial end or now), adminNotes,
+//   and the profile fields name, imo, contractLevel, annuityTier, agencyId (which agency they
+//   roll up into).
+// Deliberately NOT editable here: anything that touches billing or login — email (it's the login,
+// and Stripe keeps its own copy for receipts), subscription status, and the Stripe customer and
+// subscription IDs — nor the system-owned id, supabaseUserId, createdAt, lastSeenAt. Plan and
+// comp are the existing, deliberate billing controls.
 // isComped matters because the Stripe webhook skips comped accounts — a hand-set tier and
 // status would otherwise be overwritten by the next Stripe event.
 router.put('/producers/:id', asyncHandler(async (req, res) => {
@@ -124,6 +138,45 @@ router.put('/producers/:id', asyncHandler(async (req, res) => {
 
   const { subscriptionTier, isComped, trialEndsAt: trialEndsAtInput, extendTrialDays, adminNotes } = req.body;
   const data = {};
+  const blank = (v) => v === null || (typeof v === 'string' && v.trim() === '');
+
+  if (req.body.name !== undefined) {
+    const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
+    if (!name || name.length > 120) throw httpError(400, 'Name is required (up to 120 characters).');
+    data.name = name;
+  }
+  if (req.body.imo !== undefined) {
+    if (blank(req.body.imo)) data.imo = null;
+    else {
+      const imo = String(req.body.imo).trim();
+      if (imo.length > 120) throw httpError(400, 'IMO name is too long.');
+      // Use the directory's spelling when this matches a known IMO (ignoring case); otherwise
+      // keep what was typed, and it will show up in the IMOs tab's pending review.
+      const known = await prisma.knownImo.findFirst({ where: { name: { equals: imo, mode: 'insensitive' } } });
+      data.imo = known ? known.name : imo;
+    }
+  }
+  if (req.body.contractLevel !== undefined) {
+    if (blank(req.body.contractLevel)) data.contractLevel = null;
+    else {
+      const level = Number(req.body.contractLevel);
+      if (!Number.isInteger(level) || level < 1 || level > 300) throw httpError(400, 'Contract level must be a whole number from 1 to 300.');
+      data.contractLevel = level;
+    }
+  }
+  if (req.body.annuityTier !== undefined) {
+    if (blank(req.body.annuityTier)) data.annuityTier = null;
+    else if (!ANNUITY_TIERS.includes(req.body.annuityTier)) throw httpError(400, `annuityTier must be one of: ${ANNUITY_TIERS.join(', ')}`);
+    else data.annuityTier = req.body.annuityTier;
+  }
+  if (req.body.agencyId !== undefined) {
+    if (blank(req.body.agencyId)) data.agencyId = null;
+    else {
+      const agency = await prisma.agency.findUnique({ where: { id: String(req.body.agencyId) } });
+      if (!agency) throw httpError(400, 'That agency doesn\'t exist.');
+      data.agencyId = agency.id;
+    }
+  }
 
   if (subscriptionTier !== undefined) {
     if (!VALID_TIERS.includes(subscriptionTier)) throw httpError(400, `subscriptionTier must be one of: ${VALID_TIERS.join(', ')}`);
@@ -165,7 +218,7 @@ router.put('/producers/:id', asyncHandler(async (req, res) => {
         const agency = await tx.agency.create({
           data: { name: `${p.name}'s Agency`, ownerId: p.id, parentAgencyId: p.agencyId || undefined },
         });
-        if (!p.agencyId) data.agencyId = agency.id;
+        if (!p.agencyId && data.agencyId === undefined) data.agencyId = agency.id;
       }
     }
     return tx.producer.update({ where: { id: p.id }, data, include: { agency: true, _count: { select: { clients: true } } } });
