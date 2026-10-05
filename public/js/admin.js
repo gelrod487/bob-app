@@ -720,7 +720,9 @@ async function init(){
     // works even for an admin account that hasn't finished producer setup.
     await apiFetch('/api/admin/audit?page=1');
   } catch (err) {
-    statusEl.textContent = err.message === 'Not authorized.' ? "This account isn't set up as an admin." : err.message;
+    if (err.message === 'Not authorized.') statusEl.textContent = "This account isn't set up as an admin.";
+    else if (/two-step sign-in/i.test(err.message)) statusEl.innerHTML = 'Admin access requires two-step sign-in. <a class="link-accent" href="/app.html">Open BOB</a>, turn it on under Settings, sign out, and sign back in with your code.';
+    else statusEl.textContent = err.message;
     return;
   }
   document.getElementById('adminBody').style.display = '';

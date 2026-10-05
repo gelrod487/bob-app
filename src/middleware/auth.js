@@ -31,8 +31,9 @@ async function requireAuth(req, res, next) {
   // steals just the password (phishing, credential stuffing, a leaked-password match) could
   // hit the API directly with an aal1 token and skip the second factor the login UI enforces.
   const hasVerifiedFactor = (data.user.factors || []).some((f) => f.status === 'verified');
+  const claims = decodeJwtPayload(token);
+  req.authAal = claims?.aal || null;
   if (hasVerifiedFactor) {
-    const claims = decodeJwtPayload(token);
     if (!claims || claims.aal !== 'aal2') {
       return res.status(401).json({ error: 'Additional verification required.', mfaRequired: true });
     }
@@ -108,13 +109,23 @@ function requireActiveOrTrial(req, res, next) {
 }
 
 // Gates the internal admin dashboard to the ADMIN_EMAILS allowlist.
+//
+// Admin accounts can see every customer's data, so the allowlist alone isn't enough: the
+// session must also have completed the two-step (authenticator app) challenge. requireAuth
+// already forces a challenge for anyone who has enrolled; this additionally refuses an admin
+// who never enrolled, instead of letting a stolen password alone open the console.
 function requireAdmin(req, res, next) {
   if (!isAdminEmail(req.supabaseUser?.email)) {
     return res.status(403).json({ error: 'Not authorized.' });
   }
+  if (req.authAal !== 'aal2') return res.status(403).json(ADMIN_MFA_ERROR);
   next();
 }
+const ADMIN_MFA_ERROR = {
+  error: 'Admin access requires two-step sign-in. Turn it on under Settings in BOB, then sign in again.',
+  adminMfaRequired: true,
+};
 
 module.exports = {
-  requireAuth: asyncHandler(requireAuth), requireProducer, requireAdmin, requireActiveOrTrial, trialEndsAt, isAdminEmail, isTrialing,
+  requireAuth: asyncHandler(requireAuth), requireProducer, requireAdmin, ADMIN_MFA_ERROR, requireActiveOrTrial, trialEndsAt, isAdminEmail, isTrialing,
 };

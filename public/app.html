@@ -339,7 +339,7 @@ function renderNotices(meRes){
 
 /* ================= DESK ================= */
 async function renderDesk(){
-  mainInner.innerHTML = `<div class="page-header"><div><div class="page-eyebrow">Desk</div><h1>${me.name.split(' ')[0]}'s book</h1></div></div><p class="helptext">Loading…</p>`;
+  mainInner.innerHTML = `<div class="page-header"><div><div class="page-eyebrow">Desk</div><h1>${escapeHtml(me.name.split(' ')[0])}'s book</h1></div></div><p class="helptext">Loading…</p>`;
 
   const range = computeDateRange(dateFilterState.desk.key, dateFilterState.desk.from, dateFilterState.desk.to);
   const [dash, dashMonth, expenses, policies, activityAll, activityRange, goal] = await Promise.all([
@@ -365,7 +365,7 @@ async function renderDesk(){
   const recent = [...policies].sort((a,b)=>new Date(b.issueDate)-new Date(a.issueDate)).slice(0,5);
 
   mainInner.innerHTML = `
-    <div class="page-header"><div><div class="page-eyebrow">Desk</div><h1>${me.name.split(' ')[0]}'s book</h1></div>
+    <div class="page-header"><div><div class="page-eyebrow">Desk</div><h1>${escapeHtml(me.name.split(' ')[0])}'s book</h1></div>
     <button class="primary" type="button" id="addClientBtn">+ Add a client</button></div>
 
     ${dateFilterHTML('desk')}
@@ -2619,8 +2619,8 @@ async function renderSettings(){
 
     <div class="panel">
       <h2>Account</h2>
-      <p class="helptext">Name: <strong>${me.name}</strong></p>
-      <p class="helptext">Email: <strong>${me.email}</strong></p>
+      <p class="helptext">Name: <strong>${escapeHtml(me.name)}</strong></p>
+      <p class="helptext">Email: <strong>${escapeHtml(me.email)}</strong></p>
       <p class="helptext">Plan: <strong>${PLAN_LABEL[me.subscriptionTier] || 'Producer'}</strong></p>
     </div>
 

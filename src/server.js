@@ -11,8 +11,11 @@ const { requireAuth, requireProducer, requireAdmin, requireActiveOrTrial } = req
 const { requireProducerPlusOrAbove } = require('./middleware/tier');
 const handleStripeWebhook = require('./routes/billingWebhook');
 const asyncHandler = require('./middleware/asyncHandler');
+const { securityHeaders } = require('./middleware/securityHeaders');
+const { rateLimit } = require('./middleware/rateLimit');
 
 const app = express();
+app.use(securityHeaders);
 
 // Dev only: the browser's Supabase client normally has the production project's URL/key
 // baked into public/js/supabaseClient.js. When running against the dev project, serve a
@@ -33,6 +36,13 @@ if (process.env.BOB_ENV_FILE) {
 app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), handleStripeWebhook);
 
 app.use(express.json({ limit: '15mb' })); // generous limit for base64 workbook uploads in /import
+
+// Rate limits. The general one runs before auth so a flood of junk requests is turned away
+// before it costs a Supabase lookup; the tighter ones guard the expensive or sensitive routes.
+app.use('/api', rateLimit({ windowMs: 60 * 1000, max: 400 }));
+app.use('/api/import', rateLimit({ windowMs: 10 * 60 * 1000, max: 15, message: 'Too many imports in a short time. Please wait a few minutes and try again.' }));
+app.use('/api/billing', rateLimit({ windowMs: 10 * 60 * 1000, max: 30 }));
+app.use('/api/admin', rateLimit({ windowMs: 60 * 1000, max: 240 }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // Every remaining /api/* route requires a valid Supabase session.

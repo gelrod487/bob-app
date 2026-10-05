@@ -1,6 +1,6 @@
 const prisma = require('../lib/db');
 const asyncHandler = require('./asyncHandler');
-const { isAdminEmail } = require('./auth');
+const { isAdminEmail, ADMIN_MFA_ERROR } = require('./auth');
 const { logAdminAction } = require('../lib/audit');
 
 // "View as user", for support: an admin whose browser sends X-Support-Producer-Id sees the
@@ -19,6 +19,7 @@ async function applySupportView(req, res, next) {
   if (!targetId) return next();
 
   if (!isAdminEmail(req.supabaseUser?.email)) return res.status(403).json({ error: 'Not authorized.' });
+  if (req.authAal !== 'aal2') return res.status(403).json(ADMIN_MFA_ERROR);
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     return res.status(403).json({ error: 'Support view is read-only.' });
   }

@@ -2,6 +2,7 @@ const express = require('express');
 const prisma = require('../lib/db');
 const asyncHandler = require('../middleware/asyncHandler');
 const { isAdminEmail } = require('../middleware/auth');
+const { cleanText } = require('../lib/cleanText');
 
 const router = express.Router();
 
@@ -13,7 +14,9 @@ router.post('/bootstrap', asyncHandler(async (req, res) => {
   if (existing) return res.json(existing);
 
   let { tier } = req.body;
-  const { name, agencyName, inviteAgencyId } = req.body;
+  const { inviteAgencyId } = req.body;
+  const name = cleanText(req.body.name, 100);
+  const agencyName = cleanText(req.body.agencyName, 100);
   if (!name) return res.status(400).json({ error: 'name is required.' });
 
   // Internal admin accounts (ADMIN_EMAILS) aren't a paying customer tier — the signup form

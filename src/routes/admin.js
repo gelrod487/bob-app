@@ -5,6 +5,7 @@ const asyncHandler = require('../middleware/asyncHandler');
 const { trialEndsAt } = require('../middleware/auth');
 const { logAdminAction } = require('../lib/audit');
 const { httpError } = require('../lib/httpError');
+const { cleanText } = require('../lib/cleanText');
 const { computeOverview } = require('../lib/adminOverview');
 const stripe = require('../lib/stripe');
 const { isAdminEmail } = require('../middleware/auth');
@@ -141,7 +142,7 @@ router.put('/producers/:id', asyncHandler(async (req, res) => {
   const blank = (v) => v === null || (typeof v === 'string' && v.trim() === '');
 
   if (req.body.name !== undefined) {
-    const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
+    const name = cleanText(req.body.name, 120);
     if (!name || name.length > 120) throw httpError(400, 'Name is required (up to 120 characters).');
     data.name = name;
   }
