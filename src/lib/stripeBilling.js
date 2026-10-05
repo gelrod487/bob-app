@@ -29,9 +29,30 @@ function tierForPrice(priceId, env = process.env) {
   return null;
 }
 
+// Moves a producer to a new BOB tier after their Stripe plan changed (in-app switch or the
+// Stripe customer portal). Moving INTO Agency also gives them an agency to own, the same way
+// choosing Agency at checkout does. A no-op when the tier already matches, so it is safe to
+// call from both the switch route and the webhook for the same change.
+async function applyTierChange(prisma, producerId, tier) {
+  if (!tier) return;
+  const producer = await prisma.producer.findUnique({ where: { id: producerId } });
+  if (!producer || producer.subscriptionTier === tier) return;
+  const data = { subscriptionTier: tier };
+  if (tier === 'agency_owner') {
+    let owned = await prisma.agency.findUnique({ where: { ownerId: producerId } });
+    if (!owned) {
+      owned = await prisma.agency.create({
+        data: { name: `${producer.name}'s Agency`, ownerId: producerId, parentAgencyId: producer.agencyId || undefined },
+      });
+    }
+    if (!producer.agencyId) data.agencyId = owned.id;
+  }
+  await prisma.producer.update({ where: { id: producerId }, data });
+}
+
 // Live Stripe state for one producer, plus any disagreement with what BOB has stored.
-// The webhook doesn't update subscriptionTier on a plan change and ignores payment-failure
-// events, so a producer's stored state can drift from Stripe — this makes that visible.
+// The webhook now follows plan changes, but it still ignores payment-failure events and could
+// miss one, so a producer's stored state can drift from Stripe — this makes that visible.
 async function getBillingSummary(producer, stripeClient, mode = stripeMode()) {
   if (!producer.stripeCustomerId) {
     return { linked: false, mode, mismatches: [], note: 'No Stripe customer yet — this producer never started checkout.' };
@@ -106,4 +127,4 @@ async function getBillingSummary(producer, stripeClient, mode = stripeMode()) {
   return summary;
 }
 
-module.exports = { stripeMode, customerDashboardUrl, expectedStatus, tierForPrice, getBillingSummary };
+module.exports = { stripeMode, customerDashboardUrl, expectedStatus, tierForPrice, applyTierChange, getBillingSummary };

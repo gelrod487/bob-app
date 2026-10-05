@@ -14,7 +14,8 @@
     "prisma:migrate": "prisma migrate dev --name init",
     "prisma:studio": "prisma studio",
     "dev:migrate": "BOB_ENV_FILE=.env.dev node scripts/assert-dev-env.js && node --env-file=.env.dev node_modules/.bin/prisma migrate deploy",
-    "dev:password": "node scripts/set-dev-db-password.js"
+    "dev:password": "node scripts/set-dev-db-password.js",
+    "dev:stripe": "node scripts/set-dev-stripe-key.js"
   },
   "dependencies": {
     "@prisma/client": "^5.19.0",

@@ -1,6 +1,7 @@
 const stripe = require('../lib/stripe');
 const prisma = require('../lib/db');
 const asyncHandler = require('../middleware/asyncHandler');
+const { tierForPrice, applyTierChange } = require('../lib/stripeBilling');
 
 // A comped account (see Producer.isComped) has its tier/status set by hand in the admin
 // console — Stripe events for it are ignored so they can't overwrite that.
@@ -79,6 +80,10 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
           where: { id: producerId },
           data: { subscriptionStatus: status },
         });
+        // A plan change (in-app switch or the Stripe customer portal) shows up as a different
+        // price on the subscription — follow it, so what they pay for is what they get.
+        const priceId = subscription.items?.data?.[0]?.price?.id;
+        if (status === 'active' || status === 'past_due') await applyTierChange(prisma, producerId, tierForPrice(priceId));
       }
       break;
     }

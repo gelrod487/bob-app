@@ -1693,9 +1693,13 @@ async function renderSubscribe(){
         </tbody>
       </table>
       <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:16px;">
-        <button class="primary" id="subscribeIndividualBtn">Subscribe — Producer ($29/mo)</button>
-        <button class="primary" id="subscribeProducerPlusBtn">Subscribe — Producer Plus ($39/mo)</button>
-        <button class="primary" id="subscribeAgencyBtn">Subscribe — Agency ($79/mo)</button>
+        ${[['individual','Producer','$29'],['producer_plus','Producer Plus','$39'],['agency_owner','Agency','$79']].map(([t, label, price]) => {
+          const id = { individual:'subscribeIndividualBtn', producer_plus:'subscribeProducerPlusBtn', agency_owner:'subscribeAgencyBtn' }[t];
+          if (!isActivePaid) return `<button class="primary" id="${id}">Subscribe — ${label} (${price}/mo)</button>`;
+          return me.subscriptionTier === t
+            ? `<button class="ghost" id="${id}" disabled>Your plan — ${label} (${price}/mo)</button>`
+            : `<button class="primary" id="${id}">Switch to ${label} (${price}/mo)</button>`;
+        }).join('')}
         <button class="ghost" id="manageBillingBtn" style="${me.subscriptionStatus==='active'?'':'display:none;'}">Manage Billing</button>
       </div>
       <p class="helptext" style="margin-top:10px;">Producer Plus adds the Commission Calculator and Analytics. Agency includes everything in Producer Plus, plus your team dashboard.</p>
@@ -1718,9 +1722,12 @@ async function renderSubscribe(){
 async function startCheckout(tier){
   const errEl = document.getElementById('billingError');
   errEl.textContent = '';
+  const alreadyPaying = me.subscriptionStatus === 'active' || me.subscriptionStatus === 'past_due';
+  if (alreadyPaying && !confirm(`Switch to ${PLAN_LABEL[tier]}? Your current subscription changes right away and Stripe prorates the difference on your next invoice.`)) return;
   try {
-    const { url } = await apiFetch('/api/billing/checkout-session', { method:'POST', body:{ tier } });
-    window.location.href = url;
+    const result = await apiFetch('/api/billing/checkout-session', { method:'POST', body:{ tier } });
+    if (result.changed) { errEl.style.color = 'var(--ink)'; errEl.textContent = `Switched to ${PLAN_LABEL[tier]}. Updating…`; setTimeout(() => { window.location.href = '/app.html'; }, 900); return; }
+    window.location.href = result.url;
   } catch (err) { errEl.textContent = err.message; }
 }
 

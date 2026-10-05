@@ -2,6 +2,7 @@ const express = require('express');
 const stripe = require('../lib/stripe');
 const prisma = require('../lib/db');
 const asyncHandler = require('../middleware/asyncHandler');
+const { applyTierChange } = require('../lib/stripeBilling');
 
 const router = express.Router();
 
@@ -20,6 +21,25 @@ router.post('/checkout-session', asyncHandler(async (req, res) => {
   if (!priceId) return res.status(400).json({ error: 'tier must be "individual", "producer_plus", or "agency_owner".' });
 
   const producer = await prisma.producer.findUnique({ where: { id: req.producerId } });
+
+  // Already subscribed? Never start a second subscription (that would bill them twice) —
+  // switch the existing one to the new plan instead. Stripe prorates the difference.
+  if (producer.stripeSubscriptionId && !producer.isComped) {
+    let current = null;
+    try { current = await stripe.subscriptions.retrieve(producer.stripeSubscriptionId); } catch (e) { current = null; }
+    if (current && ['active', 'past_due', 'trialing'].includes(current.status)) {
+      const item = current.items.data[0];
+      if (item.price.id === priceId) return res.status(409).json({ error: "You're already on this plan." });
+      await stripe.subscriptions.update(current.id, {
+        items: [{ id: item.id, price: priceId }],
+        proration_behavior: 'create_prorations',
+        cancel_at_period_end: false,
+        metadata: { producerId: producer.id, tier },
+      });
+      await applyTierChange(prisma, producer.id, tier);
+      return res.json({ changed: true, tier });
+    }
+  }
 
   let stripeCustomerId = producer.stripeCustomerId;
   if (!stripeCustomerId) {
