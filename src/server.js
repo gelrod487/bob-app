@@ -114,4 +114,10 @@ app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
 process.on('unhandledRejection', (err) => console.error('Unhandled rejection:', err));
 
 const port = process.env.PORT || 4000;
-app.listen(port, () => console.log(`BOB backend listening on :${port}`));
+app.listen(port, () => {
+  console.log(`BOB backend listening on :${port}`);
+  // Record every existing account as having used its trial (no-op once they're all recorded).
+  require('./lib/trialUse').backfillTrialUse(prisma)
+    .then((n) => { if (n) console.log(`Recorded ${n} existing account(s) as trial-used.`); })
+    .catch((err) => console.error('trial-use backfill failed:', err.message));
+});

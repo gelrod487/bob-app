@@ -417,3 +417,13 @@ model OwnerDraw {
   @@index([producerId])
   @@map("owner_draw")
 }
+
+// One row per person who has ever started a free trial, keyed by a one-way fingerprint of their
+// canonical email (see src/lib/trialUse.js). Survives account deletion, so deleting and
+// re-signing-up (or using +aliases / Gmail dots) doesn't earn a second trial.
+model TrialUse {
+  emailHash   String   @id @map("email_hash")
+  firstUsedAt DateTime @default(now()) @map("first_used_at")
+
+  @@map("trial_use")
+}

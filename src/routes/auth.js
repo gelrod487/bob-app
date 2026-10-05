@@ -3,8 +3,21 @@ const prisma = require('../lib/db');
 const asyncHandler = require('../middleware/asyncHandler');
 const { isAdminEmail } = require('../middleware/auth');
 const { cleanText } = require('../lib/cleanText');
+const { isDisposableEmail, registerTrialUse } = require('../lib/trialUse');
 
 const router = express.Router();
+
+// One free trial per person. The first account for a (canonical) email keeps the normal 14
+// days. A returning email — deleted and re-signed-up, or a +alias / Gmail-dots variant — is
+// created with the trial already over (trial end pinned to signup time), so it lands on the
+// Subscribe page. An admin can still grant them a trial from the console (trial override).
+// Admin accounts are exempt from the trial gate anyway, so they're left alone.
+async function applyTrialRule(producer, email) {
+  if (isAdminEmail(email)) return producer;
+  const firstTime = await registerTrialUse(prisma, email);
+  if (firstTime) return producer;
+  return prisma.producer.update({ where: { id: producer.id }, data: { trialEndsAtOverride: producer.createdAt } });
+}
 
 // POST /api/auth/bootstrap — called once, right after Supabase sign-up (or first sign-in),
 // to create the app-level Producer row for a Supabase Auth user. Safe to call again for an
@@ -18,6 +31,12 @@ router.post('/bootstrap', asyncHandler(async (req, res) => {
   const name = cleanText(req.body.name, 100);
   const agencyName = cleanText(req.body.agencyName, 100);
   if (!name) return res.status(400).json({ error: 'name is required.' });
+
+  // Throwaway-inbox addresses can't start a trial (the signup page also says so up front, but
+  // that check can be bypassed — this one can't). Admin accounts are exempt.
+  if (!isAdminEmail(req.supabaseUser.email) && isDisposableEmail(req.supabaseUser.email)) {
+    return res.status(400).json({ error: 'Please sign up with a permanent email address, not a temporary or disposable one.' });
+  }
 
   // Internal admin accounts (ADMIN_EMAILS) aren't a paying customer tier — the signup form
   // skips the plan picker for them (see login.html's ?admin=1 flow), so default it here
@@ -41,7 +60,7 @@ router.post('/bootstrap', asyncHandler(async (req, res) => {
         agencyId: agency.id,
       },
     });
-    return res.status(201).json(producer);
+    return res.status(201).json(await applyTrialRule(producer, req.supabaseUser.email));
   }
 
   if (!tier) return res.status(400).json({ error: 'name and tier are required.' });
@@ -69,7 +88,7 @@ router.post('/bootstrap', asyncHandler(async (req, res) => {
     return created;
   });
 
-  res.status(201).json(producer);
+  res.status(201).json(await applyTrialRule(producer, req.supabaseUser.email));
 }));
 
 module.exports = router;
