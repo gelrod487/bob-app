@@ -451,3 +451,15 @@ footer.home-footer a{display:block; color:var(--ink-soft); text-decoration:none;
 .notice-bar.info{background:var(--panel-alt); color:var(--ink); border-bottom:1px solid var(--line);}
 .notice-bar.warning{background:var(--amber-bg); color:var(--amber);}
 .notice-bar.support{background:var(--red-bg); color:var(--red);}
+
+/* Terms / Privacy pages */
+.legal-wrap{max-width:760px; margin:0 auto; padding:24px 18px 48px;}
+.legal{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:34px 32px; box-shadow:var(--shadow);}
+.legal h1{font-family:'Playfair Display',serif; font-size:2rem; margin:0 0 6px;}
+.legal h2{font-family:'Playfair Display',serif; font-size:1.2rem; margin:28px 0 8px; color:var(--maroon);}
+.legal p, .legal li{font-size:.96rem; line-height:1.65; color:var(--ink);}
+.legal ul{padding-left:22px; margin:8px 0;}
+.legal li{margin:6px 0;}
+.legal-meta{color:var(--ink-soft); font-size:.88rem; margin:0 0 18px;}
+.legal-foot{text-align:center; font-size:.85rem; color:var(--ink-soft); margin-top:18px;}
+@media(max-width:600px){.legal{padding:24px 18px;}}

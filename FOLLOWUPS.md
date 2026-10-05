@@ -14,6 +14,23 @@ Running list of deferred action items — things that are deliberate "not now" d
       - Also requires bumping compute to at least the "Small" tier (~$15/mo) if not already there.
       - Where: Supabase Dashboard → Database → Backups → Point in Time.
 
+## Business / legal
+
+- [ ] **Move BOB from Elrod Financial, LLC (d/b/a BOB) into its own LLC** once the user base has
+      grown (Gustin's plan as of 2026-10-05). Launching under Elrod Financial, LLC first. When the
+      new company exists, the move involves:
+      - Sign an IP/asset assignment moving the code, the BOB name, and the getbob.agency domain.
+      - New Stripe account under the new LLC; ask Stripe support to migrate saved cards; new
+        prices, webhook endpoint, and keys in Render; recreate/move subscriptions.
+      - New EIN and bank account; update sales-tax registration and the DBA filing.
+      - Update Terms, Privacy, and the footer with the new legal name (Terms section 14 already
+        lets us transfer the agreement to an affiliate/successor); tell customers.
+      - Billing contact updates on Supabase, Render, Resend, Cloudflare.
+      Easier the earlier it's done (fewer subscriptions to move).
+- [ ] Have an attorney review the Terms of Service and Privacy Policy (drafted 2026-10-05).
+- [ ] File a DBA / fictitious-name registration for "BOB" if the state requires one.
+- [ ] Decide on sales tax for subscriptions (Stripe Tax) before going live.
+
 ## Done
 
 - [x] Add `sslmode=require` to Render's environment variables for `DATABASE_URL` and
