@@ -76,6 +76,11 @@ function trialEndsAt(producer) {
 // — a producer still inside their 14-day trial gets full Producer Plus-level feature access
 // regardless of which plan they picked at signup, so the trial actually shows off the more
 // robust version of BOB rather than whatever tier they happened to click first.
+//
+// Deliberately NOT cut short when someone subscribes early: a Producer-plan subscriber keeps
+// the Plus preview until the 14 days are up, so they use the Calculator and Analytics and feel
+// the loss (and want to upgrade) when it ends. The app labels this honestly — see
+// trialPreviewBanner() in app.html, which words it differently for paying vs. not-yet-paying.
 function isTrialing(producer) {
   return new Date() < trialEndsAt(producer);
 }

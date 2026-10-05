@@ -35,6 +35,7 @@
     </div>
     <div class="sidebar-footer">
       <button data-page="subscribe"><span class="ic">💳</span>Subscribe <span class="pill" id="sidebarStatusPill" style="margin-left:auto;"></span></button>
+      <div class="sidebar-plan" id="sidebarPlan"></div>
       <button data-page="team" id="teamNavBtn" style="display:none;"><span class="ic">👥</span>Team</button>
       <button data-page="feedback"><span class="ic">💡</span>Feedback</button>
       <button data-page="settings"><span class="ic">⚙️</span>Settings</button>
@@ -86,10 +87,18 @@ const PLAN_LABEL = { individual: 'Producer', producer_plus: 'Producer Plus', age
 // Shown on the Calculator and Analytics tabs for a base-Producer-tier account only
 // reaching them via trial access (see hasPlusFeatures in GET /api/me) — if they're on
 // Producer Plus/Agency already, me.subscriptionTier won't be 'individual' and this stays
-// hidden, since there's nothing to warn them about.
+// hidden, since there's nothing to warn them about. Paying Producer subscribers keep this
+// access until their 14 days end (on purpose — it's the upgrade pitch), so the wording
+// differs: someone not yet paying is "previewing during the trial"; someone already on the
+// Producer plan is told the preview has an end date and that Producer Plus keeps it.
 function trialPreviewBanner(){
   if (me.subscriptionTier !== 'individual') return '';
-  return `<div class="panel" style="border-color:var(--accent); margin-bottom:16px;"><p class="helptext" style="font-weight:600; margin:0;">You're previewing this Producer Plus feature free during your trial. <a href="#" onclick="go('subscribe');return false;" style="color:var(--maroon); font-weight:700; text-decoration:none;">See plans →</a></p></div>`;
+  const paying = me.subscriptionStatus === 'active' || me.subscriptionStatus === 'past_due';
+  const ends = new Date(me.trialEndsAt).toLocaleDateString(undefined, { month: 'long', day: 'numeric' });
+  const text = paying
+    ? `Your Producer plan doesn't include this Producer Plus feature — you can keep using it free until your trial ends on ${ends}. <a href="#" onclick="go('subscribe');return false;" style="color:var(--maroon); font-weight:700; text-decoration:none;">Switch to Producer Plus to keep it →</a>`
+    : `You're previewing this Producer Plus feature free during your trial. <a href="#" onclick="go('subscribe');return false;" style="color:var(--maroon); font-weight:700; text-decoration:none;">See plans →</a>`;
+  return `<div class="panel" style="border-color:var(--accent); margin-bottom:16px;"><p class="helptext" style="font-weight:600; margin:0;">${text}</p></div>`;
 }
 // Shown in place of a Producer Plus tab's normal content when the server-side gate
 // (requireProducerPlusOrAbove) rejects the request — e.g. a Producer-tier account whose
@@ -324,8 +333,20 @@ function renderNotices(meRes){
   renderNotices(meRes);
 
   const statusPill = document.getElementById('sidebarStatusPill');
-  statusPill.textContent = me.subscriptionStatus;
-  statusPill.className = 'pill ' + me.subscriptionStatus;
+  // A not-yet-paying account still inside its free trial reads "trial" (amber), not the raw
+  // "inactive" status, which looks like something is wrong.
+  const onFreeTrial = !['active', 'past_due'].includes(me.subscriptionStatus) && !me.trialExpired && !me.isAdmin;
+  statusPill.textContent = onFreeTrial ? 'trial' : me.subscriptionStatus;
+  statusPill.className = 'pill ' + (onFreeTrial ? 'past_due' : me.subscriptionStatus);
+  // Plan name under Subscribe: the paid plan once subscribed, otherwise where the trial stands.
+  const planEl = document.getElementById('sidebarPlan');
+  const paying = me.subscriptionStatus === 'active' || me.subscriptionStatus === 'past_due';
+  if (paying) planEl.textContent = `${PLAN_LABEL[me.subscriptionTier] || 'Producer'} plan`;
+  else if (me.trialExpired) planEl.textContent = 'Free trial ended';
+  else {
+    const daysLeft = Math.max(0, Math.ceil((new Date(me.trialEndsAt) - Date.now()) / 86400000));
+    planEl.textContent = `Free trial · ${daysLeft} day${daysLeft === 1 ? '' : 's'} left`;
+  }
   if (me.subscriptionTier === 'agency_owner') document.getElementById('teamNavBtn').style.display = '';
   if (me.isAdmin) document.getElementById('adminNavBtn').style.display = '';
   // Calculator and Analytics stay visible to every tier — clicking in as a Producer-only
@@ -1680,7 +1701,7 @@ async function renderSubscribe(){
     ${me.trialExpired ? `<div class="panel" style="border-color:var(--maroon); margin-bottom:16px;"><p class="helptext" style="color:var(--maroon); font-weight:600;">Your 14-day free trial has ended. Subscribe below to keep using your book.</p></div>` : ''}
     ${isCurrentlyTrialing ? `<div class="panel" style="border-color:var(--accent); margin-bottom:16px;"><p class="helptext" style="font-weight:600;">You're currently seeing full Producer Plus-level access during your trial — including the Commission Calculator and Analytics — no matter which plan you pick below. Once your trial ends, those two stay unlocked only on Producer Plus or Agency.</p></div>` : ''}
     <div class="panel">
-      <p class="helptext">Current plan: <strong>${PLAN_LABEL[me.subscriptionTier] || 'Producer'}</strong> · Status: <span class="pill ${me.subscriptionStatus}">${me.subscriptionStatus}</span></p>
+      <p class="helptext">Current plan: <strong>${PLAN_LABEL[me.subscriptionTier] || 'Producer'}</strong> · Status: <span class="pill ${isCurrentlyTrialing ? 'past_due' : me.subscriptionStatus}">${isCurrentlyTrialing ? 'trial' : me.subscriptionStatus}</span></p>
       <table style="margin-top:16px;">
         <thead><tr><th>Feature</th><th>Producer</th><th>Producer Plus</th><th>Agency</th></tr></thead>
         <tbody>

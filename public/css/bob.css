@@ -246,6 +246,7 @@ footer.home-footer a{display:block; color:var(--ink-soft); text-decoration:none;
 .sidebar-nav button .ic{font-size:1.05rem; width:20px; text-align:center;}
 .sidebar-nav button.active{background:var(--panel); color:var(--maroon); box-shadow:var(--shadow);}
 .sidebar-footer{display:flex; flex-direction:column; gap:8px; padding-top:12px; border-top:1px solid var(--line);}
+.sidebar-plan{font-size:.75rem; font-weight:600; color:var(--maroon); padding:0 12px 4px 44px; margin-top:-6px;}
 .sidebar-footer button{display:flex; align-items:center; gap:10px; background:transparent; border:none; padding:9px 12px; border-radius:10px; font-weight:600; font-size:.88rem; color:var(--ink-soft); cursor:pointer; text-align:left;}
 .main-area{flex:1; min-width:0;}
 .main-inner{max-width:960px; margin:0 auto; padding:30px 30px 70px;}
