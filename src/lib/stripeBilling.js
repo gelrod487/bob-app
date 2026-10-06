@@ -2,7 +2,9 @@
 // parameter so it can be unit-tested with a fake one.
 
 function stripeMode(secretKey = process.env.STRIPE_SECRET_KEY) {
-  return (secretKey || '').trim().startsWith('sk_live_') ? 'live' : 'test';
+  const key = (secretKey || '').trim();
+  // sk_live_ is a standard secret key; rk_live_ is a restricted key (what Stripe issues for "full access except sensitive operations").
+  return key.startsWith('sk_live_') || key.startsWith('rk_live_') ? 'live' : 'test';
 }
 
 function customerDashboardUrl(customerId, mode = stripeMode()) {

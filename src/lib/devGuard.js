@@ -15,7 +15,8 @@ function devEnvProblems(env = process.env) {
       problems.push(`${key} points at the PRODUCTION Supabase project (${PRODUCTION_PROJECT_REF}).`);
     }
   }
-  if ((env.STRIPE_SECRET_KEY || '').startsWith('sk_live_')) {
+  const stripeKey = (env.STRIPE_SECRET_KEY || '').trim();
+  if (stripeKey.startsWith('sk_live_') || stripeKey.startsWith('rk_live_')) {
     problems.push('STRIPE_SECRET_KEY is a LIVE Stripe key — use an sk_test_ key locally.');
   }
   return problems;

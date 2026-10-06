@@ -448,6 +448,18 @@ completeForm.addEventListener('submit', async (e) => {
   }
 });
 
+/* ---- landed here from an email link that failed (already used, expired, or invalid) ---- */
+(function explainFailedEmailLink() {
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  if (!hash.get('error_code') && !hash.get('error')) return;
+  history.replaceState(null, '', window.location.pathname + window.location.search);
+  const expired = /otp_expired|expired|invalid/i.test(`${hash.get('error_code')} ${hash.get('error_description')}`);
+  const msg = expired
+    ? 'That email link was already used or has expired. If you already confirmed your email, just sign in below. If not, sign up again with the same email and we will send a fresh link.'
+    : 'That email link did not work. Please try signing in below, or sign up again for a fresh link.';
+  document.getElementById('signinError').textContent = msg;
+})();
+
 /* ---- if already signed in, skip straight to the right place ---- */
 (async () => {
   const { data: { session } } = await supabaseClient.auth.getSession();
