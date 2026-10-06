@@ -6,6 +6,11 @@ const { applyTierChange } = require('../lib/stripeBilling');
 
 const router = express.Router();
 
+// True only when the env var is exactly "true" (any other value, or unset, keeps tax off).
+function taxEnabled() {
+  return (process.env.STRIPE_AUTOMATIC_TAX || '').trim().toLowerCase() === 'true';
+}
+
 const PRICE_BY_TIER = {
   individual: process.env.STRIPE_PRICE_ID_INDIVIDUAL,
   producer_plus: process.env.STRIPE_PRICE_ID_PRODUCER_PLUS,
@@ -65,10 +70,23 @@ router.post('/checkout-session', asyncHandler(async (req, res) => {
   }
 
   const origin = `${req.protocol}://${req.get('host')}`;
+  // Sales tax, worked out by Stripe from the customer's billing address. Behind an env switch
+  // (STRIPE_AUTOMATIC_TAX=true) because Stripe rejects checkout if automatic tax is requested
+  // before Stripe Tax is set up on the account — flip it on only after Stripe Tax is configured.
+  const taxOptions = taxEnabled()
+    ? {
+        automatic_tax: { enabled: true },
+        billing_address_collection: 'required',
+        // Lets Stripe save the address and name the customer types onto their Stripe customer,
+        // which it needs to calculate tax (and for later renewals).
+        customer_update: { address: 'auto', name: 'auto' },
+      }
+    : {};
   const session = await stripe.checkout.sessions.create({
     mode: 'subscription',
     customer: stripeCustomerId,
     line_items: [{ price: priceId, quantity: 1 }],
+    ...taxOptions,
     success_url: `${origin}/app.html?checkout=success`,
     cancel_url: `${origin}/app.html?checkout=cancelled`,
     metadata: { producerId: producer.id, tier },
