@@ -58,6 +58,10 @@ router.get('/', asyncHandler(async (req, res) => {
       subscriptionTier: producer.subscriptionTier,
       subscriptionStatus: producer.subscriptionStatus,
       trialEndsAt: endsAt.toISOString(),
+      // Whole days left, worked out here on the server's clock (not the visitor's, which can be
+      // a few seconds off). The 2-minute allowance stops a hair of clock difference right after
+      // signup from rounding 14 days up to 15.
+      trialDaysLeft: Math.max(0, Math.ceil((endsAt.getTime() - Date.now() - 2 * 60 * 1000) / 86400000)),
       trialExpired,
       // Producer Plus-level features (Commission Calculator, Analytics) — available on
       // the Producer Plus/Agency Owner tiers, or to ANY tier still inside its 14-day

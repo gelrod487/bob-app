@@ -56,7 +56,7 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
           }
           if (!producer.agencyId) membershipAgencyId = ownedAgency.id;
         }
-        await prisma.producer.update({
+        await prisma.producer.updateMany({
           where: { id: producerId },
           data: {
             subscriptionStatus: 'active',
@@ -76,7 +76,7 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
           : subscription.status === 'past_due' ? 'past_due'
           : subscription.cancel_at_period_end ? 'active'
           : 'inactive';
-        await prisma.producer.update({
+        await prisma.producer.updateMany({
           where: { id: producerId },
           data: { subscriptionStatus: status },
         });
@@ -91,7 +91,7 @@ const handleStripeWebhook = asyncHandler(async (req, res) => {
       const subscription = event.data.object;
       const producerId = subscription.metadata?.producerId;
       if (producerId && !(await isCompedProducer(producerId))) {
-        await prisma.producer.update({
+        await prisma.producer.updateMany({
           where: { id: producerId },
           data: { subscriptionStatus: 'canceled' },
         });

@@ -344,7 +344,7 @@ function renderNotices(meRes){
   if (paying) planEl.textContent = `${PLAN_LABEL[me.subscriptionTier] || 'Producer'} plan`;
   else if (me.trialExpired) planEl.textContent = 'Free trial ended';
   else {
-    const daysLeft = Math.max(0, Math.ceil((new Date(me.trialEndsAt) - Date.now()) / 86400000));
+    const daysLeft = me.trialDaysLeft != null ? me.trialDaysLeft : Math.max(0, Math.ceil((new Date(me.trialEndsAt) - Date.now()) / 86400000));
     planEl.textContent = `Free trial · ${daysLeft} day${daysLeft === 1 ? '' : 's'} left`;
   }
   if (me.subscriptionTier === 'agency_owner') document.getElementById('teamNavBtn').style.display = '';
