@@ -42,6 +42,18 @@ router.post('/checkout-session', asyncHandler(async (req, res) => {
   }
 
   let stripeCustomerId = producer.stripeCustomerId;
+  // A saved customer id can point at a customer that no longer exists on this Stripe account
+  // (e.g. it was created in Stripe's test mode and the app has since moved to live keys, or the
+  // customer was deleted in the dashboard). Treat that as "no customer yet" and make a fresh one.
+  if (stripeCustomerId) {
+    try {
+      const existing = await stripe.customers.retrieve(stripeCustomerId);
+      if (existing.deleted) stripeCustomerId = null;
+    } catch (err) {
+      if (err.code === 'resource_missing') stripeCustomerId = null;
+      else throw err;
+    }
+  }
   if (!stripeCustomerId) {
     const customer = await stripe.customers.create({
       email: producer.email,
@@ -79,10 +91,19 @@ router.post('/portal-session', asyncHandler(async (req, res) => {
   }
 
   const origin = `${req.protocol}://${req.get('host')}`;
-  const session = await stripe.billingPortal.sessions.create({
-    customer: producer.stripeCustomerId,
-    return_url: `${origin}/app.html`,
-  });
+  let session;
+  try {
+    session = await stripe.billingPortal.sessions.create({
+      customer: producer.stripeCustomerId,
+      return_url: `${origin}/app.html`,
+    });
+  } catch (err) {
+    // The saved customer doesn't exist on this Stripe account (see checkout-session above).
+    if (err.code === 'resource_missing') {
+      return res.status(400).json({ error: 'No active billing account found. Choose a plan above to subscribe.' });
+    }
+    throw err;
+  }
 
   res.json({ url: session.url });
 }));
