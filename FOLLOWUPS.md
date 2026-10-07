@@ -14,15 +14,6 @@ Running list of deferred action items — things that are deliberate "not now" d
       - Also requires bumping compute to at least the "Small" tier (~$15/mo) if not already there.
       - Where: Supabase Dashboard → Database → Backups → Point in Time.
 
-## Before launch
-
-- [ ] **Add a way for prospective customers to contact BOB on the marketing page.** (Gustin,
-      2026-10-06 — do right after the Stripe live-mode switch.) Today the homepage has no "Contact
-      us" anywhere. support@getbob.agency now exists (Cloudflare Email Routing -> Gustin's inbox;
-      replies go out as "BOB Support" via Gmail Send-mail-as + Resend SMTP). Add: a Contact link in
-      the footer + nav, a short Contact/Support section or page with the email, and mention it in the
-      FAQ ("Questions? Email support@getbob.agency"). Consider a simple contact form later.
-
 ## Business / legal
 
 - [ ] **Move BOB from Elrod Financial, LLC (d/b/a BOB) into its own LLC** once the user base has
@@ -38,9 +29,25 @@ Running list of deferred action items — things that are deliberate "not now" d
       Easier the earlier it's done (fewer subscriptions to move).
 - [ ] Have an attorney review the Terms of Service and Privacy Policy (drafted 2026-10-05).
 - [ ] File a DBA / fictitious-name registration for "BOB" if the state requires one.
-- [ ] Decide on sales tax for subscriptions (Stripe Tax) before going live.
+- [ ] **Sales tax on subscriptions — deferred by Gustin (2026-10-06): "not collecting tax yet."**
+      Code is already in place and OFF: set `STRIPE_AUTOMATIC_TAX=true` in Render to have Stripe
+      calculate tax at checkout (billing address required). Before turning it on:
+      1. Get a Texas Sales and Use Tax Permit (free, comptroller.texas.gov). Texas generally taxes
+         SaaS as a data-processing service (80% of the price taxable) — confirm with the accountant.
+      2. Stripe live: Settings > Tax: head office address, default tax code "SaaS – business use",
+         default behavior Exclusive, add a Texas registration with the permit number, turn on
+         monitoring for other states (thresholds, often ~$100k in a state).
+      3. Optionally test first in the Stripe sandbox (any permit number works there), with a Texas
+         ZIP (e.g. 78261) to see the tax line.
+      Until then, Texas customers' purchases are untaxed — ask the accountant how to handle any
+      Texas sales made before the permit exists.
 
 ## Done
+
+- [x] **Contact path for prospective customers on the marketing page** — done 2026-10-06: Contact
+      link in nav + footer, "Questions? Ask a real person." section with a mailto button, a FAQ
+      entry, and a help line under the sign-in form. support@getbob.agency forwards to Gustin's
+      inbox; replies go out as "BOB Support".
 
 - [x] Add `sslmode=require` to Render's environment variables for `DATABASE_URL` and
       `DIRECT_URL` — confirmed live in production 2026-09-30.
