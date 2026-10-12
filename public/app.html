@@ -1455,11 +1455,18 @@ async function monthlyStatsReal(count){
     return { label: m.label, dials, sales, gross, cb, cost, net: gross - cb - cost, draw };
   });
 }
+// One Unit economics tile: the metric, its value, and a one-line definition underneath.
+function unitMetric(label, value, definition){
+  return `<div class="metric-cell"><div class="mlabel">${label}</div><div class="mvalue">${value}</div><div class="mdef">${definition}</div></div>`;
+}
+// "Paid commissions" below means gross first-year commission paid in the range (before chargebacks).
+const NO_DATA = '—';
+function ratioOrDash(numerator, denominator, format){ return denominator ? format(numerator/denominator) : NO_DATA; }
 async function renderProfit(){
   mainInner.innerHTML = `<div class="page-header"><div><div class="page-eyebrow">Profit</div><h1>Financial reporting</h1></div></div><p class="helptext">Loading…</p>`;
   const range = computeDateRange(dateFilterState.profit.key, dateFilterState.profit.from, dateFilterState.profit.to);
   const healthRange = computeDateRange(dateFilterState.healthOfBook.key, dateFilterState.healthOfBook.from, dateFilterState.healthOfBook.to);
-  const [dash, dashHealth, entries, policies, activityRange, draws, expensesHealth] = await Promise.all([
+  const [dash, dashHealth, entries, policies, activityRange, draws, expensesHealth, expensesRange] = await Promise.all([
     apiFetch(`/api/dashboard?from=${range.from}&to=${range.to}`),
     apiFetch(`/api/dashboard?from=${healthRange.from}&to=${healthRange.to}`),
     apiFetch(`/api/commission-entries?from=${range.from}&to=${range.to}`),
@@ -1467,18 +1474,28 @@ async function renderProfit(){
     apiFetch(`/api/activity?from=${range.from}&to=${range.to}`),
     apiFetch(`/api/owner-draws?from=${range.from}&to=${range.to}`),
     apiFetch(`/api/expenses?from=${healthRange.from}&to=${healthRange.to}`),
+    apiFetch(`/api/expenses?from=${range.from}&to=${range.to}`),
   ]);
   policiesCache = policies;
   const isAgency = dash.tier === 'agency_owner';
 
-  const actTotals = activityRange.reduce((s,r)=>({dials:s.dials+r.dials, appointments:s.appointments+r.appointments, sales:s.sales+r.sales}), {dials:0,appointments:0,sales:0});
+  const actTotals = activityRange.reduce((s,r)=>({dials:s.dials+r.dials, appointments:s.appointments+r.appointments, presentations:s.presentations+(r.presentations||0), sales:s.sales+r.sales}), {dials:0,appointments:0,presentations:0,sales:0});
   const placedRange = policies.filter(p => (p.status==='active'||p.status==='lapsed') && p.issueDate.slice(0,10) >= range.from && p.issueDate.slice(0,10) <= range.to);
-  const costPerSale = actTotals.sales ? dash.totalExpenses/actTotals.sales : 0;
-  const commissionPerDial = actTotals.dials ? dash.grossCommission/actTotals.dials : 0;
-  const costPerAppointment = actTotals.appointments ? dash.totalExpenses/actTotals.appointments : 0;
-  const costPerDial = actTotals.dials ? dash.totalExpenses/actTotals.dials : 0;
-  const avgCaseFYC = placedRange.length ? dash.grossCommission/placedRange.length : 0;
-  const avgAnnualPremium = placedRange.length ? placedRange.reduce((s,p)=>s+premiumSize(p),0)/placedRange.length : 0;
+
+  // Unit economics: all for the selected date range, and about YOUR OWN selling. For an agency owner the
+  // dashboard totals above are the whole team's, so paid commissions here come from the owner's own entries.
+  const paidCommissions = entries
+    .filter(c => c.ownerType !== 'agency' && ['advance','installment','additional','other'].includes(c.entryType))
+    .reduce((t,c) => t + Number(c.amount), 0);
+  const leadCosts = expensesRange.filter(e => e.category === 'Leads').reduce((t,e) => t + Number(e.amount), 0);
+  const unit = {
+    costPerSale: ratioOrDash(leadCosts, paidCommissions, v => (v*100).toFixed(1) + '%'),
+    commissionPerDial: ratioOrDash(paidCommissions, actTotals.dials, fmtMoney2),
+    commissionPerAppointment: ratioOrDash(paidCommissions, actTotals.appointments, fmt),
+    commissionPerPresentation: ratioOrDash(paidCommissions, actTotals.presentations, fmt),
+    avgCaseFYC: ratioOrDash(paidCommissions, placedRange.length, fmt),
+    avgAnnualPremium: placedRange.length ? fmt(placedRange.reduce((s,p)=>s+premiumSize(p),0)/placedRange.length) : NO_DATA,
+  };
 
   const netProfitPct = dashHealth.grossCommission ? (dashHealth.netProfit/dashHealth.grossCommission*100) : 0;
   const chargebackRatio = dashHealth.grossCommission ? (dashHealth.chargebacks/dashHealth.grossCommission*100) : 0;
@@ -1562,12 +1579,12 @@ async function renderProfit(){
       <h2>Unit economics</h2>
       <p class="helptext" style="margin:-8px 0 14px;">${fmtDateRangeLabel(range.from)} – ${fmtDateRangeLabel(range.to)}</p>
       <div class="metrics-grid">
-        <div class="metric-cell"><div class="mlabel">Cost per Sale</div><div class="mvalue">${fmt(costPerSale)}</div></div>
-        <div class="metric-cell"><div class="mlabel">Commission per Dial</div><div class="mvalue">${fmtMoney2(commissionPerDial)}</div></div>
-        <div class="metric-cell"><div class="mlabel">Cost per Appointment</div><div class="mvalue">${fmt(costPerAppointment)}</div></div>
-        <div class="metric-cell"><div class="mlabel">Cost per Dial</div><div class="mvalue">${fmtMoney2(costPerDial)}</div></div>
-        <div class="metric-cell"><div class="mlabel">Average Case FYC</div><div class="mvalue">${fmt(avgCaseFYC)}</div></div>
-        <div class="metric-cell"><div class="mlabel">Average Annual Premium</div><div class="mvalue">${fmt(avgAnnualPremium)}</div></div>
+        ${unitMetric('Cost per Sale', unit.costPerSale, 'Total lead costs ÷ total first-year commission (FYC) in this date range. The share of every commission dollar spent on buying leads.')}
+        ${unitMetric('Commission per Dial', unit.commissionPerDial, 'Paid commissions ÷ total dials made in this date range. What each dial is worth.')}
+        ${unitMetric('Commission per Appointment', unit.commissionPerAppointment, 'Paid commissions ÷ total appointments scheduled in this date range.')}
+        ${unitMetric('Commission per Presentation', unit.commissionPerPresentation, 'Paid commissions ÷ total presentations given in this date range.')}
+        ${unitMetric('Average Case FYC', unit.avgCaseFYC, 'Paid commissions ÷ cases placed in this date range. The average first-year commission on a placed case.')}
+        ${unitMetric('Average Annual Premium', unit.avgAnnualPremium, 'Average annual premium (a single-premium annuity counts as its deposit) across the cases placed in this date range.')}
       </div>
     </div>
 

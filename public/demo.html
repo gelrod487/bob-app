@@ -1973,21 +1973,31 @@ function renderGoals(){
 
 /* ================= PROFIT ================= */
 let trendMonths = 6;
+// One Unit economics tile: the metric, its value, and a one-line definition underneath.
+function unitMetric(label, value, definition){
+  return `<div class="metric-cell"><div class="mlabel">${label}</div><div class="mvalue">${value}</div><div class="mdef">${definition}</div></div>`;
+}
+// "Paid commissions" below means gross first-year commission paid in the range (before chargebacks).
+const NO_DATA = '—';
+function ratioOrDash(numerator, denominator, format){ return denominator ? format(numerator/denominator) : NO_DATA; }
 function renderProfit(){
   const range = computeDateRange(dateFilterState.profit.key, dateFilterState.profit.from, dateFilterState.profit.to);
   const st = statement(range.from, range.to);
   const rangeActivity = sumActivity(activityInRange(range.from, range.to));
   const placedRange = placedInRange(range.from, range.to);
 
-  // Unit economics describe the owner's OWN selling (their dials, their cases) — the team-wide totals above
-  // would be divided by one person's activity and mean nothing — so an agency owner's use their own book.
+  // Unit economics: all for the selected date range, and about the owner's OWN selling (their dials, their
+  // cases), so an agency owner's team-wide totals above aren't divided by one person's activity.
   const own = ownStatement(range.from, range.to);
-  const costPerSale = rangeActivity.sales ? own.costsTotal/rangeActivity.sales : 0;
-  const commissionPerDial = rangeActivity.dials ? own.gross/rangeActivity.dials : 0;
-  const costPerAppointment = rangeActivity.appointments ? own.costsTotal/rangeActivity.appointments : 0;
-  const costPerDial = rangeActivity.dials ? own.costsTotal/rangeActivity.dials : 0;
-  const avgCaseFYC = placedRange.length ? own.gross/placedRange.length : 0;
-  const avgAnnualPremium = placedRange.length ? placedRange.reduce((s,c)=>s+annualPremium(c),0)/placedRange.length : 0;
+  const leadCosts = costsInRange(range.from, range.to).filter(c => c.category === 'Leads').reduce((t,c) => t + Number(c.amount), 0);
+  const unit = {
+    costPerSale: ratioOrDash(leadCosts, own.gross, v => (v*100).toFixed(1) + '%'),
+    commissionPerDial: ratioOrDash(own.gross, rangeActivity.dials, fmtMoney2),
+    commissionPerAppointment: ratioOrDash(own.gross, rangeActivity.appointments, fmt),
+    commissionPerPresentation: ratioOrDash(own.gross, rangeActivity.presentations, fmt),
+    avgCaseFYC: ratioOrDash(own.gross, placedRange.length, fmt),
+    avgAnnualPremium: placedRange.length ? fmt(placedRange.reduce((s,c)=>s+annualPremium(c),0)/placedRange.length) : NO_DATA,
+  };
 
   // Health of the book — has its own date range, independent of the filter above
   const healthRange = computeDateRange(dateFilterState.healthOfBook.key, dateFilterState.healthOfBook.from, dateFilterState.healthOfBook.to);
@@ -2076,12 +2086,12 @@ function renderProfit(){
       <h2>Unit economics</h2>
       <p class="helptext" style="margin:-8px 0 14px;">${fmtDateRangeLabel(range.from)} – ${fmtDateRangeLabel(range.to)}</p>
       <div class="metrics-grid">
-        <div class="metric-cell"><div class="mlabel">Cost per Sale</div><div class="mvalue">${fmt(costPerSale)}</div></div>
-        <div class="metric-cell"><div class="mlabel">Commission per Dial</div><div class="mvalue">${fmtMoney2(commissionPerDial)}</div></div>
-        <div class="metric-cell"><div class="mlabel">Cost per Appointment</div><div class="mvalue">${fmt(costPerAppointment)}</div></div>
-        <div class="metric-cell"><div class="mlabel">Cost per Dial</div><div class="mvalue">${fmtMoney2(costPerDial)}</div></div>
-        <div class="metric-cell"><div class="mlabel">Average Case FYC</div><div class="mvalue">${fmt(avgCaseFYC)}</div></div>
-        <div class="metric-cell"><div class="mlabel">Average Annual Premium</div><div class="mvalue">${fmt(avgAnnualPremium)}</div></div>
+        ${unitMetric('Cost per Sale', unit.costPerSale, 'Total lead costs ÷ total first-year commission (FYC) in this date range. The share of every commission dollar spent on buying leads.')}
+        ${unitMetric('Commission per Dial', unit.commissionPerDial, 'Paid commissions ÷ total dials made in this date range. What each dial is worth.')}
+        ${unitMetric('Commission per Appointment', unit.commissionPerAppointment, 'Paid commissions ÷ total appointments scheduled in this date range.')}
+        ${unitMetric('Commission per Presentation', unit.commissionPerPresentation, 'Paid commissions ÷ total presentations given in this date range.')}
+        ${unitMetric('Average Case FYC', unit.avgCaseFYC, 'Paid commissions ÷ cases placed in this date range. The average first-year commission on a placed case.')}
+        ${unitMetric('Average Annual Premium', unit.avgAnnualPremium, 'Average annual premium (a single-premium annuity counts as its deposit) across the cases placed in this date range.')}
       </div>
     </div>
 

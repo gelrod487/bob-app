@@ -44,13 +44,7 @@ Running list of deferred action items — things that are deliberate "not now" d
 
 ## Product follow-ups
 
-- [ ] **Agency owner's Profit tab — Unit economics uses the wrong denominator.** For an Agency Owner,
-      `GET /api/dashboard` rolls up the whole team (gross, chargebacks, costs), but Cost per Sale /
-      Commission per Dial / Cost per Appointment / Cost per Dial in `renderProfit` (public/app.html)
-      divide those team-wide totals by the owner's OWN dials and sales, so they come out inflated. The
-      sample Agency tour (demo.html?mode=agency) already uses the owner's own numbers for these; the live
-      app should do the same (or compute them team-wide from team activity). Same idea for Health of the
-      book's Gross Margin, which subtracts only the owner's own lead spend from team-wide gross.
+- [x] Agency owner's Profit tab unit economics now use the owner's own commissions/activity (fixed with the new Unit economics definitions, 2026-10-12). Still open: Health of the book's Gross Margin subtracts only the owner's own lead spend from team-wide gross.
 
 ## Done
 

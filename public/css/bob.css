@@ -376,6 +376,7 @@ footer.home-footer a{display:block; color:var(--ink-soft); text-decoration:none;
 .metric-cell{background:var(--panel-alt); border-radius:14px; padding:14px 16px;}
 .metric-cell .mlabel{font-size:.72rem; color:var(--ink-soft); font-weight:700; text-transform:uppercase; letter-spacing:.03em; margin-bottom:6px;}
 .metric-cell .mvalue{font-size:1.25rem; font-weight:800; font-family:'Playfair Display',serif;}
+.metric-cell .mdef{font-size:.72rem; line-height:1.4; color:var(--ink-soft); margin-top:8px;}
 .trend-controls{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:16px;}
 .case-card .case-sub{font-size:.8rem; color:var(--ink-soft); margin-top:2px;}
 .case-card .case-right{text-align:right;}
