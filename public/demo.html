@@ -1991,7 +1991,7 @@ function renderProfit(){
   const own = ownStatement(range.from, range.to);
   const leadCosts = costsInRange(range.from, range.to).filter(c => c.category === 'Leads').reduce((t,c) => t + Number(c.amount), 0);
   const unit = {
-    costPerSale: ratioOrDash(leadCosts, own.gross, v => (v*100).toFixed(1) + '%'),
+    costPerSale: ratioOrDash(leadCosts, placedRange.length, fmt),
     commissionPerDial: ratioOrDash(own.gross, rangeActivity.dials, fmtMoney2),
     commissionPerAppointment: ratioOrDash(own.gross, rangeActivity.appointments, fmt),
     commissionPerPresentation: ratioOrDash(own.gross, rangeActivity.presentations, fmt),
@@ -2086,7 +2086,7 @@ function renderProfit(){
       <h2>Unit economics</h2>
       <p class="helptext" style="margin:-8px 0 14px;">${fmtDateRangeLabel(range.from)} – ${fmtDateRangeLabel(range.to)}</p>
       <div class="metrics-grid">
-        ${unitMetric('Cost per Sale', unit.costPerSale, 'Total lead costs ÷ total first-year commission (FYC) in this date range. The share of every commission dollar spent on buying leads.')}
+        ${unitMetric('Cost per Sale', unit.costPerSale, 'Total lead costs ÷ cases placed in this date range. What it costs, in lead spend, to put one case on the books.')}
         ${unitMetric('Commission per Dial', unit.commissionPerDial, 'Paid commissions ÷ total dials made in this date range. What each dial is worth.')}
         ${unitMetric('Commission per Appointment', unit.commissionPerAppointment, 'Paid commissions ÷ total appointments scheduled in this date range.')}
         ${unitMetric('Commission per Presentation', unit.commissionPerPresentation, 'Paid commissions ÷ total presentations given in this date range.')}
