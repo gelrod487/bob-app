@@ -2028,10 +2028,16 @@ async function renderAnalytics(){
   const baselinePlacedCount = policies.filter(p => (p.status==='active'||p.status==='lapsed')
     && p.issueDate.slice(0,10) >= baseline.from && p.issueDate.slice(0,10) <= baseline.to).length;
   analyticsCache = {
-    baseline: { ...baselineFunnel, grossCommission: baselineDash.grossCommission, placedCount: baselinePlacedCount },
+    // The baseline window is 3 full months, but the target is per MONTH — so work in monthly
+    // averages here, or the "/mo" comparisons below mix 3-month totals with 1-month needs.
+    baseline: {
+      dials: baselineFunnel.dials / 3, contacts: baselineFunnel.contacts / 3, appointments: baselineFunnel.appointments / 3,
+      presentations: baselineFunnel.presentations / 3, sales: baselineFunnel.sales / 3,
+      grossCommission: baselineDash.grossCommission / 3, placedCount: baselinePlacedCount / 3,
+    },
   };
   if (!analyticsTarget) {
-    const baselineMonthlyAvg = baselineDash.grossCommission / 3;
+    const baselineMonthlyAvg = analyticsCache.baseline.grossCommission;
     analyticsTarget = Math.ceil((baselineMonthlyAvg * 1.5) / 1000) * 1000 || 10000;
   }
 

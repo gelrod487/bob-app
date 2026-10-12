@@ -73,10 +73,11 @@ function uid(prefix){ return prefix+'_'+Math.random().toString(36).slice(2,9); }
 
 /* ============================================================
    persisted store (clients, daily activity, cost lines) — all
-   local to this browser, seeded once with ~14 months of sample
-   history so every report/filter has something real to show.
+   local to this browser, seeded once with a full year-plus of sample
+   history (~215 clients, 150 placed cases, 7 lead vendors, a full set of
+   operating costs) so every report and date filter has something real to show.
    ============================================================ */
-const STORE_KEY = 'bob_demo_store_v10';
+const STORE_KEY = 'bob_demo_store_v11';
 const COST_CATEGORIES = [
   { key:'Leads',      color:'#7A3B4A' },
   { key:'Marketing',      color:'#A63D40' },
@@ -92,92 +93,285 @@ const COST_CATEGORIES = [
 function costColor(cat){ return (COST_CATEGORIES.find(c=>c.key===cat) || {}).color || '#B7ADA0'; }
 
 function seedStore(){
-  const CARRIERS = ['Americo','Mutual of Omaha','National Life','Transamerica','F&G','Foresters','Corebridge'];
-  const PRODUCTS = ['Instant IUL','Living Promise','Flexlife IUL','FE Express','Pathsetter IUL','Term 20','Whole Life'];
-  const NAMES = ['Maria Delgado','James Whitaker','Elena Ruiz','Robert Chen','Danielle Brooks','Carlos Mendoza','Ashley Cooper','Michael Torres','Sarah Kim','David Nguyen','Patricia Owens','Kevin Walsh','Nicole Foster','Brian Alvarez'];
-  const LEAD_VENDORS = ['Facebook Leads','Google Ads','Referral','Direct Mail','Aged Leads Co'];
-  const LEAD_TYPES = ['Final Expense','Mortgage Protection','IUL','Annuity Lead'];
-  const MONTHLIES = [62.10,94.50,120.00,150.00,187.40,210.00,240.00,312.00,275.00,98.00,155.00,205.00,132.00,178.50];
-  const STATUS_PLAN = ['active','active','pending','lapsed','active','active','pending','active','active','active','lapsed','active','pending','active'];
+  // A full, realistic year-plus of sample history for a busy solo producer, generated with a
+  // fixed-seed random generator so every visitor sees the same book. Everything is dated
+  // relative to today, so each date filter (today, this week, this month, last month, this
+  // quarter, year to date, all time) always has something to show. Built so the headline
+  // numbers land at: >$200K gross first-year commission over a trailing year, ~8% chargebacks,
+  // ~50% net profit, and a lead-vendor table with genuinely different winners and losers.
+  let _seed = 20261012;
+  const rand = () => { _seed |= 0; _seed = (_seed + 0x6D2B79F5) | 0; let t = Math.imul(_seed ^ (_seed >>> 15), 1 | _seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const rint = (a, b) => a + Math.floor(rand() * (b - a + 1));
+  const rpick = (arr) => arr[Math.floor(rand() * arr.length)];
+  const shuffle = (arr) => { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; };
+  const between = (a, b) => a + rand() * (b - a);
 
-  const clients = NAMES.map((name, i) => {
-    const monthsBack = 13 - Math.floor(i * 13 / (NAMES.length - 1)); // spreads ~0..13 months back, oldest first
-    let dayOfMonth = 3 + (i*7)%24;
-    if (monthsBack === 0) dayOfMonth = Math.min(dayOfMonth, new Date().getDate() - 1); // never seed a future date
-    const submitted = monthsAgoISO(monthsBack, dayOfMonth);
-    const status = STATUS_PLAN[i];
-    const monthlyPremium = MONTHLIES[i];
-    const isPlaced = status === 'active' || status === 'lapsed';
-    const approvedDate = isPlaced ? addDays(submitted, 5) : null;
-    const issueDate = isPlaced ? addDays(submitted, 9) : null;
-    const issuePaidFYC = isPlaced ? Math.round(monthlyPremium * 12 * 0.75) : 0;
-    const chargebackAmount = status === 'lapsed' ? issuePaidFYC : 0;
-    const chargebackDate = status === 'lapsed' ? addDays(issueDate, 60) : null;
-    // issuePaidFYC is a DERIVED total (see recalcIssuePaidFYC) — this one seeded "Initial"
-    // entry is what it derives from, so the Commission entries panel has real history.
-    const commissionEntries = isPlaced ? [{ id: uid('ce'), type: 'Initial', amount: issuePaidFYC, date: issueDate }] : [];
-    return {
-      id: uid('c'), name,
-      email: name.toLowerCase().replace(/[^a-z]+/g,'.') + '@example.com',
-      phone: `(${200+i*11}) 555-0${100+i*7}`,
-      carrier: CARRIERS[i % CARRIERS.length],
-      product: PRODUCTS[i % PRODUCTS.length],
-      policyNumber: status === 'pending' ? null : `${CARRIERS[i % CARRIERS.length].slice(0,2).toUpperCase()}-${10000+i*137}`,
-      faceAmount: Math.round(monthlyPremium * 12 * 18),
-      saleType: 'life', singlePremium: null,
-      monthlyPremium, status,
-      leadVendor: LEAD_VENDORS[i % LEAD_VENDORS.length],
-      leadType: LEAD_TYPES[i % LEAD_TYPES.length],
-      dateSubmitted: submitted, approvedDate, issueDate, issuePaidFYC, commissionEntries,
-      chargebackAmount, chargebackDate,
-      notes: '',
-    };
+  const HISTORY = 14;                 // months of history before this (partial) month
+  const TARGET_NET_PCT = 0.50;
+  const todayDay = new Date().getDate();
+  const dateIn = (m, dMin, dMax) => { const hi = m === 0 ? Math.min(dMax, todayDay) : dMax; return monthsAgoISO(m, rint(Math.min(dMin, hi), hi)); };
+
+  // ---------- who: names, lead vendors, products ----------
+  const FIRST = ['Maria','James','Elena','Robert','Danielle','Carlos','Ashley','Michael','Sarah','David','Patricia','Kevin','Nicole','Brian','Angela','Marcus','Tiffany','Luis','Rachel','Anthony','Monica','Derek','Jasmine','Raymond','Gloria','Eric','Yolanda','Travis','Priya','Samuel','Natalie','Victor','Heather','Andre','Lauren','Hector','Vanessa','Gregory','Denise','Omar','Stacy','Jerome','Alicia','Paul','Renee','Isaac','Colleen','Terrence','Marisol','Wesley'];
+  const LAST = ['Delgado','Whitaker','Ruiz','Chen','Brooks','Mendoza','Cooper','Torres','Kim','Nguyen','Owens','Walsh','Foster','Alvarez','Bennett','Coleman','Patel','Ramirez','Hughes','Sanders','Price','Gonzalez','Reed','Morales','Jenkins','Powell','Watts','Navarro','Fisher','Dixon','Ortega','Lawson','Tran','Gibson','Castillo','Harper','Medina','Barnes','Pruitt','Salazar','Hayes','Okafor','Rivera','Stone','Jordan','Vaughn','Bishop','Mercer','Ellis','Pena'];
+  const names = [];
+  FIRST.forEach(f => LAST.forEach(l => names.push(`${f} ${l}`)));
+  shuffle(names);
+
+  const VENDORS = [
+    { name: 'Referrals',            total: 36, placed: 32, cpa: 45,   lapse: 0.2, lines: 1, desc: 'Referral thank-you gift cards' },
+    { name: 'Live Transfers (Apex)',total: 38, placed: 30, cpa: 1050, lapse: 0.6, lines: 2, desc: 'Live transfer credits' },
+    { name: 'Direct Mail',          total: 32, placed: 23, cpa: 640,  lapse: 0.8, lines: 1, desc: 'Direct mail drop' },
+    { name: 'Google Ads',           total: 30, placed: 20, cpa: 700,  lapse: 0.9, lines: 2, desc: 'Google Ads spend' },
+    { name: 'Facebook Leads',       total: 42, placed: 26, cpa: 330,  lapse: 1.3, lines: 2, desc: 'Facebook lead ads' },
+    { name: 'Webinar Funnel',       total: 16, placed: 10, cpa: 560,  lapse: 0.7, lines: 1, desc: 'Webinar ads & hosting' },
+    { name: 'Aged Leads Co',        total: 22, placed: 11, cpa: 160,  lapse: 1.8, lines: 1, desc: 'Aged lead batch' },
+  ];
+  const PRODUCT_POOL = [
+    ...Array(60).fill('fe'), ...Array(16).fill('term'), ...Array(14).fill('wl'), ...Array(44).fill('iul'), ...Array(18).fill('ann'),
+  ];
+  const PRODUCT_DEF = {
+    fe:   { names: ['Living Promise','FE Express'], carriers: ['Mutual of Omaha','Americo','Foresters','Transamerica'], leadType: 'Final Expense',       prem: [48,125],  rate: 0.85, face: [8000,25000] },
+    term: { names: ['Term 20'],                       carriers: ['Transamerica','Mutual of Omaha','National Life'],      leadType: 'Mortgage Protection', prem: [70,190],  rate: 0.95, face: [250000,750000] },
+    wl:   { names: ['Whole Life'],                    carriers: ['Mutual of Omaha','Americo','Transamerica'],            leadType: 'Mortgage Protection', prem: [100,260], rate: 0.90, face: [50000,250000] },
+    iul:  { names: ['Instant IUL','Flexlife IUL','Pathsetter IUL'], carriers: ['F&G','National Life','Corebridge','Americo'], leadType: 'IUL',          prem: [160,400], rate: 1.05, face: [250000,900000] },
+    ann:  { names: ['Guaranteed Income 7','Fixed Indexed Select','RetireSecure 10','Income Max','Accumulator Plus','Lifetime Income Builder'], carriers: ['Meridian Annuity Co','Keystone Retirement','Summit Income Partners'], leadType: 'Annuity Lead', single: [25000,95000], rate: 0.052 },
+  };
+  const NOTES = ['Spouse is interested in a term policy next quarter.','Referred by an existing client — send a thank-you.','Wants quarterly review calls.','Beneficiary change requested; paperwork sent.','Cash-flow conscious; asked about a lower face amount.','Rolled over from a CD that matured.','Medical underwriting took longer than quoted.','Wants to add a rider at the next anniversary.','Prefers text over phone calls.','Business owner — revisit key-person coverage.','Followed up twice; closed on third presentation.','Bank draft set for the 5th of each month.'];
+
+  // ---------- 1) the cases: one spec per client, vendor + outcome + product decided up front ----------
+  const specs = [];
+  VENDORS.forEach(v => {
+    for (let i = 0; i < v.total; i++) specs.push({ vendor: v, placed: i < v.placed });
+  });
+  const placedSpecs = shuffle(specs.filter(s => s.placed));
+  const otherSpecs = shuffle(specs.filter(s => !s.placed));
+  const otherStatuses = shuffle([...Array(18).fill('pending'), ...Array(6).fill('approved_not_paid'), ...Array(20).fill('declined'), ...Array(12).fill('withdrawn'), ...Array(8).fill('cancelled')]);
+  otherSpecs.forEach((s, i) => { s.status = otherStatuses[i] || 'declined'; });
+  placedSpecs.forEach(s => { s.status = 'active'; });
+  // (assigned after the placed cases get their months, further down)
+
+  // placed cases by issue month (steady growth; this month scaled by how far in we are)
+  const monthWeights = [];
+  for (let m = HISTORY; m >= 0; m--) monthWeights.push({ m, w: (1 + 0.02 * (HISTORY - m)) * between(0.96, 1.04) * (m === 0 ? Math.max(0.6, todayDay / 30) : 1) });
+  const wSum = monthWeights.reduce((s, x) => s + x.w, 0);
+  const alloc = monthWeights.map(x => ({ ...x, exact: placedSpecs.length * x.w / wSum }));
+  alloc.forEach(x => { x.n = Math.floor(x.exact); });
+  let leftover = placedSpecs.length - alloc.reduce((s, x) => s + x.n, 0);
+  [...alloc].sort((a, b) => (b.exact - b.n) - (a.exact - a.n)).slice(0, leftover).forEach(x => { x.n += 1; });
+  let cursor = 0;
+  alloc.forEach(x => { for (let i = 0; i < x.n; i++) placedSpecs[cursor++].issueMonth = x.m; });
+
+  // Product mix, evenly interleaved down the timeline so every month gets a similar blend of
+  // final expense, term/whole life, IUL and annuity cases (a purely random draw makes lumpy months).
+  const kindTargets = { fe: 60, term: 16, wl: 14, iul: 44, ann: 18 };
+  const kindCounts = { fe: 0, term: 0, wl: 0, iul: 0, ann: 0 };
+  const orderedPlaced = [...placedSpecs].sort((a, b) => b.issueMonth - a.issueMonth);
+  orderedPlaced.forEach((s, i) => {
+    let best = null, bestGap = -Infinity;
+    Object.keys(kindTargets).forEach(k => { const gap = kindTargets[k] * (i + 1) / orderedPlaced.length - kindCounts[k] + rand() * 0.45; if (gap > bestGap) { bestGap = gap; best = k; } });
+    s.kind = best; kindCounts[best]++;
+  });
+  otherSpecs.forEach(s => { s.kind = rpick(PRODUCT_POOL); });
+
+  // a realistic handful of placed cases later lapse and get charged back (one old enough to count
+  // against persistency, the rest inside the last year); lapse-prone vendors are likelier
+  const lapseMonths = [HISTORY, 11, 10, 9, 8, 8, 7, 6, 5, 5, 4, 3, 7, 6];
+  lapseMonths.forEach(mm => {
+    const cands = placedSpecs.filter(s => s.issueMonth === mm && s.status === 'active' && s.kind !== 'ann'); // annuity chargebacks are rare
+    if (!cands.length) return;
+    cands.sort((a, b) => (rand() / b.vendor.lapse) - (rand() / a.vendor.lapse));
+    cands[0].status = 'lapsed';
+  });
+  // each chargeback lands in its own month (1+ months after issue, never this month)
+  const usedChargebackMonths = new Set();
+  placedSpecs.filter(s => s.status === 'lapsed').sort((a, b) => b.issueMonth - a.issueMonth).forEach(s => {
+    const hi = Math.max(1, s.issueMonth - 1), lo = Math.max(1, s.issueMonth - 5);
+    const open = []; for (let cm = lo; cm <= hi; cm++) if (!usedChargebackMonths.has(cm)) open.push(cm);
+    s.chargebackMonth = open.length ? rpick(open) : rint(lo, hi);
+    usedChargebackMonths.add(s.chargebackMonth);
   });
 
-  // ~11 months of weekday activity, with occasional zero/skip days for realism
+  // other outcomes: dates
+  const otherMonthWeights = monthWeights.map(x => x.w);
+  otherSpecs.forEach(s => {
+    if (s.status === 'pending') s.submitted = daysAgoISO(rint(1, 24));
+    else if (s.status === 'approved_not_paid') s.submitted = daysAgoISO(rint(10, 30));
+    else {
+      let r = rand() * otherMonthWeights.reduce((a, b) => a + b, 0), idx = 0;
+      while (idx < otherMonthWeights.length - 1 && r > otherMonthWeights[idx]) { r -= otherMonthWeights[idx]; idx++; }
+      s.submitted = dateIn(monthWeights[idx].m, 1, 28);
+    }
+  });
+
+  // ---------- 2) fill in every client record ----------
+  const premiumsRaw = specs.map(s => {
+    const d = PRODUCT_DEF[s.kind];
+    return d.single ? rint(d.single[0], d.single[1]) : rint(d.prem[0], d.prem[1]);
+  });
+  const rawFYC = (s, i) => { const d = PRODUCT_DEF[s.kind]; return d.single ? premiumsRaw[i] * d.rate : premiumsRaw[i] * 12 * d.rate; };
+  // Each month's placed business is scaled to a smooth growth curve (about $17K a month at the
+  // start of the history rising to about $25K, ~$270K over any trailing year), so the monthly
+  // charts trend up cleanly instead of jumping around.
+  const monthTarget = (m) => (17500 + (HISTORY - m) * 600) * between(0.97, 1.03) * (m === 0 ? Math.max(0.5, todayDay / 30) : 1);
+  const monthScale = {};
+  for (let m = HISTORY; m >= 0; m--) {
+    let raw = 0;
+    specs.forEach((s, i) => { if (s.placed && s.issueMonth === m) raw += rawFYC(s, i); });
+    monthScale[m] = raw ? monthTarget(m) / raw : 1;
+  }
+
+  const clients = specs.map((s, i) => {
+    const d = PRODUCT_DEF[s.kind];
+    const isAnn = !!d.single;
+    const k = s.placed ? monthScale[s.issueMonth] : 1;
+    const prem = isAnn ? Math.round(premiumsRaw[i] * k / 500) * 500 : Math.round(premiumsRaw[i] * k);
+    const carrierIdx = isAnn ? Math.floor(rand() * 3) : Math.floor(rand() * d.carriers.length);
+    const productName = isAnn ? d.names[carrierIdx * 2 + Math.floor(rand() * 2)] : rpick(d.names);
+    const carrier = d.carriers[carrierIdx];
+    const placed = s.status === 'active' || s.status === 'lapsed';
+    let submitted, approvedDate = null, issueDate = null;
+    if (placed) {
+      issueDate = dateIn(s.issueMonth, 1, 28);
+      submitted = addDays(issueDate, -rint(6, 13));
+      approvedDate = addDays(issueDate, -rint(2, 4));
+    } else if (s.status === 'approved_not_paid') {
+      submitted = s.submitted; approvedDate = addDays(submitted, rint(3, 6)); if (approvedDate > todayISO()) approvedDate = todayISO();
+    } else submitted = s.submitted;
+
+    const fyc = placed ? (isAnn ? Math.round(prem * d.rate) : Math.round(prem * 12 * d.rate)) : 0;
+    const commissionEntries = [];
+    if (placed) {
+      const initial = Math.round(fyc * 0.75);
+      commissionEntries.push({ id: uid('ce'), type: 'Initial', amount: initial, date: issueDate });
+      const installDate = addDays(issueDate, rint(28, 42));
+      if (installDate <= todayISO() && fyc - initial > 0) commissionEntries.push({ id: uid('ce'), type: 'Installment', amount: fyc - initial, date: installDate });
+    }
+    const issuePaidFYC = commissionEntries.reduce((t, e) => t + e.amount, 0);
+    let chargebackAmount = 0, chargebackDate = null;
+    if (s.status === 'lapsed') {
+      chargebackAmount = Math.min(4200, Math.round(issuePaidFYC * between(0.5, 0.9)));
+      chargebackDate = monthsAgoISO(s.chargebackMonth, rint(3, 26));
+      if (chargebackDate < addDays(issueDate, 30)) chargebackDate = addDays(issueDate, rint(31, 45));
+    }
+    const prefix = carrier.replace(/[^A-Za-z]/g, '').slice(0, 2).toUpperCase();
+    return {
+      id: uid('c'), name: names[i],
+      email: names[i].toLowerCase().replace(/[^a-z]+/g, '.') + '@example.com',
+      phone: `(${rpick([210, 512, 214, 713, 817, 903])}) 555-${String(100 + rint(0, 899)).padStart(4, '0')}`,
+      carrier, product: productName,
+      policyNumber: (placed || s.status === 'approved_not_paid') ? `${prefix}-${rint(10000, 99999)}` : null,
+      faceAmount: isAnn ? prem : Math.round(rint(d.face[0], d.face[1]) / 5000) * 5000,
+      saleType: isAnn ? 'annuity' : 'life', singlePremium: isAnn ? prem : null,
+      monthlyPremium: isAnn ? 0 : prem, status: s.status,
+      leadVendor: s.vendor.name, leadType: d.leadType,
+      dateSubmitted: submitted, approvedDate, issueDate, issuePaidFYC, commissionEntries,
+      chargebackAmount, chargebackDate,
+      notes: rand() < 0.3 ? rpick(NOTES) : '',
+      _kind: s.kind,
+    };
+  });
+  // a status chosen above for placed cases is final; drop the helper field
+  clients.forEach(c => { delete c._kind; });
+
+  // ---------- 3) daily activity that agrees with the cases (sales per month = cases submitted) ----------
   const activity = [];
-  for (let d = 335; d >= 0; d--) {
-    const iso = daysAgoISO(d);
-    const dow = new Date(iso+'T00:00:00').getDay();
-    if (dow === 0 || dow === 6) continue; // skip weekends
-    if (Math.random() < 0.08) continue; // the occasional day off
-    const dials = 55 + Math.floor(Math.random()*55);
-    const contacts = Math.round(dials * (0.38 + Math.random()*0.12));
-    const appointments = Math.round(contacts * (0.10 + Math.random()*0.05));
-    const presentations = Math.round(appointments * (0.55 + Math.random()*0.3));
-    const sales = Math.round(presentations * (0.15 + Math.random()*0.25));
-    activity.push({ date: iso, dials, contacts, appointments, presentations, sales });
+  const startISO = monthsAgoISO(HISTORY, 1);
+  const todayStr = todayISO();
+  for (let iso = startISO; iso <= todayStr; iso = addDays(iso, 1)) {
+    const dow = new Date(iso + 'T00:00:00').getDay();
+    if (dow === 0 || dow === 6) continue;
+    if (iso !== todayStr && rand() < 0.06) continue; // the occasional day off
+    const dials = rint(58, 104);
+    const contacts = Math.round(dials * between(0.38, 0.5));
+    const appointments = Math.round(contacts * between(0.10, 0.15));
+    const presentations = Math.round(appointments * between(0.62, 0.88));
+    activity.push({ date: iso, dials, contacts, appointments, presentations, sales: 0 });
   }
+  const casesByMonth = {};
+  // logged "sales" are the cases that placed (by submission month), so the Analytics blueprint's math lines up
+  clients.filter(c => c.status === 'active' || c.status === 'lapsed').forEach(c => { const k = c.dateSubmitted.slice(0, 7); casesByMonth[k] = (casesByMonth[k] || 0) + 1; });
+  Object.entries(casesByMonth).forEach(([month, n]) => {
+    const days = activity.filter(a => a.date.startsWith(month));
+    if (!days.length) return;
+    const wTotal = days.reduce((t, a) => t + a.presentations + 0.3, 0);
+    for (let k = 0; k < n; k++) {
+      let r = rand() * wTotal, idx = 0;
+      while (idx < days.length - 1 && r > days[idx].presentations + 0.3) { r -= days[idx].presentations + 0.3; idx++; }
+      const a = days[idx]; a.sales += 1;
+      if (a.sales > a.presentations) { a.presentations = a.sales; if (a.appointments < a.presentations) a.appointments = a.presentations; if (a.contacts < a.appointments) a.contacts = a.appointments; if (a.dials < a.contacts) a.dials = a.contacts; }
+    }
+  });
 
-  // cost lines spread over the last ~11 months across every category
+  // ---------- 4) costs: recurring bills, one-time bills, and lead spend sized to hit the profit target ----------
   const costs = [];
-  for (let m = 10; m >= 0; m--) {
-    COST_CATEGORIES.forEach((cat, ci) => {
-      if (cat.key === 'CRM/Tools') return; // CRM/Tools is the recurring example added below instead
-      if (Math.random() < 0.12) return; // not every category every month
-      const base = { 'Leads':320,'Marketing':110,'E&O insurance':45,'Licenses':35,'CRM/Tools':85,'Office':55,'Travel':65,'Staff':60,'Insurance':50,'Other':30 }[cat.key] || 40;
-      const amount = Math.round(base * (0.7 + Math.random()*0.7));
-      // Leads costs rotate through the same vendors clients are attributed to, so the
-      // Analytics tab's Lead Vendor Performance panel has real spend-vs-conversion data.
-      const vendor = cat.key === 'Leads' ? LEAD_VENDORS[(m + ci) % LEAD_VENDORS.length] : null;
-      costs.push({ id: uid('e'), date: monthsAgoISO(m, 5 + ci*2), amount, category: cat.key, vendor, description: '', isRecurring: false, recurringEndDate: null });
-    });
-  }
-  // One recurring example so the "recurring vs one-time" feature is visible out of the box.
-  costs.push({ id: uid('e'), date: monthsAgoISO(10, 3), amount: 79, category: 'CRM/Tools', description: 'CRM subscription', isRecurring: true, recurringFrequency: 'monthly', recurringEndDate: null });
-
-  const goals = { dialsTarget: 4000, appointmentsTarget: 160, sitsTarget: 120, salesTarget: 20, fycTarget: 15000 };
-  // Static preview numbers for the agency-owner-only Team goals panel — the tour simulates
-  // a solo producer's book, with no real team/agency data behind these, so they're just
-  // plausible defaults to show what that panel looks like.
-  const teamGoals = { issuedPaidTarget: 85000, newWritersTarget: 3, headcountTarget: 12 };
-
-  // A few example draws so the Owner Draws panel isn't empty on first look — cash taken
-  // out of already-earned profit, never netted against Net Profit (see bob-schema.md).
-  const ownerDraws = [
-    { id: uid('od'), amount: 2000, drawDate: monthsAgoISO(2, 1), notes: '' },
-    { id: uid('od'), amount: 1500, drawDate: monthsAgoISO(1, 1), notes: '' },
+  const recurring = [
+    ['CRM subscription', 'CRM/Tools', 297, 3], ['Power dialer', 'CRM/Tools', 199, 3], ['E-signature & quoting suite', 'CRM/Tools', 129, 7],
+    ['Call tracking & texting', 'CRM/Tools', 89, 7], ['Email & workspace', 'CRM/Tools', 24, 12],
+    ['Appointment setter (contract)', 'Staff', 1400, 1], ['Virtual assistant (part-time)', 'Staff', 1650, 1], ['E&O policy', 'E&O insurance', 168, 10], ['Business liability & cyber', 'Insurance', 74, 10],
+    ['Office suite rent', 'Office', 450, 1], ['Phone & internet', 'Office', 140, 15], ['Website & ads management', 'Marketing', 350, 5],
   ];
+  const anchorMonth = HISTORY;
+  recurring.forEach(([description, category, amount, day]) => {
+    costs.push({ id: uid('e'), date: monthsAgoISO(anchorMonth, day), amount, category, vendor: null, description, isRecurring: true, recurringFrequency: 'monthly', recurringEndDate: null });
+  });
+  const oneTime = (m, day, amount, category, description) => costs.push({ id: uid('e'), date: dateIn(m, day, day), amount, category, vendor: null, description, isRecurring: false, recurringEndDate: null });
+  for (let m = HISTORY; m >= 0; m--) {
+    oneTime(m, 12, rint(85, 245), 'Travel', 'Mileage, meals & client visits');
+    oneTime(m, 20, rint(30, 115), 'Office', 'Office supplies & postage');
+    if (m % 3 === 0) oneTime(m, 25, 275, 'Other', 'Bookkeeping & tax prep');
+  }
+  oneTime(10, 9, 850, 'Marketing', 'Client appreciation event');
+  oneTime(4, 9, 850, 'Marketing', 'Client appreciation event');
+  oneTime(7, 17, 210, 'Marketing', 'Branded folders & signage');
+  oneTime(9, 14, 1850, 'Travel', 'Carrier incentive trip — airfare & hotel');
+  oneTime(3, 14, 1420, 'Travel', 'Agent summit — registration & travel');
+  oneTime(8, 6, 380, 'Licenses', 'State license renewals');
+  oneTime(2, 6, 195, 'Licenses', 'CE courses');
+  oneTime(6, 21, 460, 'Other', 'Accounting software & annual filing');
+
+  const ago = daysAgoISO(365);
+  const grossAll = clients.reduce((t, c) => t + c.issuePaidFYC, 0);
+  const grossYear = clients.filter(c => c.issueDate && c.issueDate >= ago).reduce((t, c) => t + c.issuePaidFYC, 0);
+  const cbYear = clients.filter(c => c.chargebackDate && c.chargebackDate >= ago).reduce((t, c) => t + c.chargebackAmount, 0);
+  const opexYear = costs.filter(c => !c.isRecurring && c.date >= ago).reduce((t, c) => t + c.amount, 0)
+    + costs.filter(c => c.isRecurring).reduce((t, c) => t + expandRecurringCost(c, ago, todayISO()).length * c.amount, 0);
+  // lead spend as a share of gross, chosen so the last year nets TARGET_NET_PCT; applied to all history
+  const leadShare = Math.max(0.10, (grossYear * (1 - TARGET_NET_PCT) - cbYear - opexYear) / grossYear);
+  const leadBudget = grossAll * leadShare;
+
+  const vendorWeightTotal = VENDORS.reduce((t, v) => t + v.placed * v.cpa, 0);
+  VENDORS.forEach(v => {
+    const vBudget = leadBudget * (v.placed * v.cpa) / vendorWeightTotal;
+    const vClients = clients.filter(c => c.leadVendor === v.name);
+    const months = [];
+    const vendorAvg = vClients.reduce((t, c) => t + c.issuePaidFYC, 0) / (HISTORY + 1);
+    for (let m = HISTORY; m >= 0; m--) {
+      const mk = monthsAgoISO(m, 1).slice(0, 7);
+      // lead spend follows that vendor's production for the month (plus a base), so margins stay steady
+      const produced = vClients.filter(c => c.issueDate && c.issueDate.startsWith(mk)).reduce((t, c) => t + c.issuePaidFYC, 0);
+      months.push({ m, w: (produced + 0.8 * vendorAvg) * between(0.95, 1.05) * (m === 0 ? Math.max(0.5, todayDay / 30) : 1) });
+    }
+    const wTot = months.reduce((t, x) => t + x.w, 0);
+    const lines = [];
+    months.forEach(({ m, w }) => {
+      const monthAmt = vBudget * w / wTot;
+      for (let k = 0; k < v.lines; k++) {
+        const amount = Math.max(5, Math.round((monthAmt / v.lines) / 5) * 5);
+        lines.push({ id: uid('e'), date: dateIn(m, k === 0 ? 3 : 17, k === 0 ? 14 : 27), amount, category: 'Leads', vendor: v.name, description: v.desc, isRecurring: false, recurringEndDate: null });
+      }
+    });
+    const drift = Math.round(vBudget) - lines.reduce((t, l) => t + l.amount, 0);
+    const biggest = lines.reduce((a, b) => (b.amount > a.amount ? b : a));
+    biggest.amount = Math.max(5, biggest.amount + drift);
+    costs.push(...lines);
+  });
+
+  // ---------- 5) goals, team preview, owner draws ----------
+  const goals = { dialsTarget: 2000, appointmentsTarget: 90, sitsTarget: 65, salesTarget: 13, fycTarget: 25000 };
+  const teamGoals = { issuedPaidTarget: 85000, newWritersTarget: 3, headcountTarget: 12 };
+  const ownerDraws = [];
+  for (let m = HISTORY - 1; m >= 0; m--) ownerDraws.push({ id: uid('od'), amount: rint(5200, 7400), drawDate: monthsAgoISO(m, 1), notes: m % 3 === 0 ? 'Quarterly estimated taxes set aside' : '' });
 
   return { clients, activity, costs, goals, teamGoals, ownerDraws, suggestions: [], calcContractLevel: 100, calcAnnuityTier: 'green' };
 }
@@ -394,7 +588,7 @@ function renderDesk(){
   const st = statement(range.from, range.to);
   const funnel = sumActivity(activityInRange(range.from, range.to));
   const t = todayRow();
-  const placedAll = store.clients.filter(c => c.status==='active'||c.status==='lapsed').length;
+  const placedAll = placedInRange(range.from, range.to).length; // placed within the selected date range, like the live app
 
   const monthFrom = toISO(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const monthTo = todayISO();
@@ -417,8 +611,8 @@ function renderDesk(){
     <div class="grid" style="margin-bottom:18px;">
       <div class="card"><div class="stat-label">Net Profit</div><div class="stat-value ${st.netProfit>=0?'pos':'neg'}">${fmt(st.netProfit)}</div><div class="stat-sub">After chargebacks and costs</div></div>
       <div class="card"><div class="stat-label">Gross Commission</div><div class="stat-value">${fmt(st.gross)}</div><div class="stat-sub">${placedAll} placed · ${fmt(st.pending)} pending</div></div>
-      <div class="card"><div class="stat-label">Chargebacks</div><div class="stat-value neg">−${fmt(st.cb)}</div><div class="stat-sub">${store.clients.filter(c=>c.status==='lapsed').length} lapsed</div></div>
-      <div class="card"><div class="stat-label">Operating Costs</div><div class="stat-value">${fmt(st.costsTotal)}</div><div class="stat-sub">${fmt(st.costsTotal/(funnel.sales||1))} / sale</div></div>
+      <div class="card"><div class="stat-label">Chargebacks</div><div class="stat-value neg">−${fmt(st.cb)}</div><div class="stat-sub">from lapsed cases</div></div>
+      <div class="card"><div class="stat-label">Operating Costs</div><div class="stat-value">${fmt(st.costsTotal)}</div><div class="stat-sub">${placedAll ? fmt(st.costsTotal/placedAll)+' / sale' : '—'}</div></div>
     </div>
 
     <div class="panel">
@@ -1993,10 +2187,16 @@ function renderAnalytics(){
   const baselineFunnel = sumActivity(activityInRange(baseline.from, baseline.to));
   const baselinePlaced = placedInRange(baseline.from, baseline.to);
   analyticsCache = {
-    baseline: { ...baselineFunnel, grossCommission: grossFYCInRange(baseline.from, baseline.to), placedCount: baselinePlaced.length },
+    // The baseline window is 3 full months, but the target is per MONTH — so work in monthly
+    // averages here, or the "/mo" comparisons below mix 3-month totals with 1-month needs.
+    baseline: {
+      dials: baselineFunnel.dials / 3, contacts: baselineFunnel.contacts / 3, appointments: baselineFunnel.appointments / 3,
+      presentations: baselineFunnel.presentations / 3, sales: baselineFunnel.sales / 3,
+      grossCommission: grossFYCInRange(baseline.from, baseline.to) / 3, placedCount: baselinePlaced.length / 3,
+    },
   };
   if (!analyticsTarget) {
-    const baselineMonthlyAvg = grossFYCInRange(baseline.from, baseline.to) / 3;
+    const baselineMonthlyAvg = analyticsCache.baseline.grossCommission;
     analyticsTarget = Math.ceil((baselineMonthlyAvg * 1.5) / 1000) * 1000 || 10000;
   }
 
