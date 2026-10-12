@@ -46,6 +46,16 @@ app.use('/api/admin', rateLimit({ windowMs: 60 * 1000, max: 240 }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // Every remaining /api/* route requires a valid Supabase session.
+// Public (no login): how many Founding 75 spots are left, for the homepage counter. Cached briefly.
+let foundingCache = { at: 0, value: null };
+app.get('/api/founding-spots', asyncHandler(async (req, res) => {
+  if (!foundingCache.value || Date.now() - foundingCache.at > 30 * 1000) {
+    foundingCache = { at: Date.now(), value: await require('./lib/founding').foundingStatus(prisma) };
+  }
+  res.setHeader('Cache-Control', 'public, max-age=30');
+  res.json(foundingCache.value);
+}));
+
 app.use('/api', requireAuth);
 // Admin-only read-only "view as user" (header-driven; see the middleware's doc comment).
 app.use('/api', require('./middleware/supportView').applySupportView);
@@ -117,6 +127,10 @@ const port = process.env.PORT || 4000;
 app.listen(port, () => {
   console.log(`BOB backend listening on :${port}`);
   // Record every existing account as having used its trial (no-op once they're all recorded).
+  // Earlier testers take the first Founding spots when the program is switched on (no-op otherwise).
+  require('./lib/founding').backfillFounding(prisma)
+    .then((n) => { if (n) console.log(`Gave ${n} existing account(s) a Founding Member spot.`); })
+    .catch((err) => console.error('founding backfill failed:', err.message));
   require('./lib/trialUse').backfillTrialUse(prisma)
     .then((n) => { if (n) console.log(`Recorded ${n} existing account(s) as trial-used.`); })
     .catch((err) => console.error('trial-use backfill failed:', err.message));

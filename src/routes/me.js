@@ -2,6 +2,7 @@ const express = require('express');
 const prisma = require('../lib/db');
 const asyncHandler = require('../middleware/asyncHandler');
 const { trialEndsAt, isAdminEmail, isTrialing } = require('../middleware/auth');
+const founding = require('../lib/founding');
 const { getKnownImoNames, findTypoMatch } = require('../lib/knownImos');
 const { resolveFlags } = require('../lib/flags');
 
@@ -58,6 +59,7 @@ router.get('/', asyncHandler(async (req, res) => {
       subscriptionTier: producer.subscriptionTier,
       subscriptionStatus: producer.subscriptionStatus,
       trialEndsAt: endsAt.toISOString(),
+      founding: producer.foundingNumber && founding.enabled() ? { number: producer.foundingNumber, percentOff: founding.PERCENT_OFF } : null,
       // Whole days left, worked out here on the server's clock (not the visitor's, which can be
       // a few seconds off). The 2-minute allowance stops a hair of clock difference right after
       // signup from rounding 14 days up to 15.

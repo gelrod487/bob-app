@@ -3,6 +3,7 @@ const stripe = require('../lib/stripe');
 const prisma = require('../lib/db');
 const asyncHandler = require('../middleware/asyncHandler');
 const { applyTierChange } = require('../lib/stripeBilling');
+const founding = require('../lib/founding');
 
 const router = express.Router();
 
@@ -91,10 +92,12 @@ router.post('/checkout-session', asyncHandler(async (req, res) => {
     cancel_url: `${origin}/app.html?checkout=cancelled`,
     metadata: { producerId: producer.id, tier },
     subscription_data: { metadata: { producerId: producer.id, tier } },
-    // Shows an "Add promotion code" field on the Stripe-hosted checkout page.
-    // Codes themselves are created and managed entirely in the Stripe Dashboard —
-    // nothing to store or validate on our side.
-    allow_promotion_codes: true,
+    // A Founding Member gets their locked-in 50% off applied automatically. Stripe doesn't allow a fixed
+    // discount AND the promotion-code box on the same session, so everyone else keeps the code box
+    // (codes are created and managed entirely in the Stripe Dashboard — nothing to validate on our side).
+    ...(producer.foundingNumber && founding.enabled()
+      ? { discounts: [{ coupon: founding.couponId() }] }
+      : { allow_promotion_codes: true }),
   });
 
   res.json({ url: session.url });

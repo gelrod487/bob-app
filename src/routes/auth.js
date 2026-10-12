@@ -4,6 +4,7 @@ const asyncHandler = require('../middleware/asyncHandler');
 const { isAdminEmail } = require('../middleware/auth');
 const { cleanText } = require('../lib/cleanText');
 const { isDisposableEmail, registerTrialUse } = require('../lib/trialUse');
+const { assignFoundingNumber } = require('../lib/founding');
 
 const router = express.Router();
 
@@ -15,7 +16,11 @@ const router = express.Router();
 async function applyTrialRule(producer, email) {
   if (isAdminEmail(email)) return producer;
   const firstTime = await registerTrialUse(prisma, email);
-  if (firstTime) return producer;
+  if (firstTime) {
+    // The first 75 people to start a trial become Founding Members (a no-op until the program is switched on).
+    await assignFoundingNumber(prisma, producer.id);
+    return prisma.producer.findUnique({ where: { id: producer.id } });
+  }
   return prisma.producer.update({ where: { id: producer.id }, data: { trialEndsAtOverride: producer.createdAt } });
 }
 

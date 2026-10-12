@@ -69,7 +69,7 @@ async function loadCustomers(){
           <td>${escapeHtml(p.name)}<br><span class="helptext">${escapeHtml(p.email)}</span></td>
           <td>${escapeHtml(p.imo) || '—'}</td>
           <td>${escapeHtml(PLAN_LABEL[p.subscriptionTier] || p.subscriptionTier)}</td>
-          <td><span class="tag ${p.subscriptionStatus === 'active' ? 'active-pol' : 'pending'}">${escapeHtml(p.subscriptionStatus)}</span>${p.isComped ? ' <span class="tag approved">comped</span>' : ''}</td>
+          <td><span class="tag ${p.subscriptionStatus === 'active' ? 'active-pol' : 'pending'}">${escapeHtml(p.subscriptionStatus)}</span>${p.isComped ? ' <span class="tag approved">comped</span>' : ''}${p.foundingNumber ? ` <span class="tag approved">Founding #${p.foundingNumber}</span>` : ''}</td>
           <td>${fmtDate(p.trialEndsAt)}</td>
           <td>${escapeHtml(fmtAgo(p.lastSeenAt))}</td>
           <td>${p.clientCount}</td>
@@ -126,6 +126,10 @@ async function openCustomer(id){
       <div><label>Comped (free, skips Stripe)</label><select id="custComped">
         <option value="false" ${!p.isComped ? 'selected' : ''}>No</option>
         <option value="true" ${p.isComped ? 'selected' : ''}>Yes — treat as paid</option>
+      </select></div>
+      <div><label>Founding Member (50% off for life)</label><select id="custFounding">
+        <option value="false" ${!p.foundingNumber ? 'selected' : ''}>No</option>
+        <option value="true" ${p.foundingNumber ? 'selected' : ''}>${p.foundingNumber ? `Yes — #${p.foundingNumber}` : 'Yes — give them a spot'}</option>
       </select></div>
       <div class="full" style="grid-column:1/-1;"><label>Extend trial</label>
         <div style="display:flex; gap:8px; flex-wrap:wrap;">
@@ -196,6 +200,8 @@ async function openCustomer(id){
     if (val('custAgency') !== (p.agencyId || '')) body.agencyId = val('custAgency');
     if (tier !== p.subscriptionTier) body.subscriptionTier = tier;
     if (comped !== p.isComped) body.isComped = comped;
+    const wantsFounding = document.getElementById('custFounding').value === 'true';
+    if (wantsFounding !== !!p.foundingNumber) body.foundingMember = wantsFounding;
     if (notes !== (p.adminNotes || '')) body.adminNotes = notes;
     if (!Object.keys(body).length) { closeAdminModal(); return; }
     send(body);
@@ -396,6 +402,7 @@ async function renderOverview(){
       ${statCard('Trial ended, not paying', t.expiredUnconverted)}
       ${statCard('Trial → paid', o.conversion.rate === null ? '—' : o.conversion.rate + '%', `${o.conversion.paid} of ${o.conversion.decided} decided`)}
       ${statCard('Active last 7 days', o.activity.active7, `${o.activity.active30} in the last 30`)}
+      ${o.founding && o.founding.enabled ? statCard('Founding spots taken', `${o.founding.taken} / ${o.founding.limit}`, `${o.founding.remaining} left`) : ''}
     </div>
     <p class="helptext" style="margin:-6px 0 18px;">"Trial → paid" is a snapshot: of customers whose trial is over (or who already pay), how many pay now. BOB doesn't keep a history of status changes, so it can't show how long conversion took. ${t.comped ? `${t.comped} comped account(s) are left out of it.` : ''}
     ${o.activityTrackedSince ? `Activity tracking began ${fmtDate(o.activityTrackedSince)} — anyone who hasn't used the app since then shows as "never".` : 'Activity tracking records the first time each customer uses the app after it was turned on, so these numbers fill in over the coming days.'}</p>

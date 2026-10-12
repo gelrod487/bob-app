@@ -78,6 +78,9 @@ model Producer {
   // hand-set tier/status can't be overwritten by a later Stripe event.
   isComped          Boolean  @default(false) @map("is_comped")
   adminNotes        String?  @map("admin_notes")
+  // 1..75 for a Founding Member (an early tester who locks in 50% off); null for everyone else. Unique,
+  // so two signups racing for the last spot can never share a number. See src/lib/founding.js.
+  foundingNumber    Int?     @unique @map("founding_number")
 
   agency            Agency?   @relation("AgencyMembers", fields: [agencyId], references: [id])
   ownedAgency       Agency?   @relation("AgencyOwner")

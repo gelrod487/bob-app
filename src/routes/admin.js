@@ -6,6 +6,7 @@ const { trialEndsAt } = require('../middleware/auth');
 const { logAdminAction } = require('../lib/audit');
 const { httpError } = require('../lib/httpError');
 const { cleanText } = require('../lib/cleanText');
+const founding = require('../lib/founding');
 const { computeOverview } = require('../lib/adminOverview');
 const stripe = require('../lib/stripe');
 const { isAdminEmail } = require('../middleware/auth');
@@ -30,7 +31,7 @@ router.get('/overview', asyncHandler(async (req, res) => {
   const producers = await prisma.producer.findMany({
     select: { id: true, name: true, email: true, createdAt: true, subscriptionTier: true, subscriptionStatus: true, isComped: true, lastSeenAt: true, trialEndsAtOverride: true },
   });
-  res.json(computeOverview(producers));
+  res.json({ ...computeOverview(producers), founding: await founding.foundingStatus(prisma) });
 }));
 
 const VALID_TIERS = ['individual', 'producer_plus', 'agency_owner'];
@@ -46,6 +47,7 @@ function summarize(p) {
     subscriptionTier: p.subscriptionTier,
     subscriptionStatus: p.subscriptionStatus,
     isComped: p.isComped,
+    foundingNumber: p.foundingNumber ?? null,
     clientCount: p._count?.clients ?? 0,
     createdAt: p.createdAt,
     lastSeenAt: p.lastSeenAt,
@@ -190,6 +192,16 @@ router.put('/producers/:id', asyncHandler(async (req, res) => {
     // subscription behind it must not leave it stuck "active" forever.
     if (isComped) data.subscriptionStatus = 'active';
     else if (!p.stripeSubscriptionId) data.subscriptionStatus = 'inactive';
+  }
+  if (req.body.foundingMember !== undefined) {
+    if (typeof req.body.foundingMember !== 'boolean') throw httpError(400, 'foundingMember must be true or false.');
+    if (!founding.enabled()) throw httpError(409, 'The Founding program is off (no FOUNDING_COUPON_ID is set).');
+    if (req.body.foundingMember === false) data.foundingNumber = null;
+    else if (!p.foundingNumber) {
+      const n = await founding.assignFoundingNumber(prisma, p.id);
+      if (n === null) throw httpError(409, `All ${founding.limit()} Founding spots are taken. Remove one first.`);
+      data.foundingNumber = n; // already saved by assign; recorded here so the audit log shows it
+    }
   }
   if (trialEndsAtInput !== undefined) {
     if (trialEndsAtInput === null) data.trialEndsAtOverride = null;
