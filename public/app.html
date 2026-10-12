@@ -193,7 +193,7 @@ function policyChargeback(p){ return (p.commissionEntries||[]).filter(e=>e.entry
 /* ---- shared date-range report filter (Desk, Activity, Costs, Profit) ---- */
 const DATE_RANGE_PRESETS = [
   ['today','Today'], ['yesterday','Yesterday'], ['this_week','This week'], ['this_month','This month'],
-  ['last_month','Last month'], ['this_quarter','This quarter'], ['ytd','Year to date'], ['all_time','All time'], ['custom','Custom'],
+  ['last_month','Last month'], ['this_quarter','This quarter'], ['last_quarter','Last quarter'], ['last_90','Last 90 days'], ['last_12','Last 12 months'], ['ytd','Year to date'], ['all_time','All time'], ['custom','Custom'],
 ];
 const dateFilterState = {
   desk: { key: 'this_month', from: '', to: '' },
@@ -203,6 +203,7 @@ const dateFilterState = {
   profit: { key: 'this_month', from: '', to: '' },
   healthOfBook: { key: 'all_time', from: '', to: '' },
   analytics: { key: 'this_month', from: '', to: '' },
+  team: { key: 'this_month', from: '', to: '' },
 };
 function computeDateRange(key, customFrom, customTo){
   const now = new Date();
@@ -213,6 +214,12 @@ function computeDateRange(key, customFrom, customTo){
     case 'this_week': { const start = new Date(y,m,d - now.getDay()); return { from: toISO(start), to: toISO(now) }; }
     case 'last_month': return { from: toISO(new Date(y,m-1,1)), to: toISO(new Date(y,m,0)) };
     case 'this_quarter': { const q = Math.floor(m/3); return { from: toISO(new Date(y,q*3,1)), to: toISO(now) }; }
+    // The last full calendar quarter (e.g. in October: Jul 1 – Sep 30). Month 0 of year y minus 3 rolls back a year correctly.
+    case 'last_quarter': { const q = Math.floor(m/3); return { from: toISO(new Date(y,(q-1)*3,1)), to: toISO(new Date(y,q*3,0)) }; }
+    // A rolling window of the 90 days ending today (today included).
+    case 'last_90': return { from: toISO(new Date(y,m,d-89)), to: toISO(now) };
+    // A rolling year ending today: from the day after this date last year (e.g. Oct 13, 2025 – Oct 12, 2026).
+    case 'last_12': return { from: toISO(new Date(y-1,m,d+1)), to: toISO(now) };
     case 'ytd': return { from: toISO(new Date(y,0,1)), to: toISO(now) };
     // A safely-early sentinel date rather than querying for an actual earliest record —
     // no real client predates this, and it keeps the range computation synchronous.
@@ -1774,9 +1781,16 @@ async function startCheckout(tier){
 }
 
 /* ================= TEAM (agency owners only) ================= */
+// A slow response from an earlier filter change is ignored instead of painting over a newer one.
+let teamRenderSeq = 0;
 async function renderTeam(){
+  const renderSeq = ++teamRenderSeq;
   mainInner.innerHTML = `<div class="page-header"><div><div class="page-eyebrow">Team</div><h1>Your agency</h1></div></div><p class="helptext">Loading…</p>`;
-  const { roster } = await apiFetch('/api/team');
+  const range = computeDateRange(dateFilterState.team.key, dateFilterState.team.from, dateFilterState.team.to);
+  const { roster, production } = await apiFetch(`/api/team?from=${range.from}&to=${range.to}`);
+  if (renderSeq !== teamRenderSeq) return;
+  const byId = new Map(production.members.map(m => [m.id, m]));
+  const totals = production.totals;
 
   mainInner.innerHTML = `
     <div class="page-header"><div><div class="page-eyebrow">Team</div><h1>Your agency</h1></div></div>
@@ -1788,6 +1802,31 @@ async function renderTeam(){
         <input id="inviteLinkInput" readonly value="${window.location.origin}/login.html?invite=${me.ownedAgencyId}" style="flex:1;">
         <button class="ghost" type="button" id="copyInviteBtn">Copy link</button>
       </div>
+    </div>
+
+    ${dateFilterHTML('team')}
+
+    <div class="panel">
+      <h2>Team production</h2>
+      <p class="helptext" style="margin-top:-8px;">${fmtDateRangeLabel(range.from)} – ${fmtDateRangeLabel(range.to)}. Commissions, chargebacks, and cases placed for each producer on your roster.</p>
+      <div class="grid" style="margin-bottom:16px;">
+        <div class="card"><div class="stat-label">Team gross commission</div><div class="stat-value">${fmt(totals.grossCommission)}</div></div>
+        <div class="card"><div class="stat-label">Chargebacks</div><div class="stat-value neg">−${fmt(totals.chargebacks)}</div></div>
+        <div class="card"><div class="stat-label">Cases placed</div><div class="stat-value">${totals.placedCount}</div></div>
+        <div class="card"><div class="stat-label">Your override income</div><div class="stat-value">${fmt(totals.overrides)}</div></div>
+      </div>
+      <table class="statement-table">
+        <thead><tr><th>Producer</th><th>Gross commission</th><th>Chargebacks</th><th>Net commission</th><th>Cases placed</th></tr></thead>
+        <tbody>${roster.map(p => { const m = byId.get(p.id) || { grossCommission: 0, chargebacks: 0, placedCount: 0 }; return `<tr>
+          <td>${escapeHtml(p.name)}${p.id === me.id ? ' (you)' : ''}</td>
+          <td>${fmt(m.grossCommission)}</td>
+          <td class="neg">−${fmt(m.chargebacks)}</td>
+          <td>${fmt(m.grossCommission - m.chargebacks)}</td>
+          <td>${m.placedCount}</td>
+        </tr>`; }).join('')}
+          <tr class="statement-total"><td>Total</td><td>${fmt(totals.grossCommission)}</td><td class="neg">−${fmt(totals.chargebacks)}</td><td>${fmt(totals.grossCommission - totals.chargebacks)}</td><td>${totals.placedCount}</td></tr>
+        </tbody>
+      </table>
     </div>
 
     <div class="panel">
@@ -1807,6 +1846,7 @@ async function renderTeam(){
     </div>
   `;
   wireCopyButton('copyInviteBtn', 'inviteLinkInput');
+  wireDateFilter('team', renderTeam);
 }
 
 /* ================= GOALS ================= */

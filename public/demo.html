@@ -18,7 +18,12 @@
 </head>
 <body>
 <div class="demo-banner">
-  <span>Sample book — a fully interactive demo. Edits stay in this browser only.</span>
+  <span id="demoBannerText">Sample book — a fully interactive demo. Edits stay in this browser only.</span>
+  <div class="tour-switch" style="display:flex; gap:6px; align-items:center;">
+    <span style="font-size:.78rem; opacity:.85;">Tour:</span>
+    <a id="tourSoloLink" href="/demo.html" class="tour-switch-btn">Solo producer</a>
+    <a id="tourAgencyLink" href="/demo.html?mode=agency" class="tour-switch-btn">Agency owner</a>
+  </div>
   <div style="display:flex; gap:10px;">
     <button class="ghost" id="resetDemoBtn" type="button" style="background:transparent; border-color:rgba(255,255,255,.6); color:#fff;">Reset demo data</button>
     <a class="primary" href="/login.html">Start 14-day trial</a>
@@ -38,6 +43,7 @@
       <button data-page="calculator"><span class="ic">🧮</span>Commission Calculator</button>
     </div>
     <div class="sidebar-footer">
+      <button data-page="team" id="teamNavBtn" style="display:none;"><span class="ic">👥</span>Team</button>
       <button data-page="feedback"><span class="ic">💡</span>Feedback</button>
       <a class="ghost" href="/" style="text-align:center;">← Back home</a>
     </div>
@@ -77,7 +83,23 @@ function uid(prefix){ return prefix+'_'+Math.random().toString(36).slice(2,9); }
    history (~215 clients, 150 placed cases, 7 lead vendors, a full set of
    operating costs) so every report and date filter has something real to show.
    ============================================================ */
-const STORE_KEY = 'bob_demo_store_v11';
+// Two tours share this page: the solo producer's book (default) and the Agency plan (?mode=agency),
+// which adds a team, override income, and agency overhead on top of the owner's own book.
+const TOUR_MODE = new URLSearchParams(location.search).get('mode') === 'agency' ? 'agency' : 'solo';
+const IS_AGENCY = TOUR_MODE === 'agency';
+const STORE_KEY = IS_AGENCY ? 'bob_demo_agency_store_v1' : 'bob_demo_store_v11';
+// Small seeded random generator: every visitor sees the same book, run after run.
+function makeRng(seed){
+  let st = seed;
+  const rand = () => { st |= 0; st = (st + 0x6D2B79F5) | 0; let t = Math.imul(st ^ (st >>> 15), 1 | st); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  return {
+    rand,
+    rint: (a, b) => a + Math.floor(rand() * (b - a + 1)),
+    rpick: (arr) => arr[Math.floor(rand() * arr.length)],
+    shuffle: (arr) => { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; },
+    between: (a, b) => a + rand() * (b - a),
+  };
+}
 const COST_CATEGORIES = [
   { key:'Leads',      color:'#7A3B4A' },
   { key:'Marketing',      color:'#A63D40' },
@@ -92,20 +114,13 @@ const COST_CATEGORIES = [
 ];
 function costColor(cat){ return (COST_CATEGORIES.find(c=>c.key===cat) || {}).color || '#B7ADA0'; }
 
-function seedStore(){
-  // A full, realistic year-plus of sample history for a busy solo producer, generated with a
-  // fixed-seed random generator so every visitor sees the same book. Everything is dated
-  // relative to today, so each date filter (today, this week, this month, last month, this
-  // quarter, year to date, all time) always has something to show. Built so the headline
-  // numbers land at: >$200K gross first-year commission over a trailing year, ~8% chargebacks,
-  // ~50% net profit, and a lead-vendor table with genuinely different winners and losers.
-  let _seed = 20261012;
-  const rand = () => { _seed |= 0; _seed = (_seed + 0x6D2B79F5) | 0; let t = Math.imul(_seed ^ (_seed >>> 15), 1 | _seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-  const rint = (a, b) => a + Math.floor(rand() * (b - a + 1));
-  const rpick = (arr) => arr[Math.floor(rand() * arr.length)];
-  const shuffle = (arr) => { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; };
-  const between = (a, b) => a + rand() * (b - a);
-
+function seedStore(opts){
+  // opts.scale shrinks the book (an agency owner's own book is smaller than a full-time solo producer's);
+  // opts.agency swaps the solo producer's staff costs for lean owner costs (the agency overhead is added separately).
+  opts = opts || {};
+  const SC = opts.scale || 1;
+  const AG = !!opts.agency;
+  const { rand, rint, rpick, shuffle, between } = makeRng(opts.agency ? 20261019 : 20261012);
   const HISTORY = 14;                 // months of history before this (partial) month
   const TARGET_NET_PCT = 0.50;
   const todayDay = new Date().getDate();
@@ -127,9 +142,15 @@ function seedStore(){
     { name: 'Webinar Funnel',       total: 16, placed: 10, cpa: 560,  lapse: 0.7, lines: 1, desc: 'Webinar ads & hosting' },
     { name: 'Aged Leads Co',        total: 22, placed: 11, cpa: 160,  lapse: 1.8, lines: 1, desc: 'Aged lead batch' },
   ];
-  const PRODUCT_POOL = [
-    ...Array(60).fill('fe'), ...Array(16).fill('term'), ...Array(14).fill('wl'), ...Array(44).fill('iul'), ...Array(18).fill('ann'),
-  ];
+  VENDORS.forEach(v => { v.total = Math.max(3, Math.round(v.total * SC)); v.placed = Math.max(2, Math.min(v.total - 1, Math.round(v.placed * SC))); });
+  const placedTotal = VENDORS.reduce((t, v) => t + v.placed, 0);
+  // product mix, as whole numbers that add up to the number of placed cases
+  const kindShares = { fe: 0.395, term: 0.105, wl: 0.092, iul: 0.289, ann: 0.119 };
+  const kindTargets = {};
+  let kindAssigned = 0;
+  Object.keys(kindShares).forEach(k => { kindTargets[k] = Math.round(placedTotal * kindShares[k]); kindAssigned += kindTargets[k]; });
+  kindTargets.fe += placedTotal - kindAssigned;
+  const PRODUCT_POOL = Object.entries(kindTargets).flatMap(([k, n]) => Array(Math.max(0, n)).fill(k));
   const PRODUCT_DEF = {
     fe:   { names: ['Living Promise','FE Express'], carriers: ['Mutual of Omaha','Americo','Foresters','Transamerica'], leadType: 'Final Expense',       prem: [48,125],  rate: 0.85, face: [8000,25000] },
     term: { names: ['Term 20'],                       carriers: ['Transamerica','Mutual of Omaha','National Life'],      leadType: 'Mortgage Protection', prem: [70,190],  rate: 0.95, face: [250000,750000] },
@@ -146,7 +167,7 @@ function seedStore(){
   });
   const placedSpecs = shuffle(specs.filter(s => s.placed));
   const otherSpecs = shuffle(specs.filter(s => !s.placed));
-  const otherStatuses = shuffle([...Array(18).fill('pending'), ...Array(6).fill('approved_not_paid'), ...Array(20).fill('declined'), ...Array(12).fill('withdrawn'), ...Array(8).fill('cancelled')]);
+  const otherStatuses = shuffle([...Array(Math.max(2, Math.round(18 * SC))).fill('pending'), ...Array(Math.max(1, Math.round(6 * SC))).fill('approved_not_paid'), ...Array(Math.round(20 * SC)).fill('declined'), ...Array(Math.round(12 * SC)).fill('withdrawn'), ...Array(Math.round(8 * SC)).fill('cancelled')]);
   otherSpecs.forEach((s, i) => { s.status = otherStatuses[i] || 'declined'; });
   placedSpecs.forEach(s => { s.status = 'active'; });
   // (assigned after the placed cases get their months, further down)
@@ -164,7 +185,6 @@ function seedStore(){
 
   // Product mix, evenly interleaved down the timeline so every month gets a similar blend of
   // final expense, term/whole life, IUL and annuity cases (a purely random draw makes lumpy months).
-  const kindTargets = { fe: 60, term: 16, wl: 14, iul: 44, ann: 18 };
   const kindCounts = { fe: 0, term: 0, wl: 0, iul: 0, ann: 0 };
   const orderedPlaced = [...placedSpecs].sort((a, b) => b.issueMonth - a.issueMonth);
   orderedPlaced.forEach((s, i) => {
@@ -176,7 +196,7 @@ function seedStore(){
 
   // a realistic handful of placed cases later lapse and get charged back (one old enough to count
   // against persistency, the rest inside the last year); lapse-prone vendors are likelier
-  const lapseMonths = [HISTORY, 11, 10, 9, 8, 8, 7, 6, 5, 5, 4, 3, 7, 6];
+  const lapseMonths = [HISTORY, 11, 10, 9, 8, 8, 7, 6, 5, 5, 4, 3, 7, 6].slice(0, Math.max(5, Math.round(14 * SC)));
   lapseMonths.forEach(mm => {
     const cands = placedSpecs.filter(s => s.issueMonth === mm && s.status === 'active' && s.kind !== 'ann'); // annuity chargebacks are rare
     if (!cands.length) return;
@@ -213,7 +233,7 @@ function seedStore(){
   // Each month's placed business is scaled to a smooth growth curve (about $17K a month at the
   // start of the history rising to about $25K, ~$270K over any trailing year), so the monthly
   // charts trend up cleanly instead of jumping around.
-  const monthTarget = (m) => (17500 + (HISTORY - m) * 600) * between(0.97, 1.03) * (m === 0 ? Math.max(0.5, todayDay / 30) : 1);
+  const monthTarget = (m) => SC * (17500 + (HISTORY - m) * 600) * between(0.97, 1.03) * (m === 0 ? Math.max(0.5, todayDay / 30) : 1);
   const monthScale = {};
   for (let m = HISTORY; m >= 0; m--) {
     let raw = 0;
@@ -282,7 +302,7 @@ function seedStore(){
     const dow = new Date(iso + 'T00:00:00').getDay();
     if (dow === 0 || dow === 6) continue;
     if (iso !== todayStr && rand() < 0.06) continue; // the occasional day off
-    const dials = rint(58, 104);
+    const dials = AG ? rint(30, 62) : rint(58, 104);
     const contacts = Math.round(dials * between(0.38, 0.5));
     const appointments = Math.round(contacts * between(0.10, 0.15));
     const presentations = Math.round(appointments * between(0.62, 0.88));
@@ -305,7 +325,10 @@ function seedStore(){
 
   // ---------- 4) costs: recurring bills, one-time bills, and lead spend sized to hit the profit target ----------
   const costs = [];
-  const recurring = [
+  const recurring = AG ? [
+    // an agency owner's own selling costs only — staff, office, insurance and the team's tools are agency overhead (added separately)
+    ['Personal dialer seat', 'CRM/Tools', 99, 3], ['Call tracking & texting', 'CRM/Tools', 89, 7], ['Email & workspace', 'CRM/Tools', 24, 12],
+  ] : [
     ['CRM subscription', 'CRM/Tools', 297, 3], ['Power dialer', 'CRM/Tools', 199, 3], ['E-signature & quoting suite', 'CRM/Tools', 129, 7],
     ['Call tracking & texting', 'CRM/Tools', 89, 7], ['Email & workspace', 'CRM/Tools', 24, 12],
     ['Appointment setter (contract)', 'Staff', 1400, 1], ['Virtual assistant (part-time)', 'Staff', 1650, 1], ['E&O policy', 'E&O insurance', 168, 10], ['Business liability & cyber', 'Insurance', 74, 10],
@@ -368,19 +391,138 @@ function seedStore(){
   });
 
   // ---------- 5) goals, team preview, owner draws ----------
-  const goals = { dialsTarget: 2000, appointmentsTarget: 90, sitsTarget: 65, salesTarget: 13, fycTarget: 25000 };
+  const goals = AG
+    ? { dialsTarget: 1100, appointmentsTarget: 55, sitsTarget: 40, salesTarget: 8, fycTarget: 14000 }
+    : { dialsTarget: 2000, appointmentsTarget: 90, sitsTarget: 65, salesTarget: 13, fycTarget: 25000 };
   const teamGoals = { issuedPaidTarget: 85000, newWritersTarget: 3, headcountTarget: 12 };
   const ownerDraws = [];
-  for (let m = HISTORY - 1; m >= 0; m--) ownerDraws.push({ id: uid('od'), amount: rint(5200, 7400), drawDate: monthsAgoISO(m, 1), notes: m % 3 === 0 ? 'Quarterly estimated taxes set aside' : '' });
+  for (let m = HISTORY - 1; m >= 0; m--) ownerDraws.push({ id: uid('od'), amount: AG ? rint(15500, 21500) : rint(5200, 7400), drawDate: monthsAgoISO(m, 1), notes: m % 3 === 0 ? 'Quarterly estimated taxes set aside' : '' });
 
   return { clients, activity, costs, goals, teamGoals, ownerDraws, suggestions: [], calcContractLevel: 100, calcAnnuityTier: 'green' };
+}
+// The Agency plan tour: the owner's own (smaller) book plus a team of producers, the override income the
+// owner earns on their production, and the overhead of running an agency. The owner only ever sees the
+// team's PRODUCTION (cases, commissions, chargebacks), never their client lists, so each team member is
+// stored as dated production entries rather than a full book.
+function seedAgencyStore(){
+  const base = seedStore({ scale: 0.62, agency: true });
+  const { rand, rint, rpick, between } = makeRng(20261031);
+  const HISTORY = 14;
+  const todayDay = new Date().getDate();
+  const todayStr = todayISO();
+  const dayIn = (m, d) => monthsAgoISO(m, m === 0 ? Math.min(d, todayDay) : d);
+
+  // monthly production at full stride ($), months since joining, how they report, plan and billing status
+  const DEFS = [
+    { name: 'Marcus Hill',   base: 16000, tenure: 14, tier: 'individual',   status: 'active',   via: null,                    rate: 0.18, pending: 41000 },
+    { name: 'Priya Shah',    base: 14000, tenure: 14, tier: 'agency_owner', status: 'active',   via: null,                    rate: 0.18, pending: 36000 },
+    { name: 'Daniel Ortiz',  base: 12000, tenure: 13, tier: 'individual',   status: 'active',   via: null,                    rate: 0.18, pending: 30500 },
+    { name: 'Tamara Wells',  base: 10000, tenure: 12, tier: 'individual',   status: 'active',   via: null,                    rate: 0.18, pending: 24000 },
+    { name: 'Kevin Boyd',    base: 8500,  tenure: 12, tier: 'individual',   status: 'active',   via: null,                    rate: 0.18, pending: 21500 },
+    { name: 'Sofia Marin',   base: 7500,  tenure: 11, tier: 'individual',   status: 'active',   via: null,                    rate: 0.18, pending: 18000 },
+    { name: 'Jared Cole',    base: 6500,  tenure: 11, tier: 'individual',   status: 'active',   via: null,                    rate: 0.18, pending: 16500 },
+    { name: 'Lena Park',     base: 5500,  tenure: 8,  tier: 'individual',   status: 'active',   via: null,                    rate: 0.18, pending: 12000 },
+    { name: 'Ian Reyes',     base: 4600,  tenure: 9,  tier: 'individual',   status: 'active',   via: 'Shah Financial Group',  rate: 0.12, pending: 9800 },
+    { name: 'Andre Mills',   base: 4200,  tenure: 6,  tier: 'individual',   status: 'past_due', via: null,                    rate: 0.18, pending: 8000 },
+    { name: 'Ruth Chen',     base: 3200,  tenure: 4,  tier: 'individual',   status: 'active',   via: null,                    rate: 0.18, pending: 7000 },
+    { name: 'Dana Frost',    base: 3000,  tenure: 3,  tier: 'individual',   status: 'active',   via: 'Shah Financial Group',  rate: 0.12, pending: 5200 },
+    { name: 'Omar Khan',     base: 0,     tenure: 0,  tier: 'individual',   status: 'inactive', via: null,                    rate: 0.18, pending: 0, joinedDaysAgo: 9 },
+  ];
+  const RAMP = [0.35, 0.6, 0.85]; // first three months after joining
+
+  const members = DEFS.map((d, i) => {
+    const joined = d.joinedDaysAgo ? daysAgoISO(d.joinedDaysAgo) : monthsAgoISO(d.tenure, rint(2, 20));
+    const member = {
+      id: 'tm_' + i, name: d.name, email: d.name.toLowerCase().replace(/[^a-z]+/g, '.') + '@example.com',
+      tier: d.tier, status: d.status, reportsVia: d.via, joined, overrideRate: d.rate, pending: d.pending,
+      cases: [], chargebacks: [], costs: [],
+    };
+    for (let m = Math.min(d.tenure, HISTORY); m >= 0 && d.base > 0; m--) {
+      const monthsIn = d.tenure - m; // 0 in the month they joined
+      const ramp = monthsIn < RAMP.length ? RAMP[monthsIn] : 1;
+      const partial = m === 0 ? Math.max(0.5, todayDay / 30) : 1;
+      const monthGross = d.base * ramp * between(0.88, 1.12) * partial;
+      const n = Math.max(1, Math.round(monthGross / between(1500, 2300)));
+      const weights = Array.from({ length: n }, () => between(0.6, 1.6));
+      const wSum = weights.reduce((a, b) => a + b, 0);
+      weights.forEach(w => {
+        const fyc = Math.max(250, Math.round(monthGross * w / wSum / 10) * 10);
+        member.cases.push({ id: uid('tc'), d: dayIn(m, rint(2, 27)), fyc });
+      });
+      // the team member's own costs (leads, tools...) roll up into the agency totals, itemized nowhere here
+      member.costs.push({ id: uid('tk'), d: dayIn(m, 15), amount: Math.round(monthGross * between(0.30, 0.38) + 300) });
+    }
+    // chargebacks come later, from a small share of their placed cases (kept out of the current month)
+    const lastMonthEnd = toISO(new Date(new Date().getFullYear(), new Date().getMonth(), 0));
+    member.cases.forEach(c => {
+      if (rand() < 0.1) {
+        let when = addDays(c.d, rint(50, 150));
+        if (when > lastMonthEnd) when = addDays(lastMonthEnd, -rint(0, 20));
+        if (when > c.d) member.chargebacks.push({ id: uid('tb'), d: when, amount: Math.min(4200, Math.round(c.fyc * between(0.5, 0.9))) });
+      }
+    });
+    return member;
+  });
+
+  // the owner's override income: a share of each team member's monthly production, logged each month
+  const overrides = [];
+  members.forEach(mem => {
+    const byMonth = {};
+    mem.cases.forEach(c => { byMonth[c.d.slice(0, 7)] = (byMonth[c.d.slice(0, 7)] || 0) + c.fyc; });
+    Object.entries(byMonth).forEach(([month, gross]) => {
+      const [y, mo] = month.split('-').map(Number);
+      const isThisMonth = y === new Date().getFullYear() && mo === new Date().getMonth() + 1;
+      const d = isThisMonth ? monthsAgoISO(0, Math.min(18, todayDay)) : `${month}-18`;
+      if (d > todayStr) return;
+      const label = new Date(y, mo - 1, 1).toLocaleDateString(undefined, { month: 'short' });
+      overrides.push({ id: uid('ov'), date: d, amount: Math.round(gross * mem.overrideRate), notes: `${mem.name} — ${label} production (${Math.round(mem.overrideRate * 100)}%)` });
+    });
+  });
+
+  // what it costs to run the agency (the owner logs these on the Costs tab)
+  const agencyCosts = [];
+  const bill = (description, category, amount, day) => agencyCosts.push({ id: uid('e'), date: monthsAgoISO(HISTORY, day), amount, category, vendor: null, description, isRecurring: true, recurringFrequency: 'monthly', recurringEndDate: null });
+  bill('Operations manager (salary)', 'Staff', 4800, 1);
+  bill('Licensing & contracting admin', 'Staff', 3200, 1);
+  bill('Recruiter & new-agent trainer', 'Staff', 3600, 1);
+  bill('Payroll & accounting service', 'Other', 640, 4);
+  bill('Agency office lease', 'Office', 2950, 1);
+  bill('Phone, internet & utilities', 'Office', 410, 15);
+  bill('Agency E&O policy', 'E&O insurance', 690, 10);
+  bill('Liability, cyber & fidelity bond', 'Insurance', 360, 10);
+  bill('Team CRM seats (14)', 'CRM/Tools', 1160, 3);
+  bill('Dialer & texting seats', 'CRM/Tools', 1150, 3);
+  bill('E-signature, quoting & compliance software', 'CRM/Tools', 540, 7);
+  bill('Recruiting ads & job boards', 'Marketing', 1900, 5);
+  bill('Website, brand & social', 'Marketing', 450, 5);
+  bill('Legal & compliance counsel', 'Other', 420, 20);
+  const one = (m, day, amount, category, description) => { const date = dayIn(m, day); if (date <= todayStr) agencyCosts.push({ id: uid('e'), date, amount, category, vendor: null, description, isRecurring: false, recurringEndDate: null }); };
+  for (let m = HISTORY; m >= 0; m--) {
+    one(m, 11, rint(280, 520), 'Travel', 'Field visits & carrier meetings');
+    one(m, 22, rint(180, 340), 'Office', 'Team meeting meals & supplies');
+    if (m % 3 === 1) one(m, 25, 4500, 'Marketing', 'Quarterly team training & incentive event');
+  }
+  one(10, 8, 3200, 'Travel', 'Carrier annual conference — travel & registration');
+  one(4, 8, 3200, 'Travel', 'Agency leadership summit — travel & registration');
+  one(9, 17, 1250, 'Licenses', 'State appointment & renewal fees (team)');
+  one(2, 17, 1450, 'Licenses', 'State appointment & renewal fees (team)');
+  members.forEach(mem => {
+    const m = Math.max(0, Math.min(HISTORY, Math.round((new Date() - new Date(mem.joined + 'T00:00:00')) / (30.4 * 86400000))));
+    one(m, 6, 340, 'Licenses', `Onboarding — ${mem.name.split(' ')[0]} (background check, contracting, welcome kit)`);
+  });
+  base.costs.push(...agencyCosts);
+
+  base.team = { members };
+  base.overrides = overrides;
+  base.teamGoals = { issuedPaidTarget: 100000, newWritersTarget: 3, headcountTarget: 18 };
+  return base;
 }
 function loadStore(){
   try {
     const raw = localStorage.getItem(STORE_KEY);
     if (raw) return JSON.parse(raw);
   } catch(e){}
-  const fresh = seedStore();
+  const fresh = IS_AGENCY ? seedAgencyStore() : seedStore();
   try { localStorage.setItem(STORE_KEY, JSON.stringify(fresh)); } catch(e){}
   return fresh;
 }
@@ -471,12 +613,29 @@ function costsTotalInRange(from,to){ return costsInRange(from,to).reduce((s,c)=>
 // Flattens every client's commissionEntries into one book-wide list for the Profit tab's
 // Commission History table, tagging each entry with its owning client for display/editing.
 function allCommissionEntriesInRange(from,to){
-  return store.clients.flatMap(c => (c.commissionEntries||[])
+  const own = store.clients.flatMap(c => (c.commissionEntries||[])
     .filter(e => e.date >= from && e.date <= to)
     .map(e => ({ ...e, clientId: c.id, clientName: c.name, carrier: c.carrier, product: c.product })));
+  // Agency owners also see their override income here, logged against no particular client.
+  const overrides = IS_AGENCY ? (store.overrides||[]).filter(o => o.date >= from && o.date <= to)
+    .map(o => ({ id: o.id, type: 'Override', amount: Number(o.amount), date: o.date, clientId: null, clientName: 'Agency override', notes: o.notes })) : [];
+  return [...own, ...overrides];
 }
 function pendingAsOf(to){ return store.clients.filter(c => c.status==='pending' && c.dateSubmitted<=to).reduce((s,c)=>s+annualPremium(c),0); }
-function statement(from,to){
+// ---- Agency plan: the dashboards roll up the whole team, as the live app does ----
+// (every producer's commissions, chargebacks and costs, plus the owner's override income)
+function teamMembers(){ return (IS_AGENCY && store.team && store.team.members) || []; }
+function inRange(d, from, to){ return d >= from && d <= to; }
+function teamGrossInRange(from,to){ return teamMembers().reduce((s,m)=>s+m.cases.filter(c=>inRange(c.d,from,to)).reduce((t,c)=>t+c.fyc,0),0); }
+function teamChargebacksInRange(from,to){ return teamMembers().reduce((s,m)=>s+m.chargebacks.filter(c=>inRange(c.d,from,to)).reduce((t,c)=>t+c.amount,0),0); }
+function teamPlacedInRange(from,to){ return teamMembers().reduce((s,m)=>s+m.cases.filter(c=>inRange(c.d,from,to)).length,0); }
+function teamCostsInRange(from,to){ return teamMembers().reduce((s,m)=>s+m.costs.filter(c=>inRange(c.d,from,to)).reduce((t,c)=>t+c.amount,0),0); }
+function overridesInRange(from,to){ return IS_AGENCY ? (store.overrides||[]).filter(o=>inRange(o.date,from,to)).reduce((s,o)=>s+Number(o.amount),0) : 0; }
+function rollGross(from,to){ return grossFYCInRange(from,to) + teamGrossInRange(from,to) + overridesInRange(from,to); }
+function rollChargebacks(from,to){ return chargebacksInRange(from,to) + teamChargebacksInRange(from,to); }
+function rollCosts(from,to){ return costsTotalInRange(from,to) + teamCostsInRange(from,to); }
+function rollPlaced(from,to){ return placedInRange(from,to).length + teamPlacedInRange(from,to); }
+function ownStatement(from,to){
   const gross = grossFYCInRange(from,to);
   const cb = chargebacksInRange(from,to);
   const netCommission = gross - cb;
@@ -485,13 +644,22 @@ function statement(from,to){
   const pending = pendingAsOf(to);
   return { gross, cb, netCommission, costsTotal, netProfit, pending };
 }
+function statement(from,to){
+  if (!IS_AGENCY) return ownStatement(from,to);
+  const gross = rollGross(from,to);
+  const cb = rollChargebacks(from,to);
+  const costsTotal = rollCosts(from,to);
+  const netCommission = gross - cb;
+  const teamPending = to >= todayISO() ? teamMembers().reduce((s,m)=>s+m.pending,0) : 0;
+  return { gross, cb, netCommission, costsTotal, netProfit: netCommission - costsTotal, pending: pendingAsOf(to) + teamPending };
+}
 
 /* ============================================================
    shared date-range report filter (Desk, Activity, Book, Costs, Profit)
    ============================================================ */
 const DATE_RANGE_PRESETS = [
   ['today','Today'], ['yesterday','Yesterday'], ['this_week','This week'], ['this_month','This month'],
-  ['last_month','Last month'], ['this_quarter','This quarter'], ['ytd','Year to date'], ['all_time','All time'], ['custom','Custom'],
+  ['last_month','Last month'], ['this_quarter','This quarter'], ['last_quarter','Last quarter'], ['last_90','Last 90 days'], ['last_12','Last 12 months'], ['ytd','Year to date'], ['all_time','All time'], ['custom','Custom'],
 ];
 const dateFilterState = {
   desk: { key: 'this_month', from: '', to: '' },
@@ -501,6 +669,7 @@ const dateFilterState = {
   profit: { key: 'this_month', from: '', to: '' },
   healthOfBook: { key: 'all_time', from: '', to: '' },
   analytics: { key: 'this_month', from: '', to: '' },
+  team: { key: 'this_month', from: '', to: '' },
 };
 function computeDateRange(key, customFrom, customTo){
   const now = new Date();
@@ -511,6 +680,12 @@ function computeDateRange(key, customFrom, customTo){
     case 'this_week': { const start = new Date(y,m,d - now.getDay()); return { from: toISO(start), to: toISO(now) }; }
     case 'last_month': return { from: toISO(new Date(y,m-1,1)), to: toISO(new Date(y,m,0)) };
     case 'this_quarter': { const q = Math.floor(m/3); return { from: toISO(new Date(y,q*3,1)), to: toISO(now) }; }
+    // The last full calendar quarter (e.g. in October: Jul 1 – Sep 30). Month 0 of year y minus 3 rolls back a year correctly.
+    case 'last_quarter': { const q = Math.floor(m/3); return { from: toISO(new Date(y,(q-1)*3,1)), to: toISO(new Date(y,q*3,0)) }; }
+    // A rolling window of the 90 days ending today (today included).
+    case 'last_90': return { from: toISO(new Date(y,m,d-89)), to: toISO(now) };
+    // A rolling year ending today: from the day after this date last year (e.g. Oct 13, 2025 – Oct 12, 2026).
+    case 'last_12': return { from: toISO(new Date(y-1,m,d+1)), to: toISO(now) };
     case 'ytd': return { from: toISO(new Date(y,0,1)), to: toISO(now) };
     case 'all_time': return { from: '2000-01-01', to: toISO(now) };
     case 'custom': return { from: customFrom || toISO(new Date(y,m,1)), to: customTo || toISO(now) };
@@ -604,7 +779,7 @@ function renderDesk(){
   const st = statement(range.from, range.to);
   const funnel = sumActivity(activityInRange(range.from, range.to));
   const t = todayRow();
-  const placedAll = placedInRange(range.from, range.to).length; // placed within the selected date range, like the live app
+  const placedAll = rollPlaced(range.from, range.to); // placed within the selected date range, like the live app (agency: whole team)
 
   const monthFrom = toISO(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const monthTo = todayISO();
@@ -619,7 +794,7 @@ function renderDesk(){
   const costLines = COST_CATEGORIES.map(c => ({ cat:c.key, color:c.color, total: costsInRange(range.from,range.to).filter(e=>e.category===c.key).reduce((s,e)=>s+e.amount,0) })).filter(c=>c.total>0);
 
   mainInner.innerHTML = `
-    <div class="page-header"><div><div class="page-eyebrow">Desk</div><h1>Sample producer's book</h1></div>
+    <div class="page-header"><div><div class="page-eyebrow">Desk</div><h1>${IS_AGENCY ? "Sample agency's book" : "Sample producer's book"}</h1></div>
     <button class="primary" type="button" id="addClientBtn">+ Add a client</button></div>
 
     ${dateFilterHTML('desk')}
@@ -754,9 +929,9 @@ function monthBuckets(count){
 function monthlyStats(count){
   return monthBuckets(count).map(m => {
     const act = sumActivity(activityInRange(m.start,m.end));
-    const gross = grossFYCInRange(m.start,m.end);
-    const cb = chargebacksInRange(m.start,m.end);
-    const cost = costsTotalInRange(m.start,m.end);
+    const gross = rollGross(m.start,m.end);
+    const cb = rollChargebacks(m.start,m.end);
+    const cost = rollCosts(m.start,m.end);
     const draw = (store.ownerDraws||[]).filter(d=>d.drawDate>=m.start && d.drawDate<=m.end).reduce((s,d)=>s+Number(d.amount),0);
     return { label:m.label, dials:act.dials, sales:act.sales, gross, cb, cost, net: gross-cb-cost, draw };
   });
@@ -1761,7 +1936,7 @@ function renderGoals(){
 
     <div class="panel">
       <h2>This month's Team goals</h2>
-      <p class="helptext" style="margin-top:-8px;">Targets for the whole agency, not just you. Agency Owner plan only — shown here so you can see what it looks like.</p>
+      <p class="helptext" style="margin-top:-8px;">Targets for the whole agency, not just you.${IS_AGENCY ? '' : ' Agency Owner plan only — shown here so you can see what it looks like.'}</p>
       <form class="entry" id="teamGoalsForm">
         <div><label>Team Issued Paid Total ($)</label><input type="number" step="0.01" name="issuedPaidTarget" value="${store.teamGoals.issuedPaidTarget}"></div>
         <div><label>New Writers</label><input type="number" name="newWritersTarget" value="${store.teamGoals.newWritersTarget}"></div>
@@ -1804,22 +1979,27 @@ function renderProfit(){
   const rangeActivity = sumActivity(activityInRange(range.from, range.to));
   const placedRange = placedInRange(range.from, range.to);
 
-  const costPerSale = rangeActivity.sales ? st.costsTotal/rangeActivity.sales : 0;
-  const commissionPerDial = rangeActivity.dials ? st.gross/rangeActivity.dials : 0;
-  const costPerAppointment = rangeActivity.appointments ? st.costsTotal/rangeActivity.appointments : 0;
-  const costPerDial = rangeActivity.dials ? st.costsTotal/rangeActivity.dials : 0;
-  const avgCaseFYC = placedRange.length ? st.gross/placedRange.length : 0;
+  // Unit economics describe the owner's OWN selling (their dials, their cases) — the team-wide totals above
+  // would be divided by one person's activity and mean nothing — so an agency owner's use their own book.
+  const own = ownStatement(range.from, range.to);
+  const costPerSale = rangeActivity.sales ? own.costsTotal/rangeActivity.sales : 0;
+  const commissionPerDial = rangeActivity.dials ? own.gross/rangeActivity.dials : 0;
+  const costPerAppointment = rangeActivity.appointments ? own.costsTotal/rangeActivity.appointments : 0;
+  const costPerDial = rangeActivity.dials ? own.costsTotal/rangeActivity.dials : 0;
+  const avgCaseFYC = placedRange.length ? own.gross/placedRange.length : 0;
   const avgAnnualPremium = placedRange.length ? placedRange.reduce((s,c)=>s+annualPremium(c),0)/placedRange.length : 0;
 
   // Health of the book — has its own date range, independent of the filter above
   const healthRange = computeDateRange(dateFilterState.healthOfBook.key, dateFilterState.healthOfBook.from, dateFilterState.healthOfBook.to);
-  const allGross = grossFYCInRange(healthRange.from, healthRange.to);
-  const allCB = chargebacksInRange(healthRange.from, healthRange.to);
-  const allCosts = costsTotalInRange(healthRange.from, healthRange.to);
+  const allGross = rollGross(healthRange.from, healthRange.to);
+  const allCB = rollChargebacks(healthRange.from, healthRange.to);
+  const allCosts = rollCosts(healthRange.from, healthRange.to);
   const allNet = (allGross - allCB) - allCosts;
   const netProfitPct = allGross ? (allNet/allGross*100) : 0;
   const chargebackRatio = allGross ? (allCB/allGross*100) : 0;
-  const leadSpendHealth = costsInRange(healthRange.from, healthRange.to).filter(c=>c.category==='Leads').reduce((s,c)=>s+Number(c.amount),0);
+  // (for an agency, roughly half of what the team spends goes on leads — their costs roll up as one number)
+  const leadSpendHealth = costsInRange(healthRange.from, healthRange.to).filter(c=>c.category==='Leads').reduce((s,c)=>s+Number(c.amount),0)
+    + teamCostsInRange(healthRange.from, healthRange.to) * 0.5;
   const grossMarginDollar = allGross - leadSpendHealth;
   const grossMarginPct = allGross ? (grossMarginDollar/allGross*100) : 0;
   // Persistency needs a case to have had a real chance to lapse, so it's "of what was
@@ -1930,10 +2110,11 @@ function renderProfit(){
     <div class="panel">
       <h2>Log Commission</h2>
       <form class="entry" id="commForm">
-        <div class="full"><label>Case</label><select required name="clientId" id="commClientSelect">${store.clients.map(c=>`<option value="${c.id}">${c.name} — ${c.carrier} — ${c.product}</option>`).join('') || '<option value="">No cases yet</option>'}</select></div>
-        <div><label>Type</label><select name="type"><option value="Initial">Initial</option><option value="Installment">Installment</option><option value="Renewal">Renewal</option><option value="Override">Override</option><option value="Chargeback">Chargeback</option></select></div>
-        <div><label>Amount ($)</label><input required type="number" step="0.01" name="amount" placeholder="850"></div>
+        <div><label>Type</label><select name="type" id="commTypeSelect"><option value="Initial">Initial</option><option value="Installment">Installment</option><option value="Renewal">Renewal</option>${IS_AGENCY?'<option value="Override">Override</option>':''}<option value="Chargeback">Chargeback</option></select></div>
         <div><label>Date</label><input required type="date" name="date"></div>
+        <div class="full" id="commCaseField"><label>Case</label><select required name="clientId" id="commClientSelect">${store.clients.map(c=>`<option value="${c.id}">${c.name} — ${c.carrier} — ${c.product}</option>`).join('') || '<option value="">No cases yet</option>'}</select></div>
+        <div><label>Amount ($)</label><input required type="number" step="0.01" name="amount" placeholder="850"></div>
+        <div class="full section-hidden" id="commNotesField"><label>Which producer / case was this for?</label><input name="notes" placeholder="e.g. Jordan Alvarez's Americo term case"></div>
         <div class="full"><button class="primary" type="submit">Log Commission</button></div>
         <div class="full errortext" id="commError"></div>
       </form>
@@ -1943,7 +2124,7 @@ function renderProfit(){
       <h2>Commission History</h2>
       <p class="helptext" style="margin:-8px 0 14px;">Click a row to edit or delete it.</p>
       <table><thead><tr><th>Client</th><th>Type</th><th>Amount</th><th>Date</th></tr></thead>
-      <tbody>${[...commEntries].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(e=>`<tr class="row-clickable" data-hist-entry-id="${e.id}" data-hist-client-id="${e.clientId}"><td>${e.clientName}</td><td>${e.type}</td><td>${fmt(e.amount)}</td><td>${fmtDate(e.date)}</td></tr>`).join('') || '<tr><td colspan="4" class="helptext">No commissions in this range.</td></tr>'}</tbody></table>
+      <tbody>${[...commEntries].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(e=>`<tr class="${e.clientId ? 'row-clickable' : ''}" ${e.clientId ? `data-hist-entry-id="${e.id}" data-hist-client-id="${e.clientId}"` : ''}><td>${e.clientName}${e.notes ? ` <span class="helptext">— ${e.notes}</span>` : ''}</td><td>${e.type}</td><td>${fmt(e.amount)}</td><td>${fmtDate(e.date)}</td></tr>`).join('') || '<tr><td colspan="4" class="helptext">No commissions in this range.</td></tr>'}</tbody></table>
     </div>
   `;
   wireDateFilter('profit', renderProfit);
@@ -1963,14 +2144,32 @@ function renderProfit(){
       if (entry) openEditCommEntryModal(entry, clientId, renderProfit);
     };
   });
+  document.getElementById('commTypeSelect').addEventListener('change', (e) => {
+    const isOverride = e.target.value === 'Override';
+    document.getElementById('commCaseField').classList.toggle('section-hidden', isOverride);
+    document.getElementById('commNotesField').classList.toggle('section-hidden', !isOverride);
+    document.getElementById('commClientSelect').required = !isOverride;
+    document.querySelector('#commNotesField input').required = isOverride;
+  });
   document.getElementById('commForm').addEventListener('submit', (ev) => {
     ev.preventDefault();
     const errEl = document.getElementById('commError');
     errEl.textContent = '';
     const f = new FormData(ev.target);
+    const type = f.get('type');
+    if (type === 'Override') {
+      // Override income belongs to the agency, not to a case: it needs a note saying whose production it was for.
+      const notes = (f.get('notes') || '').trim();
+      if (!notes) { errEl.textContent = 'Say which producer or case this override was for.'; return; }
+      store.overrides = store.overrides || [];
+      store.overrides.push({ id: uid('ov'), date: f.get('date'), amount: Math.abs(Number(f.get('amount'))), notes });
+      saveStore();
+      say('Override logged!');
+      renderProfit();
+      return;
+    }
     const c = store.clients.find(x => x.id === f.get('clientId'));
     if (!c) { errEl.textContent = 'Pick a case first.'; return; }
-    const type = f.get('type');
     const amount = type === 'Chargeback' ? -Math.abs(Number(f.get('amount'))) : Number(f.get('amount'));
     c.commissionEntries = c.commissionEntries || [];
     c.commissionEntries.push({ id: uid('ce'), type, amount, date: f.get('date') });
@@ -2613,6 +2812,80 @@ function renderAnnuityCalculatorBody(){
   recompute();
 }
 
+/* ================= TEAM (Agency plan tour) ================= */
+function renderTeam(){
+  const range = computeDateRange(dateFilterState.team.key, dateFilterState.team.from, dateFilterState.team.to);
+  const ownGross = grossFYCInRange(range.from, range.to);
+  const ownCb = chargebacksInRange(range.from, range.to);
+  const ownPlaced = placedInRange(range.from, range.to).length;
+  const rows = teamMembers().map(m => {
+    const gross = m.cases.filter(c => inRange(c.d, range.from, range.to)).reduce((t,c)=>t+c.fyc,0);
+    const cb = m.chargebacks.filter(c => inRange(c.d, range.from, range.to)).reduce((t,c)=>t+c.amount,0);
+    const placed = m.cases.filter(c => inRange(c.d, range.from, range.to)).length;
+    return { m, gross, cb, placed };
+  });
+  const totals = {
+    gross: ownGross + rows.reduce((t,r)=>t+r.gross,0),
+    cb: ownCb + rows.reduce((t,r)=>t+r.cb,0),
+    placed: ownPlaced + rows.reduce((t,r)=>t+r.placed,0),
+    overrides: overridesInRange(range.from, range.to),
+  };
+  const pill = (st) => `<span class="pill ${st}">${st}</span>`;
+  const inviteLink = `${window.location.origin}/login.html?invite=sample-agency`;
+
+  mainInner.innerHTML = `
+    <div class="page-header"><div><div class="page-eyebrow">Team</div><h1>Your agency</h1></div></div>
+
+    <div class="panel">
+      <h2>Invite a producer</h2>
+      <p class="helptext" style="margin-top:-8px;">Share this link with an agent to have their book roll up into your agency dashboard. They still get their own 14-day trial and their own Producer ($29/mo) or Producer Plus ($39/mo) subscription afterward which they are responsible to pay. Inviting them to join your agency just ensures their numbers are included in your team stats.</p>
+      <div style="display:flex; gap:8px; margin-top:12px;">
+        <input id="inviteLinkInput" readonly value="${inviteLink}" style="flex:1;">
+        <button class="ghost" type="button" id="copyInviteBtn">Copy link</button>
+      </div>
+    </div>
+
+    ${dateFilterHTML('team')}
+
+    <div class="panel">
+      <h2>Team production</h2>
+      <p class="helptext" style="margin-top:-8px;">${fmtDateRangeLabel(range.from)} – ${fmtDateRangeLabel(range.to)}. Commissions, chargebacks, and cases placed for each producer on your roster.</p>
+      <div class="grid" style="margin-bottom:16px;">
+        <div class="card"><div class="stat-label">Team gross commission</div><div class="stat-value">${fmt(totals.gross)}</div></div>
+        <div class="card"><div class="stat-label">Chargebacks</div><div class="stat-value neg">−${fmt(totals.cb)}</div></div>
+        <div class="card"><div class="stat-label">Cases placed</div><div class="stat-value">${totals.placed}</div></div>
+        <div class="card"><div class="stat-label">Your override income</div><div class="stat-value">${fmt(totals.overrides)}</div></div>
+      </div>
+      <table class="statement-table">
+        <thead><tr><th>Producer</th><th>Gross commission</th><th>Chargebacks</th><th>Net commission</th><th>Cases placed</th></tr></thead>
+        <tbody>
+          <tr><td>Sample Agency Owner (you)</td><td>${fmt(ownGross)}</td><td class="neg">−${fmt(ownCb)}</td><td>${fmt(ownGross-ownCb)}</td><td>${ownPlaced}</td></tr>
+          ${rows.map(r => `<tr><td>${r.m.name}</td><td>${fmt(r.gross)}</td><td class="neg">−${fmt(r.cb)}</td><td>${fmt(r.gross-r.cb)}</td><td>${r.placed}</td></tr>`).join('')}
+          <tr class="statement-total"><td>Total</td><td>${fmt(totals.gross)}</td><td class="neg">−${fmt(totals.cb)}</td><td>${fmt(totals.gross-totals.cb)}</td><td>${totals.placed}</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="panel">
+      <h2>Roster</h2>
+      <p class="helptext" style="margin-top:-8px;">"Direct" reports straight to you. Anyone else has grown into their own Agency Owner with their own sub-team — their column shows whose team that is; their numbers still roll up into yours.</p>
+      <table class="statement-table">
+        <thead><tr><th>Name</th><th>Email</th><th>Plan</th><th>Status</th><th>Reports via</th><th>Joined</th></tr></thead>
+        <tbody>
+          <tr><td>Sample Agency Owner (you)</td><td>owner@example.com</td><td>Agency Owner</td><td>${pill('active')}</td><td>Direct</td><td>${fmtDate(monthsAgoISO(14, 3))}</td></tr>
+          ${teamMembers().map(m => `<tr><td>${m.name}</td><td>${m.email}</td><td>${m.tier === 'agency_owner' ? 'Agency Owner' : 'Producer'}</td><td>${pill(m.status)}</td><td>${m.reportsVia || 'Direct'}</td><td>${fmtDate(m.joined)}</td></tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+  document.getElementById('copyInviteBtn').onclick = async () => {
+    const input = document.getElementById('inviteLinkInput');
+    try { await navigator.clipboard.writeText(input.value); } catch (e) { input.select(); document.execCommand('copy'); }
+    say('Invite link copied!');
+  };
+  wireDateFilter('team', renderTeam);
+}
+
 /* ================= FEEDBACK ================= */
 function renderFeedback(){
   mainInner.innerHTML = `
@@ -2650,7 +2923,7 @@ function renderFeedback(){
 let say = () => {};
 
 /* ---- nav ---- */
-const PAGES = { desk: renderDesk, activity: renderActivity, book: () => renderBook('',''), costs: renderCosts, profit: renderProfit, goals: renderGoals, analytics: renderAnalytics, calculator: renderCalculator, feedback: renderFeedback };
+const PAGES = { desk: renderDesk, activity: renderActivity, book: () => renderBook('',''), costs: renderCosts, profit: renderProfit, goals: renderGoals, analytics: renderAnalytics, calculator: renderCalculator, team: renderTeam, feedback: renderFeedback };
 let currentPage = 'desk';
 function renderCurrentPage(){ PAGES[currentPage](); }
 function go(page){
@@ -2659,6 +2932,15 @@ function go(page){
   PAGES[page]();
 }
 document.querySelectorAll('#sidebarNav button, .sidebar-footer button[data-page]').forEach(b => b.onclick = () => go(b.dataset.page));
+
+// Tour-mode chrome: which tour is active, the Team tab for the Agency plan, and the sign-up link for that plan.
+document.getElementById(IS_AGENCY ? 'tourAgencyLink' : 'tourSoloLink').classList.add('active');
+if (IS_AGENCY) {
+  document.getElementById('teamNavBtn').style.display = '';
+  document.getElementById('demoBannerText').textContent = 'Sample agency — a fully interactive demo of the Agency plan. Edits stay in this browser only.';
+  document.title = 'BOB — Sample Agency';
+  document.querySelector('.demo-banner a.primary').href = '/login.html?tier=agency_owner';
+}
 
 document.getElementById('resetDemoBtn').onclick = () => {
   if (!confirm('Reset the sample book back to its original demo data? This clears everything you added in this browser.')) return;

@@ -463,3 +463,8 @@ footer.home-footer a{display:block; color:var(--ink-soft); text-decoration:none;
 .legal-meta{color:var(--ink-soft); font-size:.88rem; margin:0 0 18px;}
 .legal-foot{text-align:center; font-size:.85rem; color:var(--ink-soft); margin-top:18px;}
 @media(max-width:600px){.legal{padding:24px 18px;}}
+
+/* Tour switch in the demo banner */
+.tour-switch-btn{color:#fff; text-decoration:none; font-size:.8rem; font-weight:700; padding:5px 12px; border-radius:999px; border:1.5px solid rgba(255,255,255,.45);}
+.tour-switch-btn:hover{background:rgba(255,255,255,.15);}
+.tour-switch-btn.active{background:#fff; color:var(--maroon); border-color:#fff;}
