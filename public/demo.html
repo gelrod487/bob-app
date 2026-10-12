@@ -540,14 +540,30 @@ function wireDateFilter(pageKey, onChange){
   const state = dateFilterState[pageKey];
   const select = wrap.querySelector('.date-filter-select');
   const custom = wrap.querySelector('.date-filter-custom');
+  const fromInput = wrap.querySelector('.date-filter-from');
+  const toInput = wrap.querySelector('.date-filter-to');
   select.onchange = () => {
     state.key = select.value;
-    if (state.key === 'custom') { custom.classList.remove('section-hidden'); return; }
+    if (state.key === 'custom') {
+      // Show the date boxes AND apply them straight away (they start filled with the range just
+      // being viewed), so the page and the boxes never disagree.
+      custom.classList.remove('section-hidden');
+      state.from = fromInput.value; state.to = toInput.value;
+    }
     onChange();
   };
+  // Changing either custom date applies it immediately once both are filled in and in order;
+  // Apply still works as before (and is the way to apply an empty or reversed range).
+  const applyIfValid = () => {
+    if (!fromInput.value || !toInput.value || fromInput.value > toInput.value) return;
+    state.from = fromInput.value; state.to = toInput.value;
+    onChange();
+  };
+  fromInput.onchange = applyIfValid;
+  toInput.onchange = applyIfValid;
   wrap.querySelector('.date-filter-apply').onclick = () => {
-    state.from = wrap.querySelector('.date-filter-from').value;
-    state.to = wrap.querySelector('.date-filter-to').value;
+    state.from = fromInput.value;
+    state.to = toInput.value;
     onChange();
   };
 }
