@@ -161,7 +161,7 @@ function resetCaptcha(containerId) {
 fetch('/api/founding-spots').then(r => r.json()).then(f => {
   if (!f.enabled || f.remaining <= 0) return;
   const el = document.getElementById('foundingNotice');
-  el.textContent = `Founding 75: sign up now and lock in 50% off every plan for as long as you stay subscribed. ${f.remaining} spot${f.remaining === 1 ? '' : 's'} left.`;
+  el.textContent = `Founding 75: sign up now and lock in 50% off every plan for as long as you remain a paid subscription member. ${f.remaining} spot${f.remaining === 1 ? '' : 's'} left.`;
   el.classList.remove('section-hidden');
 }).catch(() => {});
 
