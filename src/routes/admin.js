@@ -268,6 +268,30 @@ router.post('/producers/:id/delete', asyncHandler(async (req, res) => {
   res.json(await deleteProducerAccount({ prisma, stripe, supabaseAdmin, producer: p, adminEmail: req.supabaseUser.email }));
 }));
 
+// POST /api/admin/test-email { kind: 'welcome' | 'trial_ending' } — sends a sample of that email to the signed-in
+// admin's OWN address only (never a customer's), to check the Resend key and see how it looks.
+router.post('/test-email', asyncHandler(async (req, res) => {
+  const kind = req.body.kind;
+  if (!['welcome', 'trial_ending'].includes(kind)) throw httpError(400, 'kind must be "welcome" or "trial_ending".');
+  const mailer = require('../lib/mailer');
+  if (!mailer.configured()) throw httpError(409, 'Email isn\'t set up on this server yet (RESEND_API_KEY is missing).');
+  const { welcomeEmail, trialEndingEmail } = require('../lib/emailTemplates');
+  const sample = { name: req.supabaseUser.user_metadata?.name || 'Alex Sample', foundingNumber: founding.enabled() ? 12 : null };
+  const ends = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+  const info = { enabled: founding.enabled(), percentOff: founding.PERCENT_OFF };
+  const message = kind === 'welcome'
+    ? welcomeEmail({ producer: sample, trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), trialActive: true, founding: info })
+    : trialEndingEmail({ producer: sample, trialEndsAt: ends, founding: info });
+  try {
+    await mailer.sendMail({ to: req.supabaseUser.email, ...message, subject: `[TEST] ${message.subject}` });
+  } catch (err) {
+    console.error('test email failed:', err.message);
+    throw httpError(502, 'The email service rejected the message. Check the Resend key and that getbob.agency is verified.');
+  }
+  await logAdminAction(req, 'email.test', null, { kind });
+  res.json({ sentTo: req.supabaseUser.email });
+}));
+
 // GET /api/admin/audit?action=&target=&page= — newest first.
 router.get('/audit', asyncHandler(async (req, res) => {
   const pageSize = 50;

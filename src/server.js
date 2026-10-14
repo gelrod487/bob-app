@@ -56,6 +56,22 @@ app.get('/api/founding-spots', asyncHandler(async (req, res) => {
   res.json(foundingCache.value);
 }));
 
+// Public (no login): a health check for uptime monitors. 200 when the app and its database answer, 503 when
+// the database doesn't. Says nothing about what's wrong; details stay in the server logs.
+app.get('/api/health', async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  try {
+    await Promise.race([
+      prisma.$queryRaw`SELECT 1`,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('database check timed out')), 4000)),
+    ]);
+    res.json({ status: 'ok' });
+  } catch (err) {
+    console.error('health check failed:', err.message);
+    res.status(503).json({ status: 'down' });
+  }
+});
+
 app.use('/api', requireAuth);
 // Admin-only read-only "view as user" (header-driven; see the middleware's doc comment).
 app.use('/api', require('./middleware/supportView').applySupportView);
@@ -131,6 +147,7 @@ app.listen(port, () => {
   require('./lib/founding').backfillFounding(prisma)
     .then((n) => { if (n) console.log(`Gave ${n} existing account(s) a Founding Member spot.`); })
     .catch((err) => console.error('founding backfill failed:', err.message));
+  require('./lib/lifecycleEmails').startScheduler(prisma);
   require('./lib/trialUse').backfillTrialUse(prisma)
     .then((n) => { if (n) console.log(`Recorded ${n} existing account(s) as trial-used.`); })
     .catch((err) => console.error('trial-use backfill failed:', err.message));

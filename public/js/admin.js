@@ -428,8 +428,26 @@ async function renderOverview(){
       <tbody>${o.quiet.map((p) => `<tr><td>${customerLink(p)}</td><td>${p.lastSeenAt ? `${p.daysSilent} days ago` : 'not since tracking began'}</td></tr>`).join('') || '<tr><td colspan="2" class="helptext">Nobody — everyone with access has been in this week.</td></tr>'}</tbody></table>
     </div>
 
+    <div class="panel">
+      <h2>Automatic emails</h2>
+      <p class="helptext" style="margin:-8px 0 14px;">BOB emails each new customer a welcome, and again 2 days before their trial ends. Send yourself a sample of either (to ${escapeHtml(window.__adminEmail || 'your own address')} only) to check they arrive and look right.</p>
+      <button class="ghost" type="button" data-test-email="welcome">Email me the welcome</button>
+      <button class="ghost" type="button" data-test-email="trial_ending">Email me the trial-ending notice</button>
+      <span class="helptext" id="testEmailMsg" style="margin-left:10px;"></span>
+    </div>
+
     ${o.pastDue.length ? `<div class="panel"><h2>Payment past due</h2><table><tbody>${o.pastDue.map((p) => `<tr><td>${customerLink(p)}</td></tr>`).join('')}</tbody></table></div>` : ''}`;
   tabBody.querySelectorAll('[data-open]').forEach((a) => { a.onclick = (e) => { e.preventDefault(); openCustomer(a.dataset.open); }; });
+  tabBody.querySelectorAll('[data-test-email]').forEach((btn) => {
+    btn.onclick = async () => {
+      const msg = document.getElementById('testEmailMsg');
+      msg.textContent = 'Sending…';
+      try {
+        const r = await apiFetch('/api/admin/test-email', { method: 'POST', body: { kind: btn.dataset.testEmail } });
+        msg.textContent = `Sent to ${r.sentTo}. Check your inbox (and spam) in a minute.`;
+      } catch (err) { msg.textContent = err.message || 'Could not send.'; }
+    };
+  });
 }
 
 /* ================= BILLING ================= */
@@ -722,6 +740,7 @@ async function showTab(name){
 async function init(){
   const { data: { session } } = await supabaseClient.auth.getSession();
   if (!session) { window.location.href = '/login.html?redirect=' + encodeURIComponent('/admin.html'); return; }
+  window.__adminEmail = session.user.email;
   try {
     // Cheapest admin-gated call: a 403 here is the definitive "not an admin" answer, and it
     // works even for an admin account that hasn't finished producer setup.

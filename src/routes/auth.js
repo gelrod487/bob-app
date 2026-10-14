@@ -5,6 +5,7 @@ const { isAdminEmail } = require('../middleware/auth');
 const { cleanText } = require('../lib/cleanText');
 const { isDisposableEmail, registerTrialUse } = require('../lib/trialUse');
 const { assignFoundingNumber } = require('../lib/founding');
+const { sendWelcome } = require('../lib/lifecycleEmails');
 
 const router = express.Router();
 
@@ -22,6 +23,12 @@ async function applyTrialRule(producer, email) {
     return prisma.producer.findUnique({ where: { id: producer.id } });
   }
   return prisma.producer.update({ where: { id: producer.id }, data: { trialEndsAtOverride: producer.createdAt } });
+}
+
+// The welcome email never holds up (or breaks) sign-up: it goes out after the response, and a failure is
+// retried by the hourly sweep (see lifecycleEmails.js).
+function sendWelcomeInBackground(producerId) {
+  sendWelcome(prisma, producerId).catch((err) => console.error('welcome email failed:', err.message));
 }
 
 // POST /api/auth/bootstrap — called once, right after Supabase sign-up (or first sign-in),
@@ -65,7 +72,9 @@ router.post('/bootstrap', asyncHandler(async (req, res) => {
         agencyId: agency.id,
       },
     });
-    return res.status(201).json(await applyTrialRule(producer, req.supabaseUser.email));
+    const ready = await applyTrialRule(producer, req.supabaseUser.email);
+    sendWelcomeInBackground(ready.id);
+    return res.status(201).json(ready);
   }
 
   if (!tier) return res.status(400).json({ error: 'name and tier are required.' });
@@ -93,7 +102,9 @@ router.post('/bootstrap', asyncHandler(async (req, res) => {
     return created;
   });
 
-  res.status(201).json(await applyTrialRule(producer, req.supabaseUser.email));
+  const ready = await applyTrialRule(producer, req.supabaseUser.email);
+  sendWelcomeInBackground(ready.id);
+  res.status(201).json(ready);
 }));
 
 module.exports = router;

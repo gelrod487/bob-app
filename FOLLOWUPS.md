@@ -4,16 +4,6 @@ Running list of deferred action items — things that are deliberate "not now" d
 
 ## Security
 
-- [ ] **Enable Point-in-Time Recovery (PITR) in Supabase** once the tester phase launches
-      (~12 users) — Gustin's plan as of 2026-10-01. Currently relying on Supabase's free
-      daily backups only, which can lose up to a day of data if something goes wrong. PITR
-      lets you restore to any exact minute instead, at a cost (Pro plan add-on):
-      - 7-day retention: ~$100/mo
-      - 14-day retention: ~$200/mo
-      - 28-day retention: ~$400/mo
-      - Also requires bumping compute to at least the "Small" tier (~$15/mo) if not already there.
-      - Where: Supabase Dashboard → Database → Backups → Point in Time.
-
 ## Business / legal
 
 - [ ] **Move BOB from Elrod Financial, LLC (d/b/a BOB) into its own LLC** once the user base has
@@ -29,24 +19,30 @@ Running list of deferred action items — things that are deliberate "not now" d
       Easier the earlier it's done (fewer subscriptions to move).
 - [ ] Have an attorney review the Terms of Service and Privacy Policy (drafted 2026-10-05).
 - [ ] File a DBA / fictitious-name registration for "BOB" if the state requires one.
-- [ ] **Sales tax on subscriptions — deferred by Gustin (2026-10-06): "not collecting tax yet."**
-      Code is already in place and OFF: set `STRIPE_AUTOMATIC_TAX=true` in Render to have Stripe
-      calculate tax at checkout (billing address required). Before turning it on:
-      1. Get a Texas Sales and Use Tax Permit (free, comptroller.texas.gov). Texas generally taxes
-         SaaS as a data-processing service (80% of the price taxable) — confirm with the accountant.
-      2. Stripe live: Settings > Tax: head office address, default tax code "SaaS – business use",
-         default behavior Exclusive, add a Texas registration with the permit number, turn on
-         monitoring for other states (thresholds, often ~$100k in a state).
-      3. Optionally test first in the Stripe sandbox (any permit number works there), with a Texas
-         ZIP (e.g. 78261) to see the tax line.
-      Until then, Texas customers' purchases are untaxed — ask the accountant how to handle any
-      Texas sales made before the permit exists.
-
+- [ ] **Sales tax on subscriptions — live and verified (updated 2026-10-14).**
+      Done: Texas taxpayer number obtained (permit paper arrives ~2-3 weeks); Stripe Tax live with head office
+      in TX, preset category "SaaS - business use", tax added on top, Texas registration active, all 3 live
+      products tagged SaaS - business use, `STRIPE_AUTOMATIC_TAX=true` set in Render, and a live checkout was
+      confirmed to add tax (Texas ~$1.91 on $29). Still worth asking the accountant / Comptroller
+      (1-800-252-5555) whether collecting before the paper permit arrives is OK.
+      Recurring: Texas return is QUARTERLY — first due 11/20/2026, must be filed even with $0 sales (Comptroller
+      WebFile, free; totals in Stripe Tax > Reports). Keep the taxpayer number + WebFile login in the password
+      manager. Do NOT buy Stripe's paid filing add-on unless filing becomes a burden. Register in other
+      states only when Stripe's threshold emails say so (usually ~$100k in a state; TX/CA/NY use $500k).
+- [ ] **Automatic emails (welcome + trial-ending) — built 2026-10-14, needs the Resend key to go live.** Create a Resend API
+      key (Sending access) and add `RESEND_API_KEY` in Render > Environment. Then Admin > Overview > "Automatic emails" lets
+      you email yourself a sample of each. Sent through `src/lib/lifecycleEmails.js`: welcome at sign-up, trial-ending notice
+      48 hours before the trial ends (hourly sweep). Existing accounts were marked "already sent" so only new signups get them.
+- [ ] **Uptime monitor.** Point UptimeRobot / Better Stack at `https://getbob.agency/api/health` (200 = up, 503 = database down).
+      Optional: set `healthCheckPath: /api/health` for the web service so Render also uses it.
 ## Product follow-ups
 
 - [x] Agency owner's Profit tab unit economics now use the owner's own commissions/activity (fixed with the new Unit economics definitions, 2026-10-12). Still open: Health of the book's Gross Margin subtracts only the owner's own lead spend from team-wide gross.
 
 ## Done
+
+- [x] **Point-in-Time Recovery enabled in Supabase (bob-app)** — 2026-10-14, ahead of opening BOB to the Founding 75.
+- [x] Resend upgraded to a paid plan and Supabase hourly auth-email limit raised 30 -> 200 — 2026-10-14.
 
 - [x] **Contact path for prospective customers on the marketing page** — done 2026-10-06: Contact
       link in nav + footer, "Questions? Ask a real person." section with a mailto button, a FAQ
