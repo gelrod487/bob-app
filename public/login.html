@@ -128,6 +128,7 @@
   <p class="helptext" style="text-align:center; max-width:420px;">Need help signing in or signing up? Email <a class="link-accent" href="mailto:support@getbob.agency">support@getbob.agency</a>.</p>
 </div>
 
+<script src="/js/source.js"></script>
 <script src="/js/supabaseClient.js"></script>
 <script src="/js/api.js"></script>
 <script src="/js/mascot.js"></script>
@@ -369,13 +370,15 @@ signupForm.addEventListener('submit', async (e) => {
     errEl.textContent = 'Please sign up with a permanent email address, not a temporary or disposable one.';
     return;
   }
+  const source = window.getBobSource ? getBobSource() : null;
   const pending = inviteAgencyId
-    ? { name: f.get('name'), inviteAgencyId, email }
-    : { name: f.get('name'), tier: selectedTier(signupForm), agencyName: f.get('agencyName') || null, email };
+    ? { name: f.get('name'), inviteAgencyId, email, source }
+    : { name: f.get('name'), tier: selectedTier(signupForm), agencyName: f.get('agencyName') || null, email, source };
 
   const { data, error } = await supabaseClient.auth.signUp({
     email, password: f.get('password'),
-    options: { captchaToken: captchaTokenFor('turnstileSignup') },
+    // The source also rides along as account metadata, so it survives confirming the email in a different browser.
+    options: { captchaToken: captchaTokenFor('turnstileSignup'), data: source ? { source } : undefined },
   });
   resetCaptcha('turnstileSignup');
   if (error) { errEl.textContent = error.message; return; }
@@ -451,6 +454,7 @@ completeForm.addEventListener('submit', async (e) => {
     const body = inviteAgencyId
       ? { name: f.get('name'), inviteAgencyId }
       : { name: f.get('name'), tier: selectedTier(completeForm), agencyName: f.get('agencyName') || null };
+    body.source = window.getBobSource ? getBobSource() : null;
     await apiFetch('/api/auth/bootstrap', { method: 'POST', body });
     window.location.href = '/app.html';
   } catch (err) {

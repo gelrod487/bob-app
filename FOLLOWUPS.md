@@ -29,12 +29,12 @@ Running list of deferred action items — things that are deliberate "not now" d
       WebFile, free; totals in Stripe Tax > Reports). Keep the taxpayer number + WebFile login in the password
       manager. Do NOT buy Stripe's paid filing add-on unless filing becomes a burden. Register in other
       states only when Stripe's threshold emails say so (usually ~$100k in a state; TX/CA/NY use $500k).
-- [ ] **Automatic emails (welcome + trial-ending) — built 2026-10-14, needs the Resend key to go live.** Create a Resend API
-      key (Sending access) and add `RESEND_API_KEY` in Render > Environment. Then Admin > Overview > "Automatic emails" lets
-      you email yourself a sample of each. Sent through `src/lib/lifecycleEmails.js`: welcome at sign-up, trial-ending notice
-      48 hours before the trial ends (hourly sweep). Existing accounts were marked "already sent" so only new signups get them.
-- [ ] **Uptime monitor.** Point UptimeRobot / Better Stack at `https://getbob.agency/api/health` (200 = up, 503 = database down).
-      Optional: set `healthCheckPath: /api/health` for the web service so Render also uses it.
+- [x] **Automatic emails (welcome + trial-ending) — live and verified 2026-10-14.** `RESEND_API_KEY` is set in Render and both
+      test emails reached the inbox (Admin > Overview > "Automatic emails"). Sent via `src/lib/lifecycleEmails.js`: welcome at
+      sign-up, trial-ending notice 48 hours before the trial ends (hourly check). Existing accounts were marked "already sent".
+- [x] **Uptime monitor — live and verified 2026-10-14.** UptimeRobot (free) checks `https://getbob.agency/api/health` every 5
+      minutes and emails gustin@elrodfinancial.com on an outage (test alert received). Optional: set `healthCheckPath: /api/health`
+      on the Render web service so Render also uses it.
 ## Product follow-ups
 
 - [x] Agency owner's Profit tab unit economics now use the owner's own commissions/activity (fixed with the new Unit economics definitions, 2026-10-12). Still open: Health of the book's Gross Margin subtracts only the owner's own lead spend from team-wide gross.

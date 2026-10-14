@@ -9,6 +9,18 @@ const { sendWelcome } = require('../lib/lifecycleEmails');
 
 const router = express.Router();
 
+// Where the customer came from (see public/js/source.js). Comes from the sign-up form, or from the account's
+// metadata when they confirmed their email in a different browser. It's analytics only, so it's just cleaned
+// and length-capped; an invite-link signup with no other source is labelled as such.
+function sourceFields(req, invited) {
+  const meta = req.supabaseUser.user_metadata;
+  const raw = [req.body.source, meta && meta.source].find((s) => s && typeof s === 'object' && !Array.isArray(s)) || {};
+  const clean = (v) => cleanText(typeof v === 'string' ? v : '', 60).toLowerCase() || null;
+  let signupSource = clean(raw.source);
+  if (!signupSource && invited) signupSource = 'agency invite';
+  return { signupSource, signupMedium: clean(raw.medium), signupCampaign: clean(raw.campaign) };
+}
+
 // One free trial per person. The first account for a (canonical) email keeps the normal 14
 // days. A returning email — deleted and re-signed-up, or a +alias / Gmail-dots variant — is
 // created with the trial already over (trial end pinned to signup time), so it lands on the
@@ -70,6 +82,7 @@ router.post('/bootstrap', asyncHandler(async (req, res) => {
         supabaseUserId: req.supabaseUser.id,
         subscriptionTier: 'individual',
         agencyId: agency.id,
+        ...sourceFields(req, true),
       },
     });
     const ready = await applyTrialRule(producer, req.supabaseUser.email);
@@ -91,6 +104,7 @@ router.post('/bootstrap', asyncHandler(async (req, res) => {
         email: req.supabaseUser.email,
         supabaseUserId: req.supabaseUser.id,
         subscriptionTier: tier,
+        ...sourceFields(req, false),
       },
     });
     if (tier === 'agency_owner') {

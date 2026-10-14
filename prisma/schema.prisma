@@ -85,6 +85,11 @@ model Producer {
   // second server instance can never send the same one twice.
   welcomeEmailSentAt     DateTime? @map("welcome_email_sent_at")
   trialEndingEmailSentAt DateTime? @map("trial_ending_email_sent_at")
+  // Where they came from (first-touch marketing attribution, from the link they clicked or the site that sent them;
+  // see public/js/source.js). All null = unknown / typed the address in directly.
+  signupSource   String? @map("signup_source")
+  signupMedium   String? @map("signup_medium")
+  signupCampaign String? @map("signup_campaign")
 
   agency            Agency?   @relation("AgencyMembers", fields: [agencyId], references: [id])
   ownedAgency       Agency?   @relation("AgencyOwner")

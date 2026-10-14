@@ -63,18 +63,19 @@ async function loadCustomers(){
   const pages = Math.max(Math.ceil(data.total / data.pageSize), 1);
   el.innerHTML = `
     <table>
-      <thead><tr><th>Customer</th><th>IMO</th><th>Plan</th><th>Status</th><th>Trial ends</th><th>Last seen</th><th>Clients</th><th>Joined</th></tr></thead>
+      <thead><tr><th>Customer</th><th>IMO</th><th>Plan</th><th>Status</th><th>Source</th><th>Trial ends</th><th>Last seen</th><th>Clients</th><th>Joined</th></tr></thead>
       <tbody>${data.items.map((p) => `
         <tr class="row-clickable" data-id="${escapeHtml(p.id)}">
           <td>${escapeHtml(p.name)}<br><span class="helptext">${escapeHtml(p.email)}</span></td>
           <td>${escapeHtml(p.imo) || '—'}</td>
           <td>${escapeHtml(PLAN_LABEL[p.subscriptionTier] || p.subscriptionTier)}</td>
           <td><span class="tag ${p.subscriptionStatus === 'active' ? 'active-pol' : 'pending'}">${escapeHtml(p.subscriptionStatus)}</span>${p.isComped ? ' <span class="tag approved">comped</span>' : ''}${p.foundingNumber ? ` <span class="tag approved">Founding #${p.foundingNumber}</span>` : ''}</td>
+          <td>${escapeHtml(p.source) || '—'}</td>
           <td>${fmtDate(p.trialEndsAt)}</td>
           <td>${escapeHtml(fmtAgo(p.lastSeenAt))}</td>
           <td>${p.clientCount}</td>
           <td>${fmtDate(p.createdAt)}</td>
-        </tr>`).join('') || '<tr><td colspan="8" class="helptext">No customers match.</td></tr>'}</tbody>
+        </tr>`).join('') || '<tr><td colspan="9" class="helptext">No customers match.</td></tr>'}</tbody>
     </table>
     <div style="display:flex; align-items:center; gap:12px; margin-top:14px;">
       <button class="ghost" type="button" id="custPrev" ${data.page <= 1 ? 'disabled' : ''}>Previous</button>
@@ -97,6 +98,7 @@ async function openCustomer(id){
       <div class="detail-item"><div class="dlabel">Last sign-in</div><div class="dvalue">${fmtDateTime(p.lastSignInAt)}</div></div>
       <div class="detail-item"><div class="dlabel">Last seen in app</div><div class="dvalue">${fmtDateTime(p.lastSeenAt)}</div></div>
       <div class="detail-item"><div class="dlabel">Trial ends</div><div class="dvalue">${fmtDate(p.trialEndsAt)}${p.trialEndsAtOverride ? ' (extended)' : ''}</div></div>
+      <div class="detail-item"><div class="dlabel">Came from</div><div class="dvalue">${escapeHtml(p.source) || '—'}</div></div>
       <div class="detail-item"><div class="dlabel">IMO</div><div class="dvalue">${escapeHtml(p.imo) || '—'}</div></div>
       <div class="detail-item"><div class="dlabel">Agency</div><div class="dvalue">${escapeHtml(p.agencyName) || '—'}</div></div>
       <div class="detail-item"><div class="dlabel">Stripe customer</div><div class="dvalue" style="word-break:break-all;">${escapeHtml(p.stripeCustomerId) || '—'}</div></div>
@@ -127,7 +129,7 @@ async function openCustomer(id){
         <option value="false" ${!p.isComped ? 'selected' : ''}>No</option>
         <option value="true" ${p.isComped ? 'selected' : ''}>Yes — treat as paid</option>
       </select></div>
-      <div><label>Founding Member (50% off for life)</label><select id="custFounding">
+      <div><label>Founding Member (50% off while subscribed)</label><select id="custFounding">
         <option value="false" ${!p.foundingNumber ? 'selected' : ''}>No</option>
         <option value="true" ${p.foundingNumber ? 'selected' : ''}>${p.foundingNumber ? `Yes — #${p.foundingNumber}` : 'Yes — give them a spot'}</option>
       </select></div>
@@ -413,6 +415,13 @@ async function renderOverview(){
         <tr><td style="white-space:nowrap;">Week of ${fmtDate(w.weekStart + 'T12:00:00')}</td>
         <td><div style="background:var(--maroon,#8a3b3b); height:12px; border-radius:6px; width:${Math.round((w.count / maxWeek) * 100)}%; min-width:${w.count ? 6 : 0}px;"></div></td>
         <td style="width:40px; text-align:right;">${w.count}</td></tr>`).join('')}</tbody></table>
+    </div>
+
+    <div class="panel">
+      <h2>Where signups come from</h2>
+      <p class="helptext" style="margin:-8px 0 14px;">From the link each person clicked (source / medium / campaign) or the site that sent them. "direct / unknown" = typed the address in, or signed up before tracking began. Use the tagged links in docs/tracking-links.md.</p>
+      <table><thead><tr><th>Source</th><th style="text-align:right;">Signups</th><th style="text-align:right;">Paying</th></tr></thead>
+      <tbody>${(o.bySource || []).map((s) => `<tr><td>${escapeHtml(s.label)}</td><td style="text-align:right;">${s.signups}</td><td style="text-align:right;">${s.paying}</td></tr>`).join('') || '<tr><td colspan="3" class="helptext">No signups yet.</td></tr>'}</tbody></table>
     </div>
 
     <div class="panel">

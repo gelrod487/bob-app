@@ -382,11 +382,58 @@ function renderNotices(meRes){
 })();
 
 /* ================= DESK ================= */
+// "Get started" card at the top of the Desk for a new account's first month: four first steps, ticked off from
+// the account's real data (GET /api/onboarding). Hiding it is a per-browser preference only.
+const GET_STARTED_STEPS = {
+  client:   { label: 'Add your first client and case', hint: 'Name, carrier, product and premium. That is enough to start.', action: 'addClient', button: 'Add a client' },
+  cost:     { label: 'Log a cost', hint: 'Leads, software or staff: whatever you spent this month.', action: 'costs', button: 'Add a cost' },
+  activity: { label: 'Count today\'s activity', hint: 'Tap + on the Today counters below as you dial, talk and sell.', action: 'today', button: 'Go to Today' },
+  goal:     { label: 'Set this month\'s goal', hint: 'Pick a target and BOB shows how many dials and appointments it takes.', action: 'goals', button: 'Set a goal' },
+};
+function getStartedHidden(){ try { return localStorage.getItem('bobGetStartedHidden') === '1'; } catch (e) { return false; } }
+function getStartedHTML(o){
+  if (!o || !o.show || getStartedHidden()) return '';
+  const rows = o.steps.map((s) => {
+    const info = GET_STARTED_STEPS[s.key];
+    if (!info) return '';
+    return `<div style="display:flex; align-items:center; gap:12px; padding:10px 0; border-top:1px solid var(--line);">
+      <span style="flex:none; width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800; ${s.done ? 'background:var(--green,#3f7d4e); color:#fff;' : 'border:2px solid var(--line); color:transparent;'}">✓</span>
+      <div style="flex:1; min-width:0;"><div style="font-weight:700; ${s.done ? 'text-decoration:line-through; color:var(--ink-soft);' : ''}">${info.label}</div><div class="helptext">${info.hint}</div></div>
+      ${s.done ? '' : `<button class="ghost" type="button" data-start-action="${info.action}">${info.button}</button>`}
+    </div>`;
+  }).join('');
+  return `<div class="panel" id="getStartedCard">
+    <div style="display:flex; justify-content:space-between; align-items:baseline; gap:12px;">
+      <h2 style="margin:0;">Get started with BOB</h2>
+      <a href="#" id="hideGetStarted" class="helptext" style="text-decoration:none;">Hide</a>
+    </div>
+    <p class="helptext" style="margin:6px 0 12px;">${o.done} of ${o.total} done. Once these are in, the Profit tab shows what you actually net.</p>
+    <div class="bar-track" style="margin-bottom:6px;"><div class="bar-fill" style="width:${Math.round(o.done / o.total * 100)}%"></div></div>
+    ${rows}
+  </div>`;
+}
+function wireGetStarted(){
+  document.querySelectorAll('[data-start-action]').forEach((btn) => {
+    btn.onclick = () => {
+      const a = btn.dataset.startAction;
+      if (a === 'addClient') openAddClientModal();
+      else if (a === 'today') document.getElementById('todayPanel')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      else go(a);
+    };
+  });
+  const hide = document.getElementById('hideGetStarted');
+  if (hide) hide.onclick = (e) => {
+    e.preventDefault();
+    try { localStorage.setItem('bobGetStartedHidden', '1'); } catch (err) { /* storage blocked: it just stays visible */ }
+    document.getElementById('getStartedCard')?.remove();
+  };
+}
+
 async function renderDesk(){
   mainInner.innerHTML = `<div class="page-header"><div><div class="page-eyebrow">Desk</div><h1>${escapeHtml(me.name.split(' ')[0])}'s book</h1></div></div><p class="helptext">Loading…</p>`;
 
   const range = computeDateRange(dateFilterState.desk.key, dateFilterState.desk.from, dateFilterState.desk.to);
-  const [dash, dashMonth, expenses, policies, activityAll, activityRange, goal] = await Promise.all([
+  const [dash, dashMonth, expenses, policies, activityAll, activityRange, goal, onboarding] = await Promise.all([
     apiFetch(`/api/dashboard?from=${range.from}&to=${range.to}`),
     apiFetch(`/api/dashboard?from=${monthFirstISO()}&to=${todayISO()}`),
     apiFetch(`/api/expenses?from=${range.from}&to=${range.to}`),
@@ -394,6 +441,7 @@ async function renderDesk(){
     apiFetch('/api/activity'),
     apiFetch(`/api/activity?from=${range.from}&to=${range.to}`),
     apiFetch(`/api/goals?month=${monthFirstISO()}`),
+    apiFetch('/api/onboarding').catch(() => null), // the Get started card is a nicety; never let it break the Desk
   ]);
   policiesCache = policies;
 
@@ -412,6 +460,8 @@ async function renderDesk(){
     <div class="page-header"><div><div class="page-eyebrow">Desk</div><h1>${escapeHtml(me.name.split(' ')[0])}'s book</h1></div>
     <button class="primary" type="button" id="addClientBtn">+ Add a client</button></div>
 
+    ${getStartedHTML(onboarding)}
+
     ${dateFilterHTML('desk')}
 
     <div class="grid" style="margin-bottom:18px;">
@@ -421,7 +471,7 @@ async function renderDesk(){
       <div class="card"><div class="stat-label">Operating Costs</div><div class="stat-value">${fmt(dash.totalExpenses)}</div><div class="stat-sub">${dash.placedCount ? fmt(dash.totalExpenses/dash.placedCount)+' / sale' : '—'}</div></div>
     </div>
 
-    <div class="panel">
+    <div class="panel" id="todayPanel">
       <h2>Today</h2>
       <div class="stepper-grid">
         ${['dials','contacts','appointments','presentations','sales'].map(f => `
@@ -472,6 +522,7 @@ async function renderDesk(){
 
   wireDateFilter('desk', renderDesk);
   document.getElementById('addClientBtn').onclick = openAddClientModal;
+  wireGetStarted();
   document.querySelectorAll('.stepper-btn').forEach(btn => btn.onclick = () => bumpActivity(btn.dataset.field, Number(btn.dataset.delta)));
   renderNetChart(await monthlySeries());
   if (costLines.length) renderDonut('donutCanvas', costLines);

@@ -24,8 +24,14 @@ function computeOverview(producers, now = new Date(), isAdmin = isAdminEmail) {
   const byTier = { individual: 0, producer_plus: 0, agency_owner: 0 };
   const expiringSoon = [];
   const pastDue = [];
+  const sources = new Map();
 
   for (const p of customers) {
+    const label = [p.signupSource, p.signupMedium, p.signupCampaign].filter(Boolean).join(' / ') || 'direct / unknown';
+    const s = sources.get(label) || { label, signups: 0, paying: 0 };
+    s.signups++;
+    if (!p.isComped && p.subscriptionStatus === 'active') s.paying++;
+    sources.set(label, s);
     if (p.subscriptionTier in byTier) byTier[p.subscriptionTier]++;
     const endsAt = trialEndsAt(p);
     if (p.isComped) { totals.comped++; continue; }
@@ -79,7 +85,9 @@ function computeOverview(producers, now = new Date(), isAdmin = isAdminEmail) {
     .sort((a, b) => (a.lastSeenAt || '').localeCompare(b.lastSeenAt || ''))
     .slice(0, 10);
 
-  return { totals, byTier, conversion, signupsByWeek, activity, activityTrackedSince, expiringSoon, pastDue, quiet };
+  const bySource = [...sources.values()].sort((a, b) => b.signups - a.signups || a.label.localeCompare(b.label)).slice(0, 20);
+
+  return { totals, byTier, conversion, bySource, signupsByWeek, activity, activityTrackedSince, expiringSoon, pastDue, quiet };
 }
 
 module.exports = { computeOverview, weekStart };

@@ -29,7 +29,7 @@ router.use('/flags', require('./adminFlags'));
 // and the caveats on conversion and last-seen tracking).
 router.get('/overview', asyncHandler(async (req, res) => {
   const producers = await prisma.producer.findMany({
-    select: { id: true, name: true, email: true, createdAt: true, subscriptionTier: true, subscriptionStatus: true, isComped: true, lastSeenAt: true, trialEndsAtOverride: true },
+    select: { id: true, name: true, email: true, createdAt: true, subscriptionTier: true, subscriptionStatus: true, isComped: true, lastSeenAt: true, trialEndsAtOverride: true, signupSource: true, signupMedium: true, signupCampaign: true },
   });
   res.json({ ...computeOverview(producers), founding: await founding.foundingStatus(prisma) });
 }));
@@ -48,6 +48,7 @@ function summarize(p) {
     subscriptionStatus: p.subscriptionStatus,
     isComped: p.isComped,
     foundingNumber: p.foundingNumber ?? null,
+    source: [p.signupSource, p.signupMedium, p.signupCampaign].filter(Boolean).join(' / ') || null,
     clientCount: p._count?.clients ?? 0,
     createdAt: p.createdAt,
     lastSeenAt: p.lastSeenAt,

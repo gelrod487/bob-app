@@ -89,6 +89,7 @@ app.use('/api/import', requireProducer, requireActiveOrTrial, require('./routes/
 // Deliberately no requireActiveOrTrial here — an expired producer must still be able to
 // reach checkout-session/portal-session to subscribe and lift their own gate.
 app.use('/api/billing', requireProducer, require('./routes/billing'));
+app.use('/api/onboarding', requireProducer, requireActiveOrTrial, require('./routes/onboarding'));
 app.use('/api/activity', requireProducer, requireActiveOrTrial, require('./routes/activity'));
 app.use('/api/goals', requireProducer, requireActiveOrTrial, require('./routes/goals'));
 app.use('/api/team-goals', requireProducer, requireActiveOrTrial, require('./routes/teamGoals'));
